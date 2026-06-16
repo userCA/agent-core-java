@@ -35,9 +35,17 @@ public final class CompactionMiddleware implements MiddlewareBase {
     /** Number of recent messages to keep (not compacted). */
     private final int keepRecent;
 
+    /** Context window size for the model (default 200K). */
+    private final int contextWindow;
+
     public CompactionMiddleware(double threshold, int keepRecent) {
+        this(threshold, keepRecent, 200_000);
+    }
+
+    public CompactionMiddleware(double threshold, int keepRecent, int contextWindow) {
         this.threshold = threshold;
         this.keepRecent = keepRecent;
+        this.contextWindow = contextWindow;
     }
 
     // ── onReasoning: check if compaction is needed ──
@@ -53,9 +61,14 @@ public final class CompactionMiddleware implements MiddlewareBase {
         }
 
         List<Msg> messages = state.getContext();
-        if (shouldCompact(messages, 200_000 /* default context window */)) {
-            log.info("Compaction triggered (estimated tokens above threshold)");
+        boolean forceCompact = Boolean.TRUE.equals(
+                ctx.get(RetryMiddleware.COMPACT_REQUESTED_KEY));
+
+        if (forceCompact || shouldCompact(messages, contextWindow)) {
+            log.info("Compaction triggered ({})",
+                    forceCompact ? "overflow signal" : "token threshold");
             compactInPlace(state, messages);
+            ctx.put(RetryMiddleware.COMPACT_REQUESTED_KEY, null); // clear signal
         }
 
         return next.apply(input);

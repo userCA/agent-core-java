@@ -106,9 +106,11 @@ public final class AgentScopeToolAdapter extends ToolBase {
             }
         }
 
+        String toolName = result.details() instanceof Map<?, ?> m
+                && m.get("tool_name") instanceof String s ? s : toolCallId;
         return output.isEmpty()
                 ? ToolResultBlock.of(TextBlock.builder().text("").build(), meta)
-                        .withIdAndName(toolCallId, "result")
-                : ToolResultBlock.of(output, meta).withIdAndName(toolCallId, "result");
+                        .withIdAndName(toolCallId, toolName)
+                : ToolResultBlock.of(output, meta).withIdAndName(toolCallId, toolName);
     }
 }

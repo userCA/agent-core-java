@@ -11,6 +11,8 @@ import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.middleware.MiddlewareBase;
 
+import io.agentscope.core.model.ExecutionConfig;
+import io.agentscope.core.model.GenerateOptions;
 import io.agentcore.tools.base.Tool;
 import io.agentcore.v2.tools.AgentScopeToolAdapter;
 
@@ -129,6 +131,19 @@ public class ClaudeCodeAgent {
         return delegate.getAgentState();
     }
 
+    // ── Config mapping helpers ──
+
+    static Integer mapThinkingBudget(String level) {
+        return switch (level) {
+            case ClaudeCodeConfig.THINKING_MINIMAL -> 128;
+            case ClaudeCodeConfig.THINKING_LOW -> 512;
+            case ClaudeCodeConfig.THINKING_MEDIUM -> 1024;
+            case ClaudeCodeConfig.THINKING_HIGH -> 2048;
+            case ClaudeCodeConfig.THINKING_XHIGH -> 4096;
+            default -> null; // OFF → null (no thinking)
+        };
+    }
+
     // ==================== Builder ====================
 
     public static Builder builder() {
@@ -192,8 +207,20 @@ public class ClaudeCodeAgent {
 
             if (description != null) raBuilder.description(description);
             if (sysPrompt != null) raBuilder.sysPrompt(sysPrompt);
-            if (toolkit != null) raBuilder.toolkit(toolkit);
             if (!middlewares.isEmpty()) raBuilder.middlewares(middlewares);
+
+            // Wire ClaudeCodeConfig into AgentScope Java options
+            raBuilder.toolExecutionConfig(
+                    ExecutionConfig.builder()
+                            .timeout(java.time.Duration.ofSeconds((long) ccConfig.toolTimeout()))
+                            .build());
+
+            raBuilder.generateOptions(
+                    GenerateOptions.builder()
+                            .thinkingBudget(mapThinkingBudget(ccConfig.thinkingLevel()))
+                            .parallelToolCalls(ccConfig.toolExecution()
+                                    .equals(ClaudeCodeConfig.EXECUTION_PARALLEL))
+                            .build());
 
             ReActAgent delegate = raBuilder.build();
             return new ClaudeCodeAgent(delegate, ccConfig);

@@ -35,6 +35,8 @@ public final class RetryMiddleware implements MiddlewareBase {
     private static final Logger log = LoggerFactory.getLogger(RetryMiddleware.class);
 
     private static final String RETRY_COUNT_KEY = "claude_code.retry_count";
+    /** Set by this middleware when context overflow is detected. Read by CompactionMiddleware. */
+    public static final String COMPACT_REQUESTED_KEY = "claude_code.compact_requested";
 
     private final int maxRetries;
     private final double baseDelay;
@@ -90,6 +92,12 @@ public final class RetryMiddleware implements MiddlewareBase {
         if (retryCount >= maxRetries) {
             log.warn("Max retries ({}) reached, giving up", maxRetries);
             return Flux.error(error);
+        }
+
+        // Signal CompactionMiddleware to compact before next reasoning attempt
+        if (overflow) {
+            ctx.put(COMPACT_REQUESTED_KEY, true);
+            log.info("Context overflow detected, signalling compaction before retry");
         }
 
         double delay = computeBackoff(retryCount);
