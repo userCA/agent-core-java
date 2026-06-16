@@ -1,8 +1,8 @@
 # agent-core-java Code Audit Report
 
-**Audit Date**: 2026-06-15
-**Auditor**: Qoder AI
-**Scope**: Full codebase review (119 Java files, 10 modules)
+**Audit Date**: 2026-06-15 (update: 2026-06-16 — AgentScope Java v2.0 migration)
+**Auditor**: Qoder AI & Claude Code
+**Scope**: Full codebase review (119 Java files + 9 v2 migration files, 10 modules + 1 v2 module)
 
 ---
 

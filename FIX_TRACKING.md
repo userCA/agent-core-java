@@ -246,12 +246,71 @@
 | Phase 5: Design (P3) | 8 | 7 | 0 | 1 |
 | Phase 6: Warnings (P4) | 4 | 4 | 0 | 0 |
 | Phase 7: Testing (P4) | 9 | 6 | 0 | 3 |
-| **Total** | **59** | **55** | **0** | **4** |
+| Phase 8: AgentScope Java Migration (M) | 12 | 10 | 0 | 2 |
+| **Total** | **71** | **65** | **0** | **6** |
+
+---
+
+## Phase 8: AgentScope Java v2.0 Migration (2026-06-16)
+
+> Goal: Migrate agent-core-java to AgentScope Java v2.0 as base platform while preserving Claude Code event model.
+
+### 8.1 Core Agent & Config
+- [x] **M-01**: Add AgentScope Java 2.0.0-SNAPSHOT dependency to build.gradle.kts
+  - Built from GitHub source, installed to ~/.m2
+  - mavenLocal() repository added
+- [x] **M-02**: Create ClaudeCodeAgent composing ReActAgent
+  - Files: `v2/agent/ClaudeCodeAgent.java`
+  - Builder pattern with legacy Tool registration, config wiring
+- [x] **M-03**: Create ClaudeCodeConfig bridge
+  - File: `v2/agent/ClaudeCodeConfig.java`
+  - Plain-type config: maxRetries, backoff, thinkingLevel, toolExecution, etc.
+- [x] **M-04**: Create AgentScopeConfig bootstrap
+  - File: `v2/config/AgentScopeConfig.java`
+  - InMemory/JsonFile stateStore factories + RuntimeContext multi-tenant helpers
+
+### 8.2 Event System & Middleware
+- [x] **M-05**: Create EventMapper
+  - File: `v2/events/EventMapper.java`
+  - 15 AgentScope event factories, TurnStart/End as CustomEvent
+- [x] **M-06**: Implement RetryMiddleware
+  - File: `v2/middleware/RetryMiddleware.java`
+  - Exponential backoff: `min(base*2^n, maxDelay)*jitter`
+  - First attempt real-time, retry buffered replay
+  - Signals CompactionMiddleware on overflow
+- [x] **M-07**: Implement TurnLifecycleMiddleware
+  - File: `v2/middleware/TurnLifecycleMiddleware.java`
+  - TurnStart at reasoning start, TurnEnd at next reasoning start
+  - Guarantees TurnEnd on error paths
+- [x] **M-08**: Implement SteeringMiddleware
+  - File: `v2/middleware/SteeringMiddleware.java`
+  - Bounded ConcurrentLinkedQueue, poll-in-a-loop atomic drain
+  - Directly appends to AgentState context
+- [x] **M-09**: Implement CompactionMiddleware
+  - File: `v2/middleware/CompactionMiddleware.java`
+  - Token estimation + threshold trigger + overflow signal response
+  - Configurable contextWindow
+
+### 8.3 Tool Migration
+- [x] **M-10**: Create AgentScopeToolAdapter
+  - File: `v2/tools/AgentScopeToolAdapter.java`
+  - Wraps legacy Tool as AgentScope ToolBase
+  - Preserves all security features (path traversal, command injection, SSRF)
+- [-] **M-11**: HITL (HumanInputGate) adaptation
+  - RequiresHumanInput → RequireUserConfirmEvent mapping deferred
+  - Workaround: use interrupt() + call() resume pattern
+- [-] **M-12**: Before/after tool call hooks
+  - Can be implemented via MiddlewareBase.onActing without adapter changes
+
+### 8.4 Verification
+- [x] Compilation: javac --release 21, 0 errors
+- [x] Smoke tests: 10/10 integration tests pass
 
 ### Build Results
 - **Compilation**: 0 warnings (was 9 with -Xlint:all)
-- **Tests**: 74/74 passed (was 52/52, +22 new tests)
+- **Tests**: 84/84 passed (was 52/52, +22 new tests, +10 v2 smoke tests)
 - **Containers**: 13/13 successful (was 10/10, +3 new test classes)
+- **V2 Migration**: 9 source files + 1 test, javac --release 21 编译通过, 10/10 smoke tests pass
 
 ---
 
@@ -268,3 +327,4 @@
 | 2026-06-16 | Phase 5 | DES-01~08 | 7/8 design improvements completed (DES-04 deferred) |
 | 2026-06-16 | Phase 6 | All | All compilation warnings eliminated (0 warnings) |
 | 2026-06-16 | Phase 7 | Tests | Added security, concurrency, and provider tests (74/74 pass) |
+| 2026-06-16 | Phase 8 | M-01~M-10 | AgentScope Java v2.0 migration (10/12 done): ClaudeCodeAgent, 4 middlewares, EventMapper, AgentScopeToolAdapter. 10/10 smoke tests pass. |
