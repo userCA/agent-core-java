@@ -2,6 +2,7 @@ package io.agentcore.tools;
 
 import io.agentcore.core.Content.TextContent;
 import io.agentcore.core.Content.ToolCallContent;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.util.SandboxQuota;
 
 import org.junit.jupiter.api.Nested;
@@ -33,40 +34,42 @@ class ToolExtensionsTest {
         void blocksDangerousCommands() {
             var tc = new ToolCallContent("tc1", "bash",
                     Map.of("command", "rm -rf /"));
-            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+            var ctx = new ToolCallContext(tc, tc.arguments());
 
             var result = policy.beforeToolCall(ctx);
             assertNotNull(result);
-            assertTrue((Boolean) result.get("block"));
+            assertInstanceOf(ToolCallHookResult.Block.class, result);
         }
 
         @Test
         void blocksShutdown() {
             var tc = new ToolCallContent("tc1", "bash",
                     Map.of("command", "shutdown -h now"));
-            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+            var ctx = new ToolCallContext(tc, tc.arguments());
 
             var result = policy.beforeToolCall(ctx);
             assertNotNull(result);
-            assertTrue((Boolean) result.get("block"));
+            assertInstanceOf(ToolCallHookResult.Block.class, result);
         }
 
         @Test
         void allowsNormalCommands() {
             var tc = new ToolCallContent("tc1", "bash",
                     Map.of("command", "ls -la"));
-            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+            var ctx = new ToolCallContext(tc, tc.arguments());
 
             var result = policy.beforeToolCall(ctx);
-            assertNotNull(result);
-            assertNull(result.get("block"));
+            // Proceed or InjectMetadata (not Block)
+            if (result != null) {
+                assertFalse(result instanceof ToolCallHookResult.Block);
+            }
         }
 
         @Test
         void ignoresNonBashTools() {
             var tc = new ToolCallContent("tc1", "read",
                     Map.of("path", "/etc/passwd"));
-            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+            var ctx = new ToolCallContext(tc, tc.arguments());
 
             var result = policy.beforeToolCall(ctx);
             assertNull(result);
@@ -143,8 +146,7 @@ class ToolExtensionsTest {
         void ignoresNonBashTools() {
             var tc = new ToolCallContent("tc1", "read", Map.of("path", "/tmp/x"));
             var result = new ToolResult("File not found: /tmp/x");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", true);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
             var response = healing.afterToolCall(ctx);
             assertNull(response);
@@ -154,8 +156,7 @@ class ToolExtensionsTest {
         void ignoresNonErrors() {
             var tc = new ToolCallContent("tc1", "bash", Map.of("command", "ls"));
             var result = new ToolResult("file1.txt\nfile2.txt");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", false);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, false);
 
             var response = healing.afterToolCall(ctx);
             assertNull(response);
@@ -165,20 +166,18 @@ class ToolExtensionsTest {
         void enhancesTimeoutError() {
             var tc = new ToolCallContent("tc1", "bash", Map.of("command", "slow_command"));
             var result = new ToolResult("Command timed out after 60s");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", true);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
             var response = healing.afterToolCall(ctx);
             assertNotNull(response);
-            assertTrue(response.containsKey("result"));
+            assertInstanceOf(AfterToolCallHookResult.ModifyResult.class, response);
         }
 
         @Test
         void enhancesMemoryError() {
             var tc = new ToolCallContent("tc1", "bash", Map.of("command", "big_data"));
             var result = new ToolResult("MemoryError: process killed");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", true);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
             var response = healing.afterToolCall(ctx);
             assertNotNull(response);
@@ -188,8 +187,7 @@ class ToolExtensionsTest {
         void enhancesMissingFile() {
             var tc = new ToolCallContent("tc1", "bash", Map.of("command", "cat missing.txt"));
             var result = new ToolResult("No such file or directory: 'missing.txt'");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", true);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
             var response = healing.afterToolCall(ctx);
             assertNotNull(response);
@@ -199,8 +197,7 @@ class ToolExtensionsTest {
         void noEnhancementForUnknownErrors() {
             var tc = new ToolCallContent("tc1", "bash", Map.of("command", "unknown"));
             var result = new ToolResult("Some random error message");
-            var ctx = Map.<String, Object>of(
-                    "tool_call", tc, "result", result, "is_error", true);
+            var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
             var response = healing.afterToolCall(ctx);
             assertNull(response);

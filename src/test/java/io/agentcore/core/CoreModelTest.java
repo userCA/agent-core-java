@@ -331,7 +331,7 @@ class CoreModelTest {
 
         @Test
         void oneAtATimeMode() {
-            var q = new PendingMessageQueue(PendingMessageQueue.MODE_ONE_AT_A_TIME);
+            var q = new PendingMessageQueue(PendingMessageQueue.DrainMode.ONE_AT_A_TIME);
             q.enqueue(new Message.UserMessage(List.of(), 1.0));
             q.enqueue(new Message.UserMessage(List.of(), 2.0));
             q.enqueue(new Message.UserMessage(List.of(), 3.0));
@@ -344,7 +344,7 @@ class CoreModelTest {
 
         @Test
         void allMode() {
-            var q = new PendingMessageQueue(PendingMessageQueue.MODE_ALL);
+            var q = new PendingMessageQueue(PendingMessageQueue.DrainMode.ALL);
             q.enqueue(new Message.UserMessage(List.of(), 1.0));
             q.enqueue(new Message.UserMessage(List.of(), 2.0));
 

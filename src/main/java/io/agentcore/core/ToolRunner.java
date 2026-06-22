@@ -4,6 +4,7 @@ import io.agentcore.core.Content.TextContent;
 import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.core.Message.AssistantMessage;
 import io.agentcore.core.Message.ToolResultMessage;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolRegistry;
@@ -17,7 +18,6 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Tool execution engine — dispatches tool calls, manages hooks and error handling.
@@ -41,26 +41,24 @@ public class ToolRunner {
 
     private final ToolRegistry registry;
     private final Double defaultTimeout;
+    private final AgentLoopConfig.BeforeToolCallHook beforeToolCall;
+    private final AgentLoopConfig.AfterToolCallHook afterToolCall;
 
-    // Hooks
-    private Function<Map<String, Object>, Map<String, Object>> beforeToolCall;
-    private Function<Map<String, Object>, Map<String, Object>> afterToolCall;
-
-    public ToolRunner(ToolRegistry registry, Double defaultTimeout) {
+    public ToolRunner(ToolRegistry registry, Double defaultTimeout,
+                      AgentLoopConfig.BeforeToolCallHook beforeToolCall,
+                      AgentLoopConfig.AfterToolCallHook afterToolCall) {
         this.registry = registry;
         this.defaultTimeout = defaultTimeout;
+        this.beforeToolCall = beforeToolCall;
+        this.afterToolCall = afterToolCall;
+    }
+
+    public ToolRunner(ToolRegistry registry, Double defaultTimeout) {
+        this(registry, defaultTimeout, null, null);
     }
 
     public ToolRunner(ToolRegistry registry) {
-        this(registry, null);
-    }
-
-    public void setBeforeToolCall(Function<Map<String, Object>, Map<String, Object>> hook) {
-        this.beforeToolCall = hook;
-    }
-
-    public void setAfterToolCall(Function<Map<String, Object>, Map<String, Object>> hook) {
-        this.afterToolCall = hook;
+        this(registry, null, null, null);
     }
 
     /**
@@ -134,25 +132,26 @@ public class ToolRunner {
             }
         }
 
-        // Run in parallel using virtual threads
-        @SuppressWarnings("unchecked")
+        // Run in parallel using virtual threads via ExecutorService
         ToolCallResult[] results = new ToolCallResult[calls.size()];
-        Thread[] threads = new Thread[calls.size()];
-
-        for (int i = 0; i < calls.size(); i++) {
-            final int idx = i;
-            final ToolCallContent tc = calls.get(i);
-            threads[i] = Thread.ofVirtual().name("tool-" + tc.name() + "-" + idx).start(() -> {
-                results[idx] = runSingleTool(tc, signal, null);
-            });
-        }
-
-        // Wait for all threads
-        for (Thread t : threads) {
-            try {
-                t.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<?>> futures = new ArrayList<>(calls.size());
+            for (int i = 0; i < calls.size(); i++) {
+                final int idx = i;
+                final ToolCallContent tc = calls.get(i);
+                futures.add(executor.submit(() -> {
+                    results[idx] = runSingleTool(tc, signal, null);
+                }));
+            }
+            // Wait for all tasks
+            for (Future<?> f : futures) {
+                try {
+                    f.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException e) {
+                    log.warn("Parallel tool execution failed", e.getCause());
+                }
             }
         }
 
@@ -192,22 +191,26 @@ public class ToolRunner {
                     new ToolResult("Tool '" + tc.name() + "' not found."), true);
         }
 
-        // Before hook
+        // Before hook (typed)
         Map<String, Object> args = tc.arguments();
         if (beforeToolCall != null) {
             try {
-                Map<String, Object> hookResult = beforeToolCall.apply(
-                        Map.of("tool_call", tc, "args", args));
+                ToolCallContext hookCtx = new ToolCallContext(tc, args);
+                ToolCallHookResult hookResult = beforeToolCall.apply(hookCtx);
                 if (hookResult != null) {
-                    if (Boolean.TRUE.equals(hookResult.get("block"))) {
-                        String reason = (String) hookResult.getOrDefault("reason", "Blocked by hook.");
-                        return new ToolCallResult(tc.id(), tc.name(),
-                                new ToolResult(reason), true);
-                    }
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> mutated = (Map<String, Object>) hookResult.get("mutated_args");
-                    if (mutated != null) {
-                        args = mutated;
+                    switch (hookResult) {
+                        case ToolCallHookResult.Block b -> {
+                            return new ToolCallResult(tc.id(), tc.name(),
+                                    new ToolResult(b.reason()), true);
+                        }
+                        case ToolCallHookResult.Proceed p -> {
+                            if (p.mutatedArguments() != null) {
+                                args = p.mutatedArguments();
+                            }
+                        }
+                        case ToolCallHookResult.InjectMetadata _ -> {
+                            // metadata injection handled at extension level
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -246,12 +249,14 @@ public class ToolRunner {
             }
         }
 
-        // After hook
+        // After hook (typed)
         if (afterToolCall != null) {
             try {
-                afterToolCall.apply(Map.of(
-                        "tool_call", tc, "args", args,
-                        "result", result, "is_error", isError));
+                AfterToolCallContext hookCtx = new AfterToolCallContext(tc, args, result, isError);
+                AfterToolCallHookResult hookResult = afterToolCall.apply(hookCtx);
+                if (hookResult instanceof AfterToolCallHookResult.ModifyResult mr) {
+                    result = new ToolResult(mr.content());
+                }
             } catch (Exception e) {
                 log.warn("After-tool-call hook failure", e);
             }
@@ -266,31 +271,22 @@ public class ToolRunner {
     private ToolResult executeWithTimeout(Tool tool, String callId,
                                            Map<String, Object> args, ToolContext ctx,
                                            double timeoutSeconds) throws Exception {
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        Future<ToolResult> future = null;
-        try {
-            future = executor.submit(() -> tool.execute(callId, args, ctx));
-            return future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            if (future != null) future.cancel(true);
-            throw e;
-        } catch (ExecutionException e) {
-            if (future != null) future.cancel(true);
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception ex) throw ex;
-            throw new RuntimeException(cause);
-        } catch (InterruptedException e) {
-            if (future != null) future.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Tool execution interrupted", e);
-        } finally {
-            executor.shutdownNow();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<ToolResult> future = executor.submit(() -> tool.execute(callId, args, ctx));
             try {
-                if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
-                    log.warn("Tool executor did not terminate within 2s for call {}", callId);
-                }
+                return future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                throw e;
+            } catch (ExecutionException e) {
+                future.cancel(true);
+                Throwable cause = e.getCause();
+                if (cause instanceof Exception ex) throw ex;
+                throw new RuntimeException(cause);
             } catch (InterruptedException e) {
+                future.cancel(true);
                 Thread.currentThread().interrupt();
+                throw new RuntimeException("Tool execution interrupted", e);
             }
         }
     }

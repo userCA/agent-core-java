@@ -1,6 +1,7 @@
 package io.agentcore.extensions;
 
 import io.agentcore.core.AgentEvent;
+import io.agentcore.extensions.HookTypes.*;
 
 import java.util.List;
 import java.util.Map;
@@ -25,12 +26,12 @@ public abstract class ExtensionAdapter implements Extension {
     }
 
     @Override
-    public Map<String, Object> beforeToolCall(Map<String, Object> callContext) {
+    public ToolCallHookResult beforeToolCall(ToolCallContext context) {
         return null;
     }
 
     @Override
-    public Map<String, Object> afterToolCall(Map<String, Object> callContext) {
+    public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
         return null;
     }
 

@@ -1,5 +1,6 @@
 package io.agentcore.core;
 
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.providers.AuthSource;
 import io.agentcore.providers.ModelInfo;
 import io.agentcore.providers.ProviderAuth;
@@ -126,19 +127,19 @@ public final class AgentLoopConfig {
     }
 
     /**
-     * Before-tool-call hook.
+     * Before-tool-call hook using typed context and result.
      */
     @FunctionalInterface
     public interface BeforeToolCallHook {
-        Map<String,Object> apply(Map<String,Object> callContext);
+        ToolCallHookResult apply(ToolCallContext context);
     }
 
     /**
-     * After-tool-call hook.
+     * After-tool-call hook using typed context and result.
      */
     @FunctionalInterface
     public interface AfterToolCallHook {
-        Map<String,Object> apply(Map<String,Object> callContext);
+        AfterToolCallHookResult apply(AfterToolCallContext context);
     }
 
     /**

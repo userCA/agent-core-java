@@ -1,6 +1,7 @@
 package io.agentcore.extensions;
 
 import io.agentcore.core.AgentEvent;
+import io.agentcore.extensions.HookTypes.*;
 
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Extension interface — plugins that hook into the agent lifecycle.
  *
  * <p>Mirrors Python {@code agent_core/extensions/base.py} Extension Protocol.
+ *
+ * <p>All hook methods use strongly-typed context and result records
+ * (see {@link HookTypes}) for compile-time safety.
  */
 public interface Extension {
 
@@ -29,16 +33,22 @@ public interface Extension {
 
     /**
      * Called before each tool execution.
-     * Can return a map with "block" → true to prevent execution.
+     * Return a {@link ToolCallHookResult} to control execution:
+     * <ul>
+     *   <li>{@link ToolCallHookResult.Block} — prevent the tool call</li>
+     *   <li>{@link ToolCallHookResult.Proceed} — allow, optionally with mutated args</li>
+     *   <li>{@link ToolCallHookResult.InjectMetadata} — attach metadata</li>
+     * </ul>
      */
-    default Map<String, Object> beforeToolCall(Map<String, Object> callContext) {
+    default ToolCallHookResult beforeToolCall(ToolCallContext context) {
         return null;
     }
 
     /**
      * Called after each tool execution.
+     * Return a {@link AfterToolCallHookResult} to optionally modify the result.
      */
-    default Map<String, Object> afterToolCall(Map<String, Object> callContext) {
+    default AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
         return null;
     }
 

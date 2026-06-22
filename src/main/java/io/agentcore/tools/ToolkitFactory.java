@@ -1,8 +1,6 @@
 package io.agentcore.tools;
 
-import io.agentcore.tools.mcp.MCPConfigParser;
 import io.agentcore.tools.mcp.MCPManager;
-import io.agentcore.tools.mcp.MCPServerConfig;
 import io.agentcore.tools.util.BashOperations;
 import io.agentcore.tools.util.FileMutationQueue;
 import io.agentcore.tools.util.FileOperations;
@@ -14,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 
 /**

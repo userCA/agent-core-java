@@ -1,5 +1,6 @@
 package io.agentcore.extensions;
 
+import io.agentcore.extensions.HookTypes.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,28 +25,60 @@ public final class ExtensionRunner {
         this.extensions = extensions != null ? List.copyOf(extensions) : List.of();
     }
 
+    public boolean hasExtensions() {
+        return !extensions.isEmpty();
+    }
+
     /**
-     * Before tool call: merge results from all extensions.
-     * Returns early with "block" if any extension blocks.
+     * Before agent start: merge results from all extensions.
      */
-    public Map<String, Object> beforeToolCall(Map<String, Object> toolCall) {
+    public Map<String, Object> onBeforeAgentStart(String prompt, String systemPrompt) {
+        if (extensions.isEmpty()) return null;
+
+        String currentSysPrompt = systemPrompt;
+        for (Extension ext : extensions) {
+            try {
+                Map<String, Object> result = ext.onBeforeAgentStart(prompt, currentSysPrompt);
+                if (result != null && result.get("system_prompt") instanceof String sp) {
+                    currentSysPrompt = sp;
+                }
+            } catch (Exception e) {
+                log.warn("Extension {} onBeforeAgentStart failed: {}", ext.name(), e.getMessage());
+            }
+        }
+        if (currentSysPrompt != null && !currentSysPrompt.equals(systemPrompt)) {
+            return Map.of("system_prompt", currentSysPrompt);
+        }
+        return null;
+    }
+
+    /**
+     * Before tool call: iterate extensions and merge typed results.
+     * Returns early with Block if any extension blocks.
+     */
+    public ToolCallHookResult beforeToolCall(ToolCallContext context) {
         if (extensions.isEmpty()) return null;
 
         Map<String, Object> mergedMetadata = new LinkedHashMap<>();
-        Map<String, Object> mergedArgs = new LinkedHashMap<>();
+        Map<String, Object> mergedArgs = null;
 
         for (Extension ext : extensions) {
             try {
-                Map<String, Object> result = ext.beforeToolCall(toolCall);
-                if (result != null) {
-                    if (Boolean.TRUE.equals(result.get("block"))) {
-                        return result; // early return on block
+                ToolCallHookResult result = ext.beforeToolCall(context);
+                if (result == null) continue;
+
+                switch (result) {
+                    case ToolCallHookResult.Block b -> {
+                        return b; // early return on block
                     }
-                    if (result.get("inject_metadata") instanceof Map<?, ?> m) {
-                        m.forEach((k, v) -> mergedMetadata.put((String) k, v));
+                    case ToolCallHookResult.Proceed p -> {
+                        if (p.mutatedArguments() != null) {
+                            if (mergedArgs == null) mergedArgs = new LinkedHashMap<>(context.arguments());
+                            mergedArgs.putAll(p.mutatedArguments());
+                        }
                     }
-                    if (result.get("mutated_args") instanceof Map<?, ?> m) {
-                        m.forEach((k, v) -> mergedArgs.put((String) k, v));
+                    case ToolCallHookResult.InjectMetadata m -> {
+                        mergedMetadata.putAll(m.metadata());
                     }
                 }
             } catch (Exception e) {
@@ -53,31 +86,33 @@ public final class ExtensionRunner {
             }
         }
 
-        Map<String, Object> out = new LinkedHashMap<>();
-        if (!mergedMetadata.isEmpty()) out.put("inject_metadata", mergedMetadata);
-        if (!mergedArgs.isEmpty()) out.put("mutated_args", mergedArgs);
-        return out.isEmpty() ? null : out;
+        if (mergedArgs != null) {
+            return new ToolCallHookResult.Proceed(mergedArgs);
+        }
+        if (!mergedMetadata.isEmpty()) {
+            return new ToolCallHookResult.InjectMetadata(mergedMetadata);
+        }
+        return null;
     }
 
     /**
-     * After tool call: merge results from all extensions.
+     * After tool call: iterate extensions and merge typed results.
      */
-    public Map<String, Object> afterToolCall(
-            Map<String, Object> toolCall, Map<String, Object> result, boolean isError) {
+    public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
         if (extensions.isEmpty()) return null;
 
-        Map<String, Object> mutated = null;
+        AfterToolCallHookResult lastModified = null;
         for (Extension ext : extensions) {
             try {
-                Map<String, Object> hook = ext.afterToolCall(toolCall);
-                if (hook != null && hook.containsKey("result")) {
-                    mutated = hook;
+                AfterToolCallHookResult result = ext.afterToolCall(context);
+                if (result instanceof AfterToolCallHookResult.ModifyResult) {
+                    lastModified = result;
                 }
             } catch (Exception e) {
                 log.warn("Extension {} afterToolCall failed: {}", ext.name(), e.getMessage());
             }
         }
-        return mutated;
+        return lastModified;
     }
 
     /**
@@ -85,6 +120,8 @@ public final class ExtensionRunner {
      */
     public List<Map<String, Object>> transformContext(
             List<Map<String, Object>> messages, AtomicBoolean signal) {
+        if (extensions.isEmpty()) return messages;
+
         List<Map<String, Object>> result = messages;
         for (Extension ext : extensions) {
             try {

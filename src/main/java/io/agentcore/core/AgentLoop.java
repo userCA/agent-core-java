@@ -4,6 +4,7 @@ import io.agentcore.core.Content.TextContent;
 import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.core.Message.*;
 import io.agentcore.core.AgentEvent.*;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.providers.ProviderAuth;
 import io.agentcore.providers.StreamEvent;
 import io.agentcore.providers.StreamEvent.*;
@@ -267,15 +268,8 @@ public class AgentLoop {
         }
 
         var registry = config.toolRegistry();
-        var runner = new ToolRunner(registry, config.toolTimeout());
-        
-        // Wire up hooks
-        if (config.beforeToolCall() != null) {
-            runner.setBeforeToolCall(config.beforeToolCall()::apply);
-        }
-        if (config.afterToolCall() != null) {
-            runner.setAfterToolCall(config.afterToolCall()::apply);
-        }
+        var runner = new ToolRunner(registry, config.toolTimeout(),
+                config.beforeToolCall(), config.afterToolCall());
 
         log.debug("Executing {} tool calls in {} mode", 
                 assistant.toolCalls().size(), config.toolExecution());

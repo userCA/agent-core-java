@@ -17,6 +17,7 @@ import io.agentcore.tools.ToolResult;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.ExtensionAdapter;
 import io.agentcore.extensions.ExtensionRunner;
+import io.agentcore.extensions.HookTypes.*;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -518,15 +519,16 @@ class AgentLoopIntegrationTest {
             ExtensionRunner runner = new ExtensionRunner(List.of(
                     new ExtensionAdapter("test-hook") {
                         @Override
-                        public Map<String, Object> beforeToolCall(Map<String, Object> toolCall) {
-                            return Map.of("inject_metadata", Map.of("custom", "value"));
+                        public ToolCallHookResult beforeToolCall(ToolCallContext context) {
+                            return new ToolCallHookResult.InjectMetadata(Map.of("custom", "value"));
                         }
                     }
             ));
 
-            Map<String, Object> result = runner.beforeToolCall(Map.of("name", "echo"));
+            var tc = new ToolCallContent("tc1", "echo", Map.of());
+            ToolCallHookResult result = runner.beforeToolCall(new ToolCallContext(tc, Map.of()));
             assertNotNull(result);
-            assertTrue(result.containsKey("inject_metadata"));
+            assertInstanceOf(ToolCallHookResult.InjectMetadata.class, result);
         }
 
         @Test

@@ -9,28 +9,56 @@ import java.util.List;
  * <p>Mirrors Python {@code agent_core/core/queue.py} PendingMessageQueue.
  * Supports two drain modes:
  * <ul>
- *   <li>{@code "all"} — drain all pending messages at once</li>
- *   <li>{@code "one_at_a_time"} — drain only the oldest message per call</li>
+ *   <li>{@link DrainMode#ALL} — drain all pending messages at once</li>
+ *   <li>{@link DrainMode#ONE_AT_A_TIME} — drain only the oldest message per call</li>
  * </ul>
  */
 public final class PendingMessageQueue {
 
-    public static final String MODE_ALL = "all";
-    public static final String MODE_ONE_AT_A_TIME = "one_at_a_time";
+    /**
+     * Drain mode for the queue.
+     */
+    public enum DrainMode {
+        /** Drain all pending messages at once. */
+        ALL,
+        /** Drain only the oldest message per call. */
+        ONE_AT_A_TIME;
 
-    private volatile String mode;
+        /**
+         * Parse a string value (backward-compatible with "all" / "one_at_a_time").
+         */
+        public static DrainMode fromString(String value) {
+            if (value == null) return ONE_AT_A_TIME;
+            return switch (value.toLowerCase()) {
+                case "all" -> ALL;
+                case "one_at_a_time" -> ONE_AT_A_TIME;
+                default -> ONE_AT_A_TIME;
+            };
+        }
+    }
+
+    private volatile DrainMode mode;
     private final List<Message> items = new ArrayList<>();
 
     public PendingMessageQueue() {
-        this(MODE_ONE_AT_A_TIME);
+        this(DrainMode.ONE_AT_A_TIME);
     }
 
+    public PendingMessageQueue(DrainMode mode) {
+        this.mode = mode != null ? mode : DrainMode.ONE_AT_A_TIME;
+    }
+
+    /**
+     * Backward-compatible string constructor.
+     * @deprecated Use {@link #PendingMessageQueue(DrainMode)} instead.
+     */
+    @Deprecated
     public PendingMessageQueue(String mode) {
-        this.mode = mode;
+        this(DrainMode.fromString(mode));
     }
 
-    public String mode() { return mode; }
-    public void setMode(String mode) { this.mode = mode; }
+    public DrainMode mode() { return mode; }
+    public void setMode(DrainMode mode) { this.mode = mode; }
 
     /**
      * Add a message to the queue.
@@ -49,18 +77,18 @@ public final class PendingMessageQueue {
     /**
      * Drain messages according to the current mode.
      * <ul>
-     *   <li>{@code "all"} — returns all pending messages and clears the queue</li>
-     *   <li>{@code "one_at_a_time"} — returns only the oldest message</li>
+     *   <li>{@link DrainMode#ALL} — returns all pending messages and clears the queue</li>
+     *   <li>{@link DrainMode#ONE_AT_A_TIME} — returns only the oldest message</li>
      * </ul>
      */
     public synchronized List<Message> drain() {
         if (items.isEmpty()) return List.of();
-        if (MODE_ALL.equals(mode)) {
+        if (mode == DrainMode.ALL) {
             List<Message> drained = new ArrayList<>(items);
             items.clear();
             return drained;
         }
-        // one_at_a_time
+        // ONE_AT_A_TIME
         return List.of(items.removeFirst());
     }
 

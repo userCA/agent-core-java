@@ -2,8 +2,6 @@ package io.agentcore.tools;
 
 import io.agentcore.core.Content;
 import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content.ImageContent;
-
 import java.util.List;
 import java.util.Map;
 

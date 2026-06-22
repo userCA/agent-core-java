@@ -2,6 +2,8 @@ package io.agentcore.core;
 
 import io.agentcore.core.Content.TextContent;
 import io.agentcore.core.Message.*;
+import io.agentcore.extensions.Extension;
+import io.agentcore.extensions.ExtensionRunner;
 import io.agentcore.providers.*;
 import io.agentcore.tools.ToolRegistry;
 import org.slf4j.Logger;
@@ -11,12 +13,13 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * High-level Agent facade — stateful wrapper around AgentLoop.
  *
  * <p>Mirrors Python {@code agent_core/core/agent.py} Agent class.
+ * Integrates {@link ExtensionRunner} for unified hook dispatch via the
+ * Extension SPI (both manual registration and ServiceLoader discovery).
  */
 public class Agent {
 
@@ -27,10 +30,9 @@ public class Agent {
     private final AtomicBoolean abortSignal = new AtomicBoolean(false);
     private final List<Consumer<AgentEvent>> subscribers = new CopyOnWriteArrayList<>();
 
-    private final List<Function<Map<String, Object>, Map<String, Object>>> beforeHooks = new CopyOnWriteArrayList<>();
-    private final List<Function<Map<String, Object>, Map<String, Object>>> afterHooks = new CopyOnWriteArrayList<>();
+    // Extension-based hook system (unified)
+    private final ExtensionRunner extensionRunner;
     private final List<AgentLoopConfig.TransformContext> transformHooks = new CopyOnWriteArrayList<>();
-    private final List<java.util.function.BiFunction<String, String, Map<String, Object>>> beforeAgentStartHooks = new CopyOnWriteArrayList<>();
 
     private final PendingMessageQueue steeringQueue;
     private final PendingMessageQueue followUpQueue;
@@ -38,12 +40,18 @@ public class Agent {
     private final Set<String> pendingToolCalls = Collections.synchronizedSet(new LinkedHashSet<>());
 
     public Agent(AgentLoopConfig config) {
-        this(config, new AgentContext());
+        this(config, new AgentContext(), List.of());
     }
 
     public Agent(AgentLoopConfig config, AgentContext context) {
+        this(config, context, List.of());
+    }
+
+    public Agent(AgentLoopConfig config, AgentContext context, List<Extension> extensions) {
         this.baseConfig = config;
         this.context = context;
+        this.extensionRunner = new ExtensionRunner(
+                extensions != null ? extensions : List.of());
         this.steeringQueue = new PendingMessageQueue();
         this.followUpQueue = new PendingMessageQueue();
     }
@@ -63,50 +71,14 @@ public class Agent {
 
     public List<Message> prompt(String text, Consumer<AgentEvent> onEvent,
                                 AgentLoopConfig.CompactCallback compactCallback) {
-        abortSignal.set(false);
-        context.setErrorMessage(null);
-        context.tryStartStreaming();
-
         UserMessage userMsg = new UserMessage(
                 List.of(new TextContent(text)),
                 System.currentTimeMillis() / 1000.0);
 
-        Consumer<AgentEvent> emitter = createEmitter(onEvent);
-        AgentLoopConfig config = buildConfigWithHooks(compactCallback);
+        // Run before-agent-start hooks via extensions
+        runBeforeAgentStartHooks(text);
 
-        // Run before-agent-start hooks
-        if (!beforeAgentStartHooks.isEmpty()) {
-            String sysPrompt = context.systemPrompt();
-            for (var hook : beforeAgentStartHooks) {
-                try {
-                    Map<String, Object> result = hook.apply(text, sysPrompt);
-                    if (result != null && result.get("system_prompt") instanceof String sp) {
-                        context.setSystemPrompt(sp);
-                        sysPrompt = sp;
-                    }
-                } catch (Exception e) {
-                    log.warn("beforeAgentStartHook failed", e);
-                }
-            }
-        }
-
-        AgentLoop loop = new AgentLoop(config, context);
-
-        List<AgentEvent> allEvents = new ArrayList<>();
-        try {
-            loop.run(List.of(userMsg), abortSignal, evt -> {
-                allEvents.add(evt);
-                trackState(evt);
-                emitter.accept(evt);
-            });
-        } catch (Exception e) {
-            context.setErrorMessage(e.getMessage());
-        } finally {
-            context.stopStreaming();
-            pendingToolCalls.clear();
-        }
-
-        return extractAssistantMessages(allEvents);
+        return runLoop(List.of(userMsg), onEvent, compactCallback);
     }
 
     public List<Message> continue_(Consumer<AgentEvent> onEvent) {
@@ -115,29 +87,7 @@ public class Agent {
 
     public List<Message> continue_(Consumer<AgentEvent> onEvent,
                                    AgentLoopConfig.CompactCallback compactCallback) {
-        abortSignal.set(false);
-        context.setErrorMessage(null);
-        context.tryStartStreaming();
-
-        Consumer<AgentEvent> emitter = createEmitter(onEvent);
-        AgentLoopConfig config = buildConfigWithHooks(compactCallback);
-        AgentLoop loop = new AgentLoop(config, context);
-
-        List<AgentEvent> allEvents = new ArrayList<>();
-        try {
-            loop.run(List.of(), abortSignal, evt -> {
-                allEvents.add(evt);
-                trackState(evt);
-                emitter.accept(evt);
-            });
-        } catch (Exception e) {
-            context.setErrorMessage(e.getMessage());
-        } finally {
-            context.stopStreaming();
-            pendingToolCalls.clear();
-        }
-
-        return extractAssistantMessages(allEvents);
+        return runLoop(List.of(), onEvent, compactCallback);
     }
 
     public void abort() {
@@ -163,36 +113,13 @@ public class Agent {
         followUpQueue.clear();
     }
 
-    // ── Hook chains ────────────────────────────────────────
-
-    public void addBeforeToolCallHook(Function<Map<String, Object>, Map<String, Object>> hook) {
-        beforeHooks.add(hook);
-    }
-
-    public void removeBeforeToolCallHook(Function<Map<String, Object>, Map<String, Object>> hook) {
-        beforeHooks.remove(hook);
-    }
-
-    public void addAfterToolCallHook(Function<Map<String, Object>, Map<String, Object>> hook) {
-        afterHooks.add(hook);
-    }
-
-    public void removeAfterToolCallHook(Function<Map<String, Object>, Map<String, Object>> hook) {
-        afterHooks.remove(hook);
-    }
-
-    public void addTransformContextHook(AgentLoopConfig.TransformContext hook) {
-        transformHooks.add(hook);
-    }
+    // ── Extension / Hook registration ──────────────────────
 
     /**
-     * Add a hook called before the agent loop starts.
-     * Hook receives (prompt, systemPrompt) and can return:
-     * - "system_prompt" → modified system prompt
-     * - "message" → a Message to inject
+     * Add a transform-context hook (called before each LLM call).
      */
-    public void addBeforeAgentStartHook(java.util.function.BiFunction<String, String, Map<String, Object>> hook) {
-        beforeAgentStartHooks.add(hook);
+    public void addTransformContextHook(AgentLoopConfig.TransformContext hook) {
+        transformHooks.add(hook);
     }
 
     // ── State accessors ────────────────────────────────────
@@ -202,6 +129,7 @@ public class Agent {
     public Set<String> pendingToolCalls() { return Set.copyOf(pendingToolCalls); }
     public List<Message> messages() { return List.copyOf(context.messages()); }
     public AgentContext context() { return context; }
+    public ExtensionRunner extensionRunner() { return extensionRunner; }
 
     public void reset() {
         context.resetState();
@@ -235,17 +163,63 @@ public class Agent {
 
     // ── Internal ───────────────────────────────────────────
 
+    /**
+     * Common loop execution logic shared by prompt() and continue_().
+     */
+    private List<Message> runLoop(List<Message> newMessages,
+                                  Consumer<AgentEvent> onEvent,
+                                  AgentLoopConfig.CompactCallback compactCallback) {
+        abortSignal.set(false);
+        context.setErrorMessage(null);
+        context.tryStartStreaming();
+
+        Consumer<AgentEvent> emitter = createEmitter(onEvent);
+        AgentLoopConfig config = buildConfigWithHooks(compactCallback);
+        AgentLoop loop = new AgentLoop(config, context);
+
+        List<AgentEvent> allEvents = new ArrayList<>();
+        try {
+            loop.run(newMessages, abortSignal, evt -> {
+                allEvents.add(evt);
+                trackState(evt);
+                emitter.accept(evt);
+            });
+        } catch (Exception e) {
+            context.setErrorMessage(e.getMessage());
+        } finally {
+            context.stopStreaming();
+            pendingToolCalls.clear();
+        }
+
+        return extractAssistantMessages(allEvents);
+    }
+
+    /**
+     * Run before-agent-start hooks via ExtensionRunner.
+     */
+    private void runBeforeAgentStartHooks(String prompt) {
+        if (!extensionRunner.hasExtensions()) return;
+        String sysPrompt = context.systemPrompt();
+        Map<String, Object> result = extensionRunner.onBeforeAgentStart(prompt, sysPrompt);
+        if (result != null && result.get("system_prompt") instanceof String sp) {
+            context.setSystemPrompt(sp);
+        }
+    }
+
     private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.CompactCallback compactCallback) {
         AgentLoopConfig.Builder b = baseConfig.toBuilder();
 
-        if (!beforeHooks.isEmpty()) {
-            b.beforeToolCall(this::chainBeforeHooks);
+        // Wire extension runner hooks (typed)
+        if (extensionRunner.hasExtensions()) {
+            b.beforeToolCall(extensionRunner::beforeToolCall);
+            b.afterToolCall(extensionRunner::afterToolCall);
         }
-        if (!afterHooks.isEmpty()) {
-            b.afterToolCall(this::chainAfterHooks);
-        }
-        if (!transformHooks.isEmpty()) {
-            b.transformContext(this::chainTransformHooks);
+
+        // Wire transform hooks (ad-hoc + extension)
+        boolean hasExtTransform = extensionRunner.hasExtensions();
+        boolean hasAdHocTransform = !transformHooks.isEmpty();
+        if (hasExtTransform || hasAdHocTransform) {
+            b.transformContext(this::chainAllTransformHooks);
         }
 
         b.getSteeringMessages(() -> steeringQueue.drain());
@@ -258,49 +232,24 @@ public class Agent {
         return b.build();
     }
 
-    private Map<String, Object> chainBeforeHooks(Map<String, Object> callCtx) {
-        Map<String, Object> merged = null;
-        for (var hook : beforeHooks) {
-            try {
-                Map<String, Object> result = hook.apply(callCtx);
-                if (result != null) {
-                    if (Boolean.TRUE.equals(result.get("block"))) return result;
-                    if (merged == null) merged = new HashMap<>();
-                    if (result.containsKey("inject_metadata")) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> meta = (Map<String, Object>) result.get("inject_metadata");
-                        if (meta != null) merged.putAll(meta);
-                    }
-                    if (result.containsKey("mutated_args")) {
-                        merged.put("mutated_args", result.get("mutated_args"));
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("beforeToolCall hook failed", e);
-            }
-        }
-        return merged;
-    }
-
-    private Map<String, Object> chainAfterHooks(Map<String, Object> callCtx) {
-        Map<String, Object> lastResult = null;
-        for (var hook : afterHooks) {
-            try {
-                Map<String, Object> result = hook.apply(callCtx);
-                if (result != null && result.containsKey("result")) {
-                    lastResult = result;
-                }
-            } catch (Exception e) {
-                log.warn("afterToolCall hook failed", e);
-            }
-        }
-        return lastResult;
-    }
-
-    private List<Map<String, Object>> chainTransformHooks(List<Map<String, Object>> msgs, AtomicBoolean signal) {
+    private List<Map<String, Object>> chainAllTransformHooks(
+            List<Map<String, Object>> msgs, AtomicBoolean signal) {
         List<Map<String, Object>> result = msgs;
+        // Extension transforms first
+        if (extensionRunner.hasExtensions()) {
+            try {
+                result = extensionRunner.transformContext(result, signal);
+            } catch (Exception e) {
+                log.warn("Extension transformContext failed", e);
+            }
+        }
+        // Then ad-hoc transforms
         for (var hook : transformHooks) {
-            try { result = hook.transform(result, signal); } catch (Exception e) { log.warn("transformContext hook failed", e); }
+            try {
+                result = hook.transform(result, signal);
+            } catch (Exception e) {
+                log.warn("transformContext hook failed", e);
+            }
         }
         return result;
     }

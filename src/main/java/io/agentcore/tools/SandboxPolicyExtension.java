@@ -1,9 +1,10 @@
 package io.agentcore.tools;
 
+import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.util.SandboxQuota;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -73,39 +74,32 @@ public class SandboxPolicyExtension implements Extension {
     }
 
     @Override
-    public Map<String, Object> beforeToolCall(Map<String, Object> callContext) {
-        Object toolCallObj = callContext.get("tool_call");
-        if (toolCallObj == null) return null;
+    public ToolCallHookResult beforeToolCall(ToolCallContext context) {
+        ToolCallContent toolCall = context.toolCall();
+        if (!"bash".equals(toolCall.name())) return null;
 
-        // Extract tool name
-        String toolName = extractToolName(toolCallObj);
-        if (!"bash".equals(toolName)) return null;
-
-        // Extract command
-        String command = extractCommand(callContext);
-        if (command == null || command.isEmpty()) return null;
+        Object cmdObj = context.arguments().get("command");
+        if (!(cmdObj instanceof String command) || command.isEmpty()) return null;
 
         // 1. Block dangerous commands
         for (Pattern pattern : DANGEROUS_PATTERNS) {
             if (pattern.matcher(command).find()) {
-                Map<String, Object> result = new LinkedHashMap<>();
-                result.put("block", true);
-                result.put("reason",
+                return new ToolCallHookResult.Block(
                         "Dangerous command pattern detected: '" + pattern.pattern() + "'. "
                                 + "This operation is blocked to prevent system damage.");
-                return result;
             }
         }
 
         // 2. Pick quota based on command content
         SandboxQuota quota = pickQuota(command);
-        Map<String, Object> sandboxMeta = new LinkedHashMap<>();
-        sandboxMeta.put("cpu_cores", quota.cpuCores());
-        sandboxMeta.put("memory_mb", quota.memoryMb());
-        sandboxMeta.put("timeout_seconds", quota.timeoutSeconds());
-        sandboxMeta.put("network_allowed", quota.networkAllowed());
+        Map<String, Object> sandboxMeta = Map.of(
+                "cpu_cores", quota.cpuCores(),
+                "memory_mb", quota.memoryMb(),
+                "timeout_seconds", quota.timeoutSeconds(),
+                "network_allowed", quota.networkAllowed()
+        );
 
-        return Map.of("inject_metadata", Map.of("sandbox_quota", sandboxMeta));
+        return new ToolCallHookResult.InjectMetadata(Map.of("sandbox_quota", sandboxMeta));
     }
 
     /**
@@ -139,28 +133,8 @@ public class SandboxPolicyExtension implements Extension {
     }
 
     private String extractToolName(Object toolCallObj) {
-        if (toolCallObj instanceof io.agentcore.core.Content.ToolCallContent tc) {
+        if (toolCallObj instanceof ToolCallContent tc) {
             return tc.name();
-        }
-        if (toolCallObj instanceof Map<?, ?> map) {
-            Object name = map.get("name");
-            return name instanceof String s ? s : null;
-        }
-        return null;
-    }
-
-    private String extractCommand(Map<String, Object> callContext) {
-        // Try from args directly
-        Object argsObj = callContext.get("args");
-        if (argsObj instanceof Map<?, ?> args) {
-            Object cmd = args.get("command");
-            if (cmd instanceof String s) return s;
-        }
-        // Try from tool_call arguments
-        Object toolCallObj = callContext.get("tool_call");
-        if (toolCallObj instanceof io.agentcore.core.Content.ToolCallContent tc) {
-            Object cmd = tc.arguments().get("command");
-            if (cmd instanceof String s) return s;
         }
         return null;
     }

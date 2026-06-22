@@ -51,7 +51,7 @@ public class AgentSession {
     private ExtensionRunner extRunner;
 
     public AgentSession(Agent agent, SessionStore store, String sessionId) {
-        this(agent, store, sessionId, null, null, DEFAULT_CONTEXT_WINDOW);
+        this(agent, store, sessionId, null, List.of(), DEFAULT_CONTEXT_WINDOW);
     }
 
     public AgentSession(Agent agent, SessionStore store, String sessionId,
@@ -92,10 +92,15 @@ public class AgentSession {
 
         agentUnsub = agent.subscribe(this::onAgentEvent);
 
-        if (!extensions.isEmpty()) {
+        // Extensions are now handled by Agent's ExtensionRunner
+        // If extensions were passed to AgentSession but Agent doesn't have them,
+        // we register them via the agent's extension runner
+        if (!extensions.isEmpty() && agent.extensionRunner().hasExtensions()) {
+            // Extensions already wired via Agent constructor
+            extRunner = agent.extensionRunner();
+        } else if (!extensions.isEmpty()) {
+            // Fallback: create runner for event forwarding only
             extRunner = new ExtensionRunner(extensions);
-            agent.addBeforeToolCallHook(extRunner::beforeToolCall);
-            agent.addAfterToolCallHook(callCtx -> extRunner.afterToolCall(callCtx, null, false));
         }
 
         started = true;

@@ -2,7 +2,9 @@ package io.agentcore.tools;
 
 import io.agentcore.core.Content;
 import io.agentcore.core.Content.TextContent;
+import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.util.BashOperations;
 
 import org.slf4j.Logger;
@@ -66,16 +68,13 @@ public class SelfHealingExtension implements Extension {
     }
 
     @Override
-    public Map<String, Object> afterToolCall(Map<String, Object> callContext) {
-        Object isErrorObj = callContext.get("is_error");
-        boolean isError = Boolean.TRUE.equals(isErrorObj);
-        if (!isError) return null;
+    public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
+        if (!context.isError()) return null;
 
         // Only process bash tool calls
-        String toolName = extractToolName(callContext.get("tool_call"));
-        if (!"bash".equals(toolName)) return null;
+        if (!"bash".equals(context.toolName())) return null;
 
-        String resultText = extractResultText(callContext.get("result"));
+        String resultText = extractResultText(context.result());
         List<String> fixes = new ArrayList<>();
 
         // 1. ModuleNotFoundError → pip install
@@ -113,12 +112,12 @@ public class SelfHealingExtension implements Extension {
         if (fixes.isEmpty()) return null;
 
         // Track fixes for this tool call
-        String toolCallId = extractToolCallId(callContext.get("tool_call"));
-        if (toolCallId != null) {
-            fixesApplied.put(toolCallId, fixes);
-        }
+        fixesApplied.put(context.toolCallId(), fixes);
 
-        return buildResponse(callContext.get("result"), fixes);
+        // Build enhanced result
+        return new AfterToolCallHookResult.ModifyResult(
+                List.of(new TextContent(resultText + buildFixMessage(fixes)))
+        );
     }
 
     /**
@@ -168,77 +167,24 @@ public class SelfHealingExtension implements Extension {
 
     // ── Response building ──
 
-    private Map<String, Object> buildResponse(Object originalResult, List<String> fixes) {
-        String origText = "";
-        Object origDetails = null;
-        Map<String, Object> origDisplay = null;
-
-        if (originalResult instanceof ToolResult tr) {
-            origText = tr.text();
-            origDetails = tr.details();
-            origDisplay = tr.display();
-        }
-
-        StringBuilder fixSb = new StringBuilder("\n\n[Self-healing]\n");
+    private String buildFixMessage(List<String> fixes) {
+        StringBuilder sb = new StringBuilder("\n\n[Self-healing]\n");
         for (String fix : fixes) {
-            fixSb.append("- ").append(fix).append('\n');
+            sb.append("- ").append(fix).append('\n');
         }
-        String enhancedText = origText + fixSb;
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("content", List.of(new TextContent(enhancedText)));
-        result.put("details", origDetails);
-        result.put("display", origDisplay);
-
-        return Map.of("result", result);
+        return sb.toString();
     }
 
     // ── Extraction helpers ──
 
-    private String extractToolName(Object toolCallObj) {
-        if (toolCallObj instanceof Content.ToolCallContent tc) {
-            return tc.name();
-        }
-        if (toolCallObj instanceof Map<?, ?> map) {
-            Object name = map.get("name");
-            return name instanceof String s ? s : null;
-        }
-        return null;
-    }
-
-    private String extractToolCallId(Object toolCallObj) {
-        if (toolCallObj instanceof Content.ToolCallContent tc) {
-            return tc.id();
-        }
-        if (toolCallObj instanceof Map<?, ?> map) {
-            Object id = map.get("id");
-            return id instanceof String s ? s : null;
-        }
-        return null;
-    }
-
-    private String extractResultText(Object resultObj) {
-        if (resultObj instanceof ToolResult tr) {
-            StringBuilder sb = new StringBuilder();
-            for (Content c : tr.content()) {
-                if (c instanceof TextContent tc) {
-                    sb.append(tc.text());
-                }
-            }
-            return sb.toString();
-        }
-        if (resultObj instanceof Map<?, ?> map) {
-            Object content = map.get("content");
-            if (content instanceof List<?> list) {
-                StringBuilder sb = new StringBuilder();
-                for (Object item : list) {
-                    if (item instanceof TextContent tc) {
-                        sb.append(tc.text());
-                    }
-                }
-                return sb.toString();
+    private String extractResultText(ToolResult result) {
+        if (result == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Content c : result.content()) {
+            if (c instanceof TextContent tc) {
+                sb.append(tc.text());
             }
         }
-        return "";
+        return sb.toString();
     }
 }

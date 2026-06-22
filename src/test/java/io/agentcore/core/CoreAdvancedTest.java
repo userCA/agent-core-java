@@ -1,6 +1,7 @@
 package io.agentcore.core;
 
 import io.agentcore.core.Message.*;
+import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.*;
 
 import org.junit.jupiter.api.*;
@@ -19,7 +20,7 @@ class CoreAdvancedTest {
         @Test
         void defaultMode_isOneAtATime() {
             var q = new PendingMessageQueue();
-            assertEquals(PendingMessageQueue.MODE_ONE_AT_A_TIME, q.mode());
+            assertEquals(PendingMessageQueue.DrainMode.ONE_AT_A_TIME, q.mode());
         }
 
         @Test
@@ -29,7 +30,7 @@ class CoreAdvancedTest {
             q.enqueue(new UserMessage(List.of(), 2.0));
             assertEquals(1, q.drain().size());
 
-            q.setMode(PendingMessageQueue.MODE_ALL);
+            q.setMode(PendingMessageQueue.DrainMode.ALL);
             q.enqueue(new UserMessage(List.of(), 3.0));
             q.enqueue(new UserMessage(List.of(), 4.0));
             assertEquals(3, q.drain().size());
@@ -37,7 +38,7 @@ class CoreAdvancedTest {
 
         @Test
         void concurrentEnqueue_threadSafe() throws Exception {
-            var q = new PendingMessageQueue(PendingMessageQueue.MODE_ALL);
+            var q = new PendingMessageQueue(PendingMessageQueue.DrainMode.ALL);
             int count = 100;
             ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();
             try {
@@ -149,8 +150,8 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry);
-            runner.setBeforeToolCall(args -> Map.of("block", true, "reason", "Blocked!"));
+            var runner = new ToolRunner(registry, null,
+                    ctx -> new ToolCallHookResult.Block("Blocked!"), null);
 
             var assistant = AssistantMessage.builder()
                     .addContent(new Content.ToolCallContent("tc1", "echo", Map.of()))
@@ -172,9 +173,9 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry);
             AtomicBoolean hookCalled = new AtomicBoolean(false);
-            runner.setAfterToolCall(args -> { hookCalled.set(true); return null; });
+            var runner = new ToolRunner(registry, null, null,
+                    ctx -> { hookCalled.set(true); return null; });
 
             var assistant = AssistantMessage.builder()
                     .addContent(new Content.ToolCallContent("tc1", "echo", Map.of()))
@@ -195,9 +196,9 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry);
-            runner.setBeforeToolCall(args -> { throw new RuntimeException("hook boom"); });
-            runner.setAfterToolCall(args -> { throw new RuntimeException("hook boom"); });
+            var runner = new ToolRunner(registry, null,
+                    ctx -> { throw new RuntimeException("hook boom"); },
+                    ctx -> { throw new RuntimeException("hook boom"); });
 
             var assistant = AssistantMessage.builder()
                     .addContent(new Content.ToolCallContent("tc1", "echo", Map.of()))
