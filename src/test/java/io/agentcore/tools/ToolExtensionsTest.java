@@ -1,0 +1,326 @@
+package io.agentcore.tools;
+
+import io.agentcore.core.Content.TextContent;
+import io.agentcore.core.Content.ToolCallContent;
+import io.agentcore.tools.util.SandboxQuota;
+
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Tests for tool extensions: SandboxPolicyExtension, SelfHealingExtension,
+ * ReadTool correctness, BashTool correctness, and ToolRenderer.
+ */
+class ToolExtensionsTest {
+
+    // ── SandboxPolicyExtension ────────────────────────────────
+
+    @Nested
+    class SandboxPolicyTest {
+
+        private final SandboxPolicyExtension policy = new SandboxPolicyExtension();
+
+        @Test
+        void blocksDangerousCommands() {
+            var tc = new ToolCallContent("tc1", "bash",
+                    Map.of("command", "rm -rf /"));
+            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+
+            var result = policy.beforeToolCall(ctx);
+            assertNotNull(result);
+            assertTrue((Boolean) result.get("block"));
+        }
+
+        @Test
+        void blocksShutdown() {
+            var tc = new ToolCallContent("tc1", "bash",
+                    Map.of("command", "shutdown -h now"));
+            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+
+            var result = policy.beforeToolCall(ctx);
+            assertNotNull(result);
+            assertTrue((Boolean) result.get("block"));
+        }
+
+        @Test
+        void allowsNormalCommands() {
+            var tc = new ToolCallContent("tc1", "bash",
+                    Map.of("command", "ls -la"));
+            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+
+            var result = policy.beforeToolCall(ctx);
+            assertNotNull(result);
+            assertNull(result.get("block"));
+        }
+
+        @Test
+        void ignoresNonBashTools() {
+            var tc = new ToolCallContent("tc1", "read",
+                    Map.of("path", "/etc/passwd"));
+            var ctx = Map.<String, Object>of("tool_call", tc, "args", tc.arguments());
+
+            var result = policy.beforeToolCall(ctx);
+            assertNull(result);
+        }
+
+        @Test
+        void pickQuotaDefault() {
+            SandboxQuota quota = policy.pickQuota("echo hello");
+            assertEquals(60, quota.timeoutSeconds());
+            assertFalse(quota.networkAllowed());
+        }
+
+        @Test
+        void pickQuotaInstallPackage() {
+            SandboxQuota quota = policy.pickQuota("pip install numpy");
+            assertTrue(quota.networkAllowed());
+            assertEquals(512, quota.memoryMb());
+        }
+
+        @Test
+        void pickQuotaDataAnalysis() {
+            SandboxQuota quota = policy.pickQuota("python -c 'import pandas as pd'");
+            assertEquals(1024, quota.memoryMb());
+            assertEquals(120, quota.timeoutSeconds());
+        }
+
+        @Test
+        void pickQuotaImageProcessing() {
+            SandboxQuota quota = policy.pickQuota("python script.py # uses cv2 and PIL");
+            assertEquals(2048, quota.memoryMb());
+        }
+
+        @Test
+        void hasCorrectName() {
+            assertEquals("sandbox-policy", policy.name());
+        }
+    }
+
+    // ── SelfHealingExtension ─────────────────────────────────
+
+    @Nested
+    class SelfHealingTest {
+
+        private final SelfHealingExtension healing = new SelfHealingExtension();
+
+        @Test
+        void detectsMissingModule() {
+            assertEquals("numpy", healing.detectMissingModule(
+                    "ModuleNotFoundError: No module named 'numpy'"));
+            assertNull(healing.detectMissingModule("Some other error"));
+        }
+
+        @Test
+        void detectsMemoryError() {
+            assertTrue(healing.isMemoryError("MemoryError: out of memory"));
+            assertTrue(healing.isMemoryError("Process was Killed"));
+            assertFalse(healing.isMemoryError("Normal output"));
+        }
+
+        @Test
+        void detectsTimeout() {
+            assertTrue(healing.isTimeout("Command timed out after 60s"));
+            assertFalse(healing.isTimeout("Command completed"));
+        }
+
+        @Test
+        void detectsMissingFile() {
+            assertEquals("data.csv", healing.detectMissingFile(
+                    "FileNotFoundError: No such file or directory: 'data.csv'"));
+            assertNull(healing.detectMissingFile("File exists"));
+        }
+
+        @Test
+        void ignoresNonBashTools() {
+            var tc = new ToolCallContent("tc1", "read", Map.of("path", "/tmp/x"));
+            var result = new ToolResult("File not found: /tmp/x");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", true);
+
+            var response = healing.afterToolCall(ctx);
+            assertNull(response);
+        }
+
+        @Test
+        void ignoresNonErrors() {
+            var tc = new ToolCallContent("tc1", "bash", Map.of("command", "ls"));
+            var result = new ToolResult("file1.txt\nfile2.txt");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", false);
+
+            var response = healing.afterToolCall(ctx);
+            assertNull(response);
+        }
+
+        @Test
+        void enhancesTimeoutError() {
+            var tc = new ToolCallContent("tc1", "bash", Map.of("command", "slow_command"));
+            var result = new ToolResult("Command timed out after 60s");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", true);
+
+            var response = healing.afterToolCall(ctx);
+            assertNotNull(response);
+            assertTrue(response.containsKey("result"));
+        }
+
+        @Test
+        void enhancesMemoryError() {
+            var tc = new ToolCallContent("tc1", "bash", Map.of("command", "big_data"));
+            var result = new ToolResult("MemoryError: process killed");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", true);
+
+            var response = healing.afterToolCall(ctx);
+            assertNotNull(response);
+        }
+
+        @Test
+        void enhancesMissingFile() {
+            var tc = new ToolCallContent("tc1", "bash", Map.of("command", "cat missing.txt"));
+            var result = new ToolResult("No such file or directory: 'missing.txt'");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", true);
+
+            var response = healing.afterToolCall(ctx);
+            assertNotNull(response);
+        }
+
+        @Test
+        void noEnhancementForUnknownErrors() {
+            var tc = new ToolCallContent("tc1", "bash", Map.of("command", "unknown"));
+            var result = new ToolResult("Some random error message");
+            var ctx = Map.<String, Object>of(
+                    "tool_call", tc, "result", result, "is_error", true);
+
+            var response = healing.afterToolCall(ctx);
+            assertNull(response);
+        }
+
+        @Test
+        void hasCorrectName() {
+            assertEquals("self-healing", healing.name());
+        }
+    }
+
+    // ── ReadTool correctness ─────────────────────────────────
+
+    @Nested
+    class ReadToolTest {
+
+        @Test
+        void readFileNotFound(@TempDir Path dir) throws Exception {
+            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps, null);
+
+            var result = tool.execute("tc1", Map.of("path", "nonexistent.txt"), null);
+
+            // Should return structured error with "not_found" detail
+            assertNotNull(result.details());
+            assertTrue(result.details() instanceof Map);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> details = (Map<String, Object>) result.details();
+            assertEquals("not_found", details.get("error"));
+            assertTrue(result.text().contains("File not found"));
+        }
+
+        @Test
+        void readFileSuccess(@TempDir Path dir) throws Exception {
+            Files.writeString(dir.resolve("test.txt"), "Hello World\nLine 2");
+            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps, null);
+
+            var result = tool.execute("tc1", Map.of("path", "test.txt"), null);
+
+            assertNotNull(result.details());
+            @SuppressWarnings("unchecked")
+            Map<String, Object> details = (Map<String, Object>) result.details();
+            assertEquals(false, details.get("truncated"));
+            assertEquals("test.txt", details.get("path"));
+            assertTrue(result.text().contains("Hello World"));
+        }
+
+        @Test
+        void readFileTruncation(@TempDir Path dir) throws Exception {
+            // Create file with many lines
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 100; i++) {
+                sb.append("Line ").append(i).append('\n');
+            }
+            Files.writeString(dir.resolve("big.txt"), sb.toString());
+
+            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps, null, 32000, 10);
+
+            var result = tool.execute("tc1", Map.of("path", "big.txt"), null);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> details = (Map<String, Object>) result.details();
+            assertEquals(true, details.get("truncated"));
+        }
+
+        @Test
+        void requirePathParameter() throws Exception {
+            var fileOps = new io.agentcore.tools.util.LocalFileOperations();
+            var tool = new ReadTool(fileOps, null);
+
+            var result = tool.execute("tc1", Map.of(), null);
+            assertTrue(result.text().contains("ERROR"));
+        }
+    }
+
+    // ── ToolRenderer ─────────────────────────────────────────
+
+    @Nested
+    class ToolRendererTest {
+
+        @Test
+        void renderedOutputDefaults() {
+            var output = new ToolRenderer.RenderedOutput("hello");
+            assertEquals("hello", output.text());
+            assertNull(output.display());
+            assertEquals("text/plain", output.mimeType());
+        }
+
+        @Test
+        void renderedOutputWithDisplay() {
+            var display = Map.<String, Object>of("language", "python");
+            var output = new ToolRenderer.RenderedOutput("print('hi')", display);
+            assertEquals("python", output.display().get("language"));
+        }
+
+        @Test
+        void defaultRenderer() {
+            ToolRenderer renderer = new ToolRenderer() {
+                @Override
+                public String renderCall(String toolCallId, String name, Map<String, Object> arguments) {
+                    return name + " " + arguments.getOrDefault("path", "");
+                }
+
+                @Override
+                public RenderedOutput renderResult(String toolCallId, String name,
+                                                   ToolResult result, boolean isError) {
+                    return new RenderedOutput(result.text(),
+                            isError ? Map.of("error", true) : null);
+                }
+            };
+
+            assertEquals("read /tmp/test",
+                    renderer.renderCall("tc1", "read", Map.of("path", "/tmp/test")));
+
+            var result = new ToolResult("file contents");
+            var rendered = renderer.renderResult("tc1", "read", result, false);
+            assertEquals("file contents", rendered.text());
+            assertNull(rendered.display());
+        }
+    }
+}

@@ -1,60 +1,86 @@
 package io.agentcore.compaction;
 
-import io.agentcore.core.messages.AgentMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.agentcore.core.Message;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+/**
+ * Default compactor: keep recent N messages, summarize older ones via a pluggable function.
+ *
+ * <p>Mirrors Python {@code agent_core/compaction/compactor.py} LLMSummaryCompactor.
+ */
 public class LLMSummaryCompactor implements Compactor {
-    private static final Logger log = LoggerFactory.getLogger(LLMSummaryCompactor.class);
 
-    private final Function<List<AgentMessage>, CompletableFuture<String>> summarizeFn;
+    /**
+     * Function that takes a list of messages and returns a summary string.
+     */
+    private final Function<List<Message>, String> summarizeFn;
     private final double threshold;
     private final int keepRecent;
 
-    public LLMSummaryCompactor(Function<List<AgentMessage>, CompletableFuture<String>> summarizeFn,
-                                double threshold, int keepRecent) {
+    /**
+     * @param summarizeFn  function to summarize messages (can be null for no-op summarization)
+     * @param threshold    fraction of context window that triggers compaction (default 0.8)
+     * @param keepRecent   number of recent messages to keep (default 4)
+     */
+    public LLMSummaryCompactor(Function<List<Message>, String> summarizeFn, double threshold, int keepRecent) {
         this.summarizeFn = summarizeFn;
         this.threshold = threshold;
         this.keepRecent = keepRecent;
     }
 
-    @Override
-    public boolean shouldCompact(List<AgentMessage> messages, int contextWindow) {
-        return CompactionStrategies.shouldCompactThreshold(messages, contextWindow, threshold);
+    public LLMSummaryCompactor() {
+        this(null, 0.8, 4);
     }
 
     @Override
-    public CompletableFuture<CompactionResult> compact(List<AgentMessage> messages, String reason,
-                                                        String instructions, AtomicBoolean signal) {
-        int tokensBefore = CompactionStrategies.totalTokens(messages);
+    public boolean shouldCompact(List<Message> messages, int contextWindow) {
+        int tokens = Compactor.totalTokens(messages);
+        return tokens >= contextWindow * threshold;
+    }
 
-        // Early abort check before starting expensive summarization
-        if (signal != null && signal.get()) {
-            return CompletableFuture.completedFuture(
-                    new CompactionResult("[aborted]", "", tokensBefore, tokensBefore, messages.size()));
+    @Override
+    public CompactionResult compact(
+            List<Message> messages,
+            String reason,
+            String instructions,
+            AtomicBoolean signal) {
+
+        if (messages == null || messages.isEmpty()) {
+            return CompactionResult.empty();
         }
 
+        int tokensBefore = Compactor.totalTokens(messages);
         int cutoff = Math.max(0, messages.size() - keepRecent);
-        List<AgentMessage> toCompact = new ArrayList<>(messages.subList(0, cutoff));
-        List<AgentMessage> toKeep = new ArrayList<>(messages.subList(cutoff, messages.size()));
+        List<Message> toCompact = messages.subList(0, cutoff);
+        List<Message> toKeep = messages.subList(cutoff, messages.size());
 
-        return summarizeFn.apply(toCompact).thenApply(summary -> {
+        String summary = "";
+        if (!toCompact.isEmpty() && summarizeFn != null) {
             if (signal != null && signal.get()) {
-                return new CompactionResult("[aborted]", "", tokensBefore, tokensBefore, toKeep.size());
+                summary = "[aborted]";
+            } else {
+                summary = summarizeFn.apply(toCompact);
             }
-            int tokensAfter = CompactionStrategies.totalTokens(toKeep);
-            String firstKeptId = toKeep.isEmpty() ? "" : String.valueOf(cutoff);
-            return new CompactionResult(summary, firstKeptId, tokensBefore, tokensAfter, toKeep.size());
-        }).exceptionally(e -> {
-            log.warn("Compaction summarize failed: {}", e.getMessage());
-            // Return a no-op result so the caller can handle gracefully
-            return new CompactionResult("", "", tokensBefore, tokensBefore, messages.size());
-        });
+        }
+
+        // Generate an ID for the first kept entry
+        String firstKeptId = "";
+        if (!toKeep.isEmpty()) {
+            firstKeptId = "msg-" + UUID.randomUUID();
+        }
+
+        int tokensAfter = Compactor.totalTokens(toKeep) + summary.length() / 4;
+
+        return new CompactionResult(
+                summary,
+                firstKeptId,
+                tokensBefore,
+                tokensAfter,
+                toKeep.size()
+        );
     }
 }

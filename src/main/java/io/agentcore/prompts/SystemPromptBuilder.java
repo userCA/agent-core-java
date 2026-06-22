@@ -1,104 +1,218 @@
 package io.agentcore.prompts;
 
-import io.agentcore.resources.types.ContextFile;
-import io.agentcore.resources.types.Skill;
-import io.agentcore.tools.base.ToolDefinition;
+import io.agentcore.resources.ContextFileLoader.ContextFile;
+import io.agentcore.tools.ToolDefinition;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * Dynamic system prompt builder — assembles from base prompt, tools, skills,
- * guidelines, context files, and meta information.
+ * Dynamic system prompt builder — assembles a system prompt from tools,
+ * skills, context files, and metadata.
+ *
+ * <p>Mirrors Python {@code agent_core/prompts/builder.py} SystemPromptBuilder.
  */
-public class SystemPromptBuilder {
+public final class SystemPromptBuilder {
+
+    private static final String DEFAULT_BASE_PROMPT =
+            "You are a helpful assistant with access to tools. "
+            + "When you need to perform actions on the user's system, use the available tools. "
+            + "Always prefer using tools over guessing when file or system information is needed.";
+
+    /**
+     * A skill descriptor for prompt injection.
+     *
+     * @param name                    skill name
+     * @param description             skill description
+     * @param disableModelInvocation  if true, hidden from model
+     */
+    public record Skill(String name, String description, boolean disableModelInvocation) {
+        public Skill(String name, String description) {
+            this(name, description, false);
+        }
+    }
+
+    /**
+     * Guideline rule: given a set of active tool names, optionally produce a guideline string.
+     */
+    @FunctionalInterface
+    public interface GuidelineRule extends Function<Set<String>, Optional<String>> {}
+
+    private static final List<GuidelineRule> DEFAULT_RULES = List.of(
+            tools -> tools.containsAll(Set.of("grep", "find", "ls"))
+                    ? Optional.of("Prefer grep/find/ls over bash when searching files.")
+                    : Optional.empty(),
+            tools -> tools.contains("edit")
+                    ? Optional.of("Always use 'edit' for small changes instead of rewriting entire files.")
+                    : Optional.empty(),
+            tools -> tools.contains("read")
+                    ? Optional.of("When using 'read', the output is automatically truncated if too large.")
+                    : Optional.empty(),
+            tools -> (tools.contains("write") || tools.contains("edit"))
+                    ? Optional.of("Before creating files, check if they already exist with 'ls'.")
+                    : Optional.empty()
+    );
+
     private final String basePrompt;
 
     public SystemPromptBuilder() {
-        this("You are a helpful AI assistant.");
+        this(null);
     }
 
     public SystemPromptBuilder(String basePrompt) {
         this.basePrompt = basePrompt;
     }
 
-    public SystemPrompt build(String cwd, List<ToolDefinition> activeTools,
-                               List<Skill> skills, List<ContextFile> contextFiles,
-                               LocalDateTime date) {
-        List<SystemPrompt.SystemPromptSection> sections = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
+    /**
+     * Build the system prompt from the given components.
+     *
+     * @param cwd          current working directory (nullable)
+     * @param activeTools  tools available to the agent (nullable)
+     * @param skills       skills available (nullable)
+     * @param contextFiles context files loaded from disk (nullable)
+     * @param date         current date (null = today)
+     * @return fully assembled SystemPrompt
+     */
+    public SystemPrompt build(String cwd,
+                              List<ToolDefinition> activeTools,
+                              List<Skill> skills,
+                              List<ContextFile> contextFiles,
+                              LocalDate date) {
+        List<SystemPromptSection> sections = new ArrayList<>();
+        List<ToolDefinition> tools = activeTools != null ? activeTools : List.of();
+        List<Skill> skillList = skills != null ? skills : List.of();
+        List<ContextFile> ctxFiles = contextFiles != null ? contextFiles : List.of();
 
         // 1. Base prompt
-        sections.add(new SystemPrompt.SystemPromptSection("base", basePrompt, null));
-        sb.append(basePrompt).append('\n');
+        String base = basePrompt != null ? basePrompt : DEFAULT_BASE_PROMPT;
+        sections.add(new SystemPromptSection("base", base));
 
         // 2. Tools
-        if (activeTools != null && !activeTools.isEmpty()) {
-            var sorted = activeTools.stream()
-                    .sorted(Comparator.comparing(ToolDefinition::name))
-                    .toList();
-            StringBuilder toolsSb = new StringBuilder("## Tools\n");
-            for (var tool : sorted) {
-                toolsSb.append("- ").append(Snippets.extractSnippet(tool)).append('\n');
+        StringBuilder toolSection = new StringBuilder();
+        if (!tools.isEmpty()) {
+            toolSection.append("\n## Tools\n\nYou have access to the following tools:\n\n");
+            List<ToolDefinition> sorted = new ArrayList<>(tools);
+            sorted.sort(Comparator.comparing(ToolDefinition::name));
+            for (ToolDefinition tool : sorted) {
+                toolSection.append("- ").append(tool.name()).append(": ")
+                           .append(extractSnippet(tool)).append("\n");
             }
-            String toolsSection = toolsSb.toString();
-            sections.add(new SystemPrompt.SystemPromptSection("tools", toolsSection, null));
-            sb.append('\n').append(toolsSection);
         }
+        sections.add(new SystemPromptSection("tools", toolSection.toString()));
 
         // 3. Guidelines
-        if (activeTools != null && !activeTools.isEmpty()) {
-            List<String> guidelines = Guidelines.generateGuidelines(activeTools);
-            if (!guidelines.isEmpty()) {
-                String guidSection = "## Guidelines\n" + String.join("\n", guidelines);
-                sections.add(new SystemPrompt.SystemPromptSection("guidelines", guidSection, null));
-                sb.append('\n').append(guidSection);
+        List<String> guidelines = generateGuidelines(tools, DEFAULT_RULES);
+        if (!guidelines.isEmpty()) {
+            StringBuilder gs = new StringBuilder("\n## Guidelines\n\n");
+            for (String g : guidelines) {
+                gs.append(g).append("\n");
             }
+            sections.add(new SystemPromptSection("guidelines", gs.toString()));
         }
 
-        // 4. Context files
-        if (contextFiles != null && !contextFiles.isEmpty()) {
-            StringBuilder ctxSb = new StringBuilder("## Project Context\n");
-            for (var cf : contextFiles) {
-                ctxSb.append("### ").append(cf.path()).append("\n").append(cf.content()).append('\n');
-            }
-            String ctxSection = ctxSb.toString();
-            sections.add(new SystemPrompt.SystemPromptSection("context_files", ctxSection, null));
-            sb.append('\n').append(ctxSection);
-        }
-
-        // 5. Skills
-        if (skills != null && !skills.isEmpty()) {
-            var invocable = skills.stream().filter(s -> !s.disableModelInvocation()).toList();
-            if (!invocable.isEmpty()) {
-                StringBuilder skillSb = new StringBuilder("## Skills\n<available_skills>\n");
-                for (var skill : invocable) {
-                    skillSb.append("<skill>\n<name>").append(skill.name()).append("</name>\n");
-                    skillSb.append("<description>").append(skill.description()).append("</description>\n");
-                    skillSb.append("</skill>\n");
+        // 4. Tool guidelines
+        List<String> toolGuidelines = new ArrayList<>();
+        toolGuidelines.add("判断工具结果是中间过程还是最终产物：");
+        toolGuidelines.add("- 最终产物（图片、生成的文件、用户直接需要的内容）→ 必须在回复中原样包含，不要只描述");
+        toolGuidelines.add("- 中间步骤（读文件用于推理、查状态、执行命令）→ 基于结果继续回答，不需要展示原始输出");
+        for (ToolDefinition tool : tools) {
+            if (tool.promptGuidelines() != null) {
+                for (String g : tool.promptGuidelines()) {
+                    toolGuidelines.add("- " + g);
                 }
-                skillSb.append("</available_skills>");
-                String skillSection = skillSb.toString();
-                sections.add(new SystemPrompt.SystemPromptSection("skills", skillSection, null));
-                sb.append('\n').append(skillSection);
             }
         }
+        StringBuilder tgSection = new StringBuilder("\n## Tool Guidelines\n\n");
+        for (String tg : toolGuidelines) {
+            tgSection.append(tg).append("\n");
+        }
+        sections.add(new SystemPromptSection("tool_guidelines", tgSection.toString()));
 
-        // 6. Meta
-        StringBuilder metaSb = new StringBuilder("## Meta\n");
-        if (date != null) metaSb.append("Current date: ").append(date.toLocalDate()).append('\n');
-        if (cwd != null) metaSb.append("Working directory: ").append(cwd).append('\n');
-        String metaSection = metaSb.toString();
-        sections.add(new SystemPrompt.SystemPromptSection("meta", metaSection, null));
-        sb.append('\n').append(metaSection);
+        // 5. Context files
+        if (!ctxFiles.isEmpty()) {
+            StringBuilder cf = new StringBuilder("\n## Project Context\n\n");
+            for (ContextFile file : ctxFiles) {
+                cf.append("### ").append(file.path()).append("\n\n");
+                cf.append(file.content()).append("\n\n");
+            }
+            sections.add(new SystemPromptSection("context_files", cf.toString()));
+        }
 
-        return new SystemPrompt(
-                sb.toString(), sections,
-                activeTools != null ? activeTools.size() : 0,
-                skills != null ? skills.size() : 0,
-                contextFiles != null ? contextFiles.size() : 0
-        );
+        // 6. Skills
+        if (!skillList.isEmpty()) {
+            StringBuilder sk = new StringBuilder("\n## Skills\n\n<available_skills>\n");
+            for (Skill skill : skillList) {
+                if (!skill.disableModelInvocation()) {
+                    sk.append("  <skill name=\"").append(skill.name()).append("\">")
+                      .append(skill.description()).append("</skill>\n");
+                }
+            }
+            sk.append("</available_skills>\n");
+            sections.add(new SystemPromptSection("skills", sk.toString()));
+        }
+
+        // 7. Meta
+        LocalDate now = date != null ? date : LocalDate.now(ZoneOffset.UTC);
+        StringBuilder meta = new StringBuilder("\n## Meta\n\n");
+        meta.append("Current date: ").append(now.format(DateTimeFormatter.ISO_LOCAL_DATE)).append("\n");
+        if (cwd != null) {
+            meta.append("Current working directory: ").append(cwd).append("\n");
+        }
+        sections.add(new SystemPromptSection("meta", meta.toString()));
+
+        // Assemble
+        StringBuilder fullText = new StringBuilder();
+        for (SystemPromptSection s : sections) {
+            fullText.append(s.content());
+        }
+
+        return new SystemPrompt(fullText.toString(), sections,
+                tools.size(), skillList.size(), ctxFiles.size());
+    }
+
+    /** Convenience overload with no date override. */
+    public SystemPrompt build(String cwd,
+                              List<ToolDefinition> activeTools,
+                              List<Skill> skills,
+                              List<ContextFile> contextFiles) {
+        return build(cwd, activeTools, skills, contextFiles, null);
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
+
+    /**
+     * Extract a one-line description for a tool.
+     * Priority: promptSnippet → first sentence of description → tool name.
+     */
+    static String extractSnippet(ToolDefinition def) {
+        if (def.promptSnippet() != null && !def.promptSnippet().isBlank()) {
+            return def.promptSnippet();
+        }
+        if (def.description() != null && !def.description().isBlank()) {
+            String sentence = def.description().split("\\.")[0].trim();
+            if (sentence.length() > 80) {
+                sentence = sentence.substring(0, 77) + "...";
+            }
+            return sentence;
+        }
+        return def.name();
+    }
+
+    /**
+     * Generate dynamic guidelines based on active tool names.
+     */
+    static List<String> generateGuidelines(List<ToolDefinition> tools, List<GuidelineRule> rules) {
+        Set<String> toolNames = new HashSet<>();
+        for (ToolDefinition t : tools) {
+            toolNames.add(t.name());
+        }
+        List<String> result = new ArrayList<>();
+        for (GuidelineRule rule : rules) {
+            rule.apply(toolNames).ifPresent(result::add);
+        }
+        return result;
     }
 }

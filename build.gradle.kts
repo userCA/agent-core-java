@@ -1,10 +1,11 @@
 plugins {
     `java-library`
+    jacoco
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(23))
     }
 }
 
@@ -24,17 +25,37 @@ dependencies {
     // Logging
     implementation("org.slf4j:slf4j-api:2.0.16")
 
-    // AgentScope Java v2.0 (migration target)
-    implementation("io.agentscope:agentscope-core:2.0.0-SNAPSHOT")
-    implementation("io.agentscope:agentscope-harness:2.0.0-SNAPSHOT")
-
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
     testImplementation("org.mockito:mockito-core:5.12.0")
-    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.3")
 }
 
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("-Dnet.bytebuddy.experimental=true")
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    violationRules {
+        rule {
+            limit {
+                minimum = "0.50".toBigDecimal()
+            }
+        }
+    }
 }
