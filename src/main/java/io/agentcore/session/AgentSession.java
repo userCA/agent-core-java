@@ -140,7 +140,7 @@ public class AgentSession implements AutoCloseable {
         checkReady();
         if (compactor == null) return;
 
-        List<Message> msgs = new ArrayList<>(agent.context().messages());
+        List<Message> msgs = agent.context().messagesSnapshot();
         CompactionResult result = compactor.compact(msgs, "manual", instructions, null);
 
         if (result.summary() != null) {
@@ -314,8 +314,8 @@ public class AgentSession implements AutoCloseable {
     private void maybeCompact() {
         if (compactor == null) return;
         try {
-            // Snapshot to avoid ConcurrentModificationException from subList on live list
-            List<Message> msgs = List.copyOf(agent.context().messages());
+            // Thread-safe snapshot via AgentContext.messagesSnapshot()
+            List<Message> msgs = agent.context().messagesSnapshot();
             if (!compactor.shouldCompact(msgs, contextWindow)) return;
 
             CompactionResult result = compactor.compact(msgs, "threshold", null, null);
