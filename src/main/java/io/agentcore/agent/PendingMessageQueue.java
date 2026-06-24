@@ -26,19 +26,7 @@ public final class PendingMessageQueue {
         /** Drain all pending messages at once. */
         ALL,
         /** Drain only the oldest message per call. */
-        ONE_AT_A_TIME;
-
-        /**
-         * Parse a string value (backward-compatible with "all" / "one_at_a_time").
-         */
-        public static DrainMode fromString(String value) {
-            if (value == null) return ONE_AT_A_TIME;
-            return switch (value.toLowerCase()) {
-                case "all" -> ALL;
-                case "one_at_a_time" -> ONE_AT_A_TIME;
-                default -> ONE_AT_A_TIME;
-            };
-        }
+        ONE_AT_A_TIME
     }
 
     private volatile DrainMode mode;
@@ -50,15 +38,6 @@ public final class PendingMessageQueue {
 
     public PendingMessageQueue(DrainMode mode) {
         this.mode = mode != null ? mode : DrainMode.ONE_AT_A_TIME;
-    }
-
-    /**
-     * Backward-compatible string constructor.
-     * @deprecated Use {@link #PendingMessageQueue(DrainMode)} instead.
-     */
-    @Deprecated
-    public PendingMessageQueue(String mode) {
-        this(DrainMode.fromString(mode));
     }
 
     public DrainMode mode() { return mode; }
