@@ -226,9 +226,7 @@ class ToolExtensionsTest {
 
             // Should return structured error with "not_found" detail
             assertNotNull(result.details());
-            assertTrue(result.details() instanceof Map);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> details = (Map<String, Object>) result.details();
+            Map<String, Object> details = result.details();
             assertEquals("not_found", details.get("error"));
             assertTrue(result.text().contains("File not found"));
         }
@@ -242,8 +240,7 @@ class ToolExtensionsTest {
             var result = tool.execute("tc1", Map.of("path", "test.txt"), null);
 
             assertNotNull(result.details());
-            @SuppressWarnings("unchecked")
-            Map<String, Object> details = (Map<String, Object>) result.details();
+            Map<String, Object> details = result.details();
             assertEquals(false, details.get("truncated"));
             assertEquals("test.txt", details.get("path"));
             assertTrue(result.text().contains("Hello World"));
@@ -263,8 +260,7 @@ class ToolExtensionsTest {
 
             var result = tool.execute("tc1", Map.of("path", "big.txt"), null);
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> details = (Map<String, Object>) result.details();
+            Map<String, Object> details = result.details();
             assertEquals(true, details.get("truncated"));
         }
 

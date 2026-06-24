@@ -353,7 +353,6 @@ public class AgentHttpServer implements AutoCloseable {
             case AgentEvent.MessageUpdate _ -> "message_update";
             case AgentEvent.MessageEnd _ -> "message_end";
             case AgentEvent.ToolExecutionStart _ -> "tool_execution_start";
-            case AgentEvent.ToolExecutionUpdate _ -> "tool_execution_update";
             case AgentEvent.ToolExecutionEnd _ -> "tool_execution_end";
             case AgentEvent.HumanInputRequired _ -> "human_input_required";
         };

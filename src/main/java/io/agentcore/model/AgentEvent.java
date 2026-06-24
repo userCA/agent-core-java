@@ -3,8 +3,6 @@ package io.agentcore.model;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
-import io.agentcore.model.ToolResult;
-
 import java.util.List;
 import java.util.Map;
 
@@ -24,11 +22,18 @@ import java.util.Map;
     @JsonSubTypes.Type(value = AgentEvent.MessageUpdate.class, name = "message_update"),
     @JsonSubTypes.Type(value = AgentEvent.MessageEnd.class, name = "message_end"),
     @JsonSubTypes.Type(value = AgentEvent.ToolExecutionStart.class, name = "tool_execution_start"),
-    @JsonSubTypes.Type(value = AgentEvent.ToolExecutionUpdate.class, name = "tool_execution_update"),
     @JsonSubTypes.Type(value = AgentEvent.ToolExecutionEnd.class, name = "tool_execution_end"),
     @JsonSubTypes.Type(value = AgentEvent.HumanInputRequired.class, name = "human_input_required"),
 })
 public sealed interface AgentEvent {
+
+    /**
+     * Event timestamp (epoch seconds).
+     * Default uses current time; records may override with a captured value.
+     */
+    default double timestamp() {
+        return Message.nowEpochSeconds();
+    }
 
     // ── Lifecycle events ───────────────────────────────────────
 
@@ -59,10 +64,6 @@ public sealed interface AgentEvent {
     ) implements AgentEvent {
         public ToolExecutionStart { args = args == null ? Map.of() : Map.copyOf(args); }
     }
-
-    record ToolExecutionUpdate(
-        String toolCallId, String toolName, Map<String, Object> args, Object partialResult
-    ) implements AgentEvent {}
 
     record ToolExecutionEnd(
         String toolCallId, String toolName, ToolResult result, boolean isError

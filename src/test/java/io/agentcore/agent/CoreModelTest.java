@@ -237,7 +237,6 @@ class CoreModelTest {
                 case AgentEvent.MessageUpdate e -> "msg_update";
                 case AgentEvent.MessageEnd e -> "msg_end";
                 case AgentEvent.ToolExecutionStart e -> "tool_start";
-                case AgentEvent.ToolExecutionUpdate e -> "tool_update";
                 case AgentEvent.ToolExecutionEnd e -> "tool_end";
                 case AgentEvent.HumanInputRequired e -> "hitl";
             };

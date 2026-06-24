@@ -110,7 +110,7 @@ public final class ExtensionRunner {
 
         // Accumulated modifications (null fields = "no extension modified this yet")
         List<Content> accContent = null;
-        Object accDetails = null;
+        Map<String, Object> accDetails = null;
         Boolean accIsError = null;
         Boolean accTerminate = null;
         boolean hasModification = false;

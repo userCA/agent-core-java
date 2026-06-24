@@ -159,7 +159,7 @@ public final class HookTypes {
          */
         record ModifyResult(
                 List<io.agentcore.model.Content> content,
-                Object details,
+                Map<String, Object> details,
                 Boolean isError,
                 Boolean terminate
         ) implements AfterToolCallHookResult {

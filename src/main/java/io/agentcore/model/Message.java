@@ -67,6 +67,9 @@ public sealed interface Message {
     enum StopReason {
         STOP, TOOL_USE, LENGTH, CONTENT_FILTER, ERROR, ABORTED;
 
+        private static final System.Logger LOG =
+                System.getLogger(StopReason.class.getName());
+
         public static StopReason fromValue(String value) {
             if (value == null) return STOP;
             return switch (value.toLowerCase()) {
@@ -76,7 +79,11 @@ public sealed interface Message {
                 case "content_filter" -> CONTENT_FILTER;
                 case "error" -> ERROR;
                 case "aborted" -> ABORTED;
-                default -> STOP;
+                default -> {
+                    LOG.log(System.Logger.Level.DEBUG,
+                            "Unknown StopReason value: ''{0}'', defaulting to STOP", value);
+                    yield STOP;
+                }
             };
         }
 

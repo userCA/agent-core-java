@@ -18,12 +18,13 @@ import java.util.Map;
  */
 public record ToolResult(
         List<Content> content,
-        Object details,
+        Map<String, Object> details,
         Map<String, Object> display
 ) {
     public ToolResult {
         if (content == null) content = List.of();
         else content = List.copyOf(content);
+        if (details != null) details = Map.copyOf(details);
         if (display != null) display = Map.copyOf(display);
     }
 
