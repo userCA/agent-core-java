@@ -501,9 +501,6 @@ class CoreModelTest {
             // Sub-config getters (preferred)
             assertEquals(5, config.retryConfig().maxRetries());
             assertEquals(60.0, config.toolConfig().timeout());
-            // Deprecated convenience getters still work
-            assertEquals(5, config.maxRetries());
-            assertEquals(60.0, config.toolTimeout());
         }
 
         @Test

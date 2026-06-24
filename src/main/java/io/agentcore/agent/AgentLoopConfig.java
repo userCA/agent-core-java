@@ -362,25 +362,4 @@ public final class AgentLoopConfig {
 
     public RetryConfig retryConfig() { return retryConfig; }
     public ToolConfig toolConfig() { return toolConfig; }
-
-    // ── Convenience getters (delegate to sub-configs) ──────────
-
-    /** @deprecated Use {@code toolConfig().execution()} instead */
-    @Deprecated
-    public ToolExecutionMode toolExecution() { return toolConfig.execution(); }
-    /** @deprecated Use {@code toolConfig().timeout()} instead */
-    @Deprecated
-    public Double toolTimeout() { return toolConfig.timeout(); }
-    /** @deprecated Use {@code toolConfig().resultMaxChars()} instead */
-    @Deprecated
-    public int toolResultMaxChars() { return toolConfig.resultMaxChars(); }
-    /** @deprecated Use {@code retryConfig().maxRetries()} instead */
-    @Deprecated
-    public int maxRetries() { return retryConfig.maxRetries(); }
-    /** @deprecated Use {@code retryConfig().baseDelay()} instead */
-    @Deprecated
-    public double retryBaseDelay() { return retryConfig.baseDelay(); }
-    /** @deprecated Use {@code retryConfig().maxDelay()} instead */
-    @Deprecated
-    public double retryMaxDelay() { return retryConfig.maxDelay(); }
 }
