@@ -23,11 +23,14 @@ public interface Extension {
     String name();
 
     /**
-     * Called before the agent loop starts. Can return a map with:
-     * - "system_prompt" → modified system prompt
-     * - "message" → a message to inject
+     * Called before the agent loop starts. Can return a typed result:
+     * <ul>
+     *   <li>{@link BeforeAgentStartResult.ModifySystemPrompt} — replace system prompt</li>
+     *   <li>{@link BeforeAgentStartResult.InjectMessage} — inject a message</li>
+     *   <li>{@code null} — no modification</li>
+     * </ul>
      */
-    default Map<String, Object> onBeforeAgentStart(String prompt, String systemPrompt) {
+    default BeforeAgentStartResult onBeforeAgentStart(String prompt, String systemPrompt) {
         return null;
     }
 

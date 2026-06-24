@@ -17,6 +17,41 @@ public final class HookTypes {
 
     private HookTypes() {}
 
+    // ── Before-agent-start ────────────────────────────────────
+
+    /**
+     * Result returned from {@link Extension#onBeforeAgentStart(String, String)}.
+     *
+     * <p>Sealed interface with three variants:
+     * <ul>
+     *   <li>{@link ModifySystemPrompt} — replace the system prompt</li>
+     *   <li>{@link InjectMessage} — inject an additional message</li>
+     *   <li>{@link NoOp} — no modification</li>
+     * </ul>
+     */
+    public sealed interface BeforeAgentStartResult {
+
+        /** Replace the system prompt with a modified version. */
+        record ModifySystemPrompt(String systemPrompt) implements BeforeAgentStartResult {
+            public ModifySystemPrompt {
+                if (systemPrompt == null) throw new IllegalArgumentException("systemPrompt must not be null");
+            }
+        }
+
+        /** Inject an additional message into the agent context. */
+        record InjectMessage(Map<String, Object> message) implements BeforeAgentStartResult {
+            public InjectMessage {
+                if (message == null) message = Map.of();
+                else message = Map.copyOf(message);
+            }
+        }
+
+        /** No-op: keep the original system prompt unchanged. */
+        record NoOp() implements BeforeAgentStartResult {
+            public static final NoOp INSTANCE = new NoOp();
+        }
+    }
+
     // ── Before-tool-call ──────────────────────────────────────
 
     /**
@@ -57,10 +92,19 @@ public final class HookTypes {
             }
         }
 
-        /** Proceed with execution, optionally mutating arguments. */
-        record Proceed(Map<String, Object> mutatedArguments) implements ToolCallHookResult {
+        /** Proceed with execution, optionally mutating arguments and/or carrying metadata. */
+        record Proceed(Map<String, Object> mutatedArguments, Map<String, Object> metadata) implements ToolCallHookResult {
+            public Proceed {
+                if (metadata != null) metadata = Map.copyOf(metadata);
+            }
+
             /** No-op: proceed with original arguments unchanged. */
-            public static final Proceed NO_CHANGE = new Proceed(null);
+            public static final Proceed NO_CHANGE = new Proceed(null, null);
+
+            /** Convenience: proceed with mutated arguments only, no metadata. */
+            public Proceed(Map<String, Object> mutatedArguments) {
+                this(mutatedArguments, null);
+            }
         }
 
         /** Attach metadata (e.g. sandbox quota) without blocking or mutating args. */

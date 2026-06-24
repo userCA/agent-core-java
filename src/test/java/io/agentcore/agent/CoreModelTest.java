@@ -28,7 +28,6 @@ import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
 import io.agentcore.tools.ToolRegistry;
 import io.agentcore.extensions.Extension;
-import io.agentcore.extensions.ExtensionAdapter;
 import io.agentcore.extensions.ExtensionRunner;
 import io.agentcore.extensions.HookTypes;
 

@@ -15,7 +15,6 @@ import io.agentcore.tools.ToolDefinition;
 import io.agentcore.tools.ToolRegistry;
 import io.agentcore.model.ToolResult;
 import io.agentcore.extensions.Extension;
-import io.agentcore.extensions.ExtensionAdapter;
 import io.agentcore.extensions.ExtensionRunner;
 import io.agentcore.extensions.HookTypes.*;
 
@@ -526,7 +525,8 @@ class AgentLoopIntegrationTest {
         @Test
         void beforeToolCallHookIsApplied() {
             ExtensionRunner runner = new ExtensionRunner(List.of(
-                    new ExtensionAdapter("test-hook") {
+                    new Extension() {
+                        @Override public String name() { return "test-hook"; }
                         @Override
                         public ToolCallHookResult beforeToolCall(ToolCallContext context) {
                             return new ToolCallHookResult.InjectMetadata(Map.of("custom", "value"));
@@ -544,7 +544,8 @@ class AgentLoopIntegrationTest {
         void eventForwardingWorks() {
             List<AgentEvent> received = new ArrayList<>();
 
-            Extension ext = new ExtensionAdapter("listener") {
+            Extension ext = new Extension() {
+                @Override public String name() { return "listener"; }
                 @Override
                 public void onEvent(AgentEvent evt) {
                     received.add(evt);

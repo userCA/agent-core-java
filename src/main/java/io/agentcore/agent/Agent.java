@@ -4,8 +4,8 @@ import io.agentcore.model.Content.TextContent;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.ExtensionRunner;
+import io.agentcore.extensions.HookTypes.BeforeAgentStartResult;
 import io.agentcore.llm.*;
-import io.agentcore.llm.anthropic.AnthropicProvider;
 import io.agentcore.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -283,15 +283,8 @@ public class Agent implements AutoCloseable {
             ToolRegistry toolRegistry,
             String systemPrompt) {
 
-        // Auto-detect Anthropic provider for native message conversion
-        AgentLoopConfig.ConvertToLlm converter;
-        if (provider instanceof AnthropicProvider ap) {
-            var anthropicConverter = ap.createMessageConverter(
-                    toolRegistry != null ? 4000 : 4000);
-            converter = anthropicConverter::convert;
-        } else {
-            converter = new MessageConverter()::convert;
-        }
+        // Use polymorphic converter selection — each provider supplies its own
+        AgentLoopConfig.ConvertToLlm converter = provider.createMessageConverter()::apply;
 
         AgentLoopConfig config = AgentLoopConfig.builder()
                 .model(model)
@@ -375,9 +368,9 @@ public class Agent implements AutoCloseable {
     private void runBeforeAgentStartHooks(String prompt) {
         if (!extensionRunner.hasExtensions()) return;
         String sysPrompt = context.systemPrompt();
-        Map<String, Object> result = extensionRunner.onBeforeAgentStart(prompt, sysPrompt);
-        if (result != null && result.get("system_prompt") instanceof String sp) {
-            context.setSystemPrompt(sp);
+        BeforeAgentStartResult result = extensionRunner.onBeforeAgentStart(prompt, sysPrompt);
+        if (result instanceof BeforeAgentStartResult.ModifySystemPrompt msp) {
+            context.setSystemPrompt(msp.systemPrompt());
         }
     }
 

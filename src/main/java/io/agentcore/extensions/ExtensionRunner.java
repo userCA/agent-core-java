@@ -33,22 +33,22 @@ public final class ExtensionRunner {
     /**
      * Before agent start: merge results from all extensions.
      */
-    public Map<String, Object> onBeforeAgentStart(String prompt, String systemPrompt) {
+    public BeforeAgentStartResult onBeforeAgentStart(String prompt, String systemPrompt) {
         if (extensions.isEmpty()) return null;
 
         String currentSysPrompt = systemPrompt;
         for (Extension ext : extensions) {
             try {
-                Map<String, Object> result = ext.onBeforeAgentStart(prompt, currentSysPrompt);
-                if (result != null && result.get("system_prompt") instanceof String sp) {
-                    currentSysPrompt = sp;
+                BeforeAgentStartResult result = ext.onBeforeAgentStart(prompt, currentSysPrompt);
+                if (result instanceof BeforeAgentStartResult.ModifySystemPrompt msp) {
+                    currentSysPrompt = msp.systemPrompt();
                 }
             } catch (Exception e) {
                 log.warn("Extension {} onBeforeAgentStart failed: {}", ext.name(), e.getMessage());
             }
         }
         if (currentSysPrompt != null && !currentSysPrompt.equals(systemPrompt)) {
-            return Map.of("system_prompt", currentSysPrompt);
+            return new BeforeAgentStartResult.ModifySystemPrompt(currentSysPrompt);
         }
         return null;
     }
@@ -87,9 +87,12 @@ public final class ExtensionRunner {
             }
         }
 
-        // Merge: Proceed takes priority, but InjectMetadata is preserved if no Proceed
+        // Merge: Proceed carries args; InjectMetadata is preserved in Proceed.metadata
         if (mergedArgs != null) {
-            return new ToolCallHookResult.Proceed(mergedArgs);
+            return new ToolCallHookResult.Proceed(
+                    mergedArgs,
+                    mergedMetadata.isEmpty() ? null : mergedMetadata
+            );
         }
         if (!mergedMetadata.isEmpty()) {
             return new ToolCallHookResult.InjectMetadata(mergedMetadata);
