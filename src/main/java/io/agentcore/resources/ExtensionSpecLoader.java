@@ -62,7 +62,7 @@ public final class ExtensionSpecLoader {
                     if (seen.contains(resolved)) continue;
                     seen.add(resolved);
 
-                    String modulePath = Files.isDirectory(entry.getParent().resolve("__init__.py"))
+                    String modulePath = Files.isRegularFile(entry.getParent().resolve("__init__.py"))
                             ? entry.getParent().toString()
                             : resolved;
 
