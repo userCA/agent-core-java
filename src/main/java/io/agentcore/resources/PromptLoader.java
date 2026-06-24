@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +24,8 @@ import org.slf4j.LoggerFactory;
 public final class PromptLoader {
 
     private static final Logger log = LoggerFactory.getLogger(PromptLoader.class);
+    private static final ConcurrentHashMap<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
+    private static final Pattern ITEM_PATTERN = Pattern.compile("^\\s+-\\s+(.+)$", Pattern.MULTILINE);
 
     private PromptLoader() {}
 
@@ -89,7 +92,8 @@ public final class PromptLoader {
      * Extract a scalar value from simple YAML: {@code key: value}.
      */
     static String extractYamlValue(String yaml, String key) {
-        Pattern p = Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*(.+)$");
+        Pattern p = PATTERN_CACHE.computeIfAbsent("value:" + key,
+                k -> Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*(.+)$"));
         Matcher m = p.matcher(yaml);
         if (m.find()) {
             String val = m.group(1).strip();
@@ -111,7 +115,8 @@ public final class PromptLoader {
         List<String> result = new ArrayList<>();
 
         // Try inline list: parameters: [a, b, c]
-        Pattern inline = Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*\\[(.+)]");
+        Pattern inline = PATTERN_CACHE.computeIfAbsent("inline:" + key,
+                k -> Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*\\[(.+)]"));
         Matcher m = inline.matcher(yaml);
         if (m.find()) {
             for (String item : m.group(1).split(",")) {
@@ -122,11 +127,11 @@ public final class PromptLoader {
         }
 
         // Try block list: parameters:\n  - item1\n  - item2
-        Pattern block = Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*\\n((?:\\s+-\\s+.+\\n?)+)");
+        Pattern block = PATTERN_CACHE.computeIfAbsent("block:" + key,
+                k -> Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*:\\s*\\n((?:\\s+-\\s+.+\\n?)+)"));
         m = block.matcher(yaml);
         if (m.find()) {
-            Pattern itemPat = Pattern.compile("^\\s+-\\s+(.+)$", Pattern.MULTILINE);
-            Matcher im = itemPat.matcher(m.group(1));
+            Matcher im = ITEM_PATTERN.matcher(m.group(1));
             while (im.find()) {
                 String v = im.group(1).strip().replaceAll("^[\"']|[\"']$", "");
                 if (!v.isEmpty()) result.add(v);
