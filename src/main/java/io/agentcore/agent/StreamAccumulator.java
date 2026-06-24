@@ -43,11 +43,11 @@ public final class StreamAccumulator {
     private static final class ToolCallSlot {
         final String id;
         final String name;
-        Map<String, Object> args;
+        volatile Map<String, Object> args;
 
         ToolCallSlot(String id, String name) {
-            this.id = id;
-            this.name = name;
+            this.id = Objects.requireNonNull(id, "tool call id");
+            this.name = name != null ? name : "";
             this.args = Map.of();
         }
 
