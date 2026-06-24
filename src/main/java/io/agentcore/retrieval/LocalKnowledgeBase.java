@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -43,6 +44,7 @@ public class LocalKnowledgeBase implements Retriever {
 
     private final Path directory;
     private final EmbeddingFunction embeddingFn;
+    private final Map<Path, double[]> vectorCache = new ConcurrentHashMap<>();
 
     /**
      * Create a knowledge base in the given directory with a pluggable embedding function.
@@ -85,8 +87,9 @@ public class LocalKnowledgeBase implements Retriever {
             if (embeddingFn != null) {
                 double[] vec = embeddingFn.embed(chunks.get(i));
                 if (vec != null && vec.length > 0) {
-                    String vecFile = String.format("chunk_%03d.vec", i);
-                    Files.writeString(docDir.resolve(vecFile), vectorToString(vec));
+                    Path vecPath = docDir.resolve(String.format("chunk_%03d.vec", i));
+                    Files.writeString(vecPath, vectorToString(vec));
+                    vectorCache.put(vecPath, vec);
                 }
             }
         }
@@ -148,6 +151,7 @@ public class LocalKnowledgeBase implements Retriever {
                 double[] vec = embeddingFn.embed(text);
                 if (vec != null && vec.length > 0) {
                     Files.writeString(vecPath, vectorToString(vec));
+                    vectorCache.put(vecPath, vec);
                     count++;
                 }
             }
@@ -238,6 +242,9 @@ public class LocalKnowledgeBase implements Retriever {
         Path docDir = directory.resolve(name);
         if (!Files.isDirectory(docDir)) return false;
 
+        // Invalidate cached vectors for this document
+        vectorCache.keySet().removeIf(p -> p.startsWith(docDir));
+
         try (Stream<Path> walk = Files.walk(docDir)) {
             walk.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try { Files.deleteIfExists(p); } catch (IOException e) {
@@ -277,7 +284,10 @@ public class LocalKnowledgeBase implements Retriever {
                             if (!Files.exists(txtPath)) continue;
 
                             try {
-                                double[] docVec = readVector(vecPath);
+                                double[] docVec = vectorCache.computeIfAbsent(vecPath, p -> {
+                                    try { return readVector(p); }
+                                    catch (IOException e) { throw new RuntimeException(e); }
+                                });
                                 String text = Files.readString(txtPath);
                                 double score = cosineSimilarity(qVec, docVec);
 
