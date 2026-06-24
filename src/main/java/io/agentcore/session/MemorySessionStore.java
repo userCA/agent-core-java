@@ -52,6 +52,16 @@ public class MemorySessionStore implements SessionStore {
     }
 
     @Override
+    public boolean sessionExists(String sessionId) {
+        return headers.containsKey(sessionId);
+    }
+
+    @Override
+    public boolean deleteSession(String sessionId) {
+        return headers.remove(sessionId) != null && entries.remove(sessionId) != null;
+    }
+
+    @Override
     public void close() {
         // No-op
     }

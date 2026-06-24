@@ -44,8 +44,8 @@ public class AgentSession implements AutoCloseable {
     private final List<Consumer<AgentEvent>> listeners = new CopyOnWriteArrayList<>();
 
     private Runnable agentUnsub;
-    private boolean started = false;
-    private boolean closed = false;
+    private volatile boolean started = false;
+    private volatile boolean closed = false;
     private ExtensionRunner extRunner;
 
     public AgentSession(Agent agent, SessionStore store, String sessionId) {
@@ -79,26 +79,24 @@ public class AgentSession implements AutoCloseable {
                 System.getProperty("user.dir", "")
         );
 
-        try {
-            SessionSnapshot snapshot = store.loadSession(sessionId);
-            restoreMessages(snapshot);
-        } catch (IllegalArgumentException e) {
+        if (store.sessionExists(sessionId)) {
+            try {
+                SessionSnapshot snapshot = store.loadSession(sessionId);
+                restoreMessages(snapshot);
+            } catch (Exception e) {
+                log.warn("Failed to load session {}: {}", sessionId, e.getMessage());
+            }
+        } else {
             store.createSession(sessionId, header);
-        } catch (Exception e) {
-            log.warn("Failed to load session {}: {}", sessionId, e.getMessage());
         }
 
         agentUnsub = agent.subscribe(this::onAgentEvent);
 
-        // Extensions are now handled by Agent's ExtensionRunner
-        // If extensions were passed to AgentSession but Agent doesn't have them,
-        // we register them via the agent's extension runner
-        if (!extensions.isEmpty() && agent.extensionRunner().hasExtensions()) {
-            // Extensions already wired via Agent constructor
-            extRunner = agent.extensionRunner();
-        } else if (!extensions.isEmpty()) {
-            // Fallback: create runner for event forwarding only
+        // Wire extension runner: merge session-level extensions with agent's runner
+        if (!extensions.isEmpty()) {
             extRunner = new ExtensionRunner(extensions);
+        } else if (agent.extensionRunner().hasExtensions()) {
+            extRunner = agent.extensionRunner();
         }
 
         started = true;
@@ -247,9 +245,9 @@ public class AgentSession implements AutoCloseable {
     private void restoreMessages(SessionSnapshot snapshot) {
         List<Message> restored = new ArrayList<>();
         for (SessionEntry entry : snapshot.entries()) {
-            if (entry instanceof SessionEntry.MessageEntry me && me.message() instanceof Map<?, ?> msgMap) {
+            if (entry instanceof SessionEntry.MessageEntry me && me.message() != null) {
                 try {
-                    Message msg = MessageSerializer.deserialize(msgMap);
+                    Message msg = MessageSerializer.deserialize(me.message());
                     if (msg != null) restored.add(msg);
                 } catch (Exception e) {
                     log.warn("Failed to restore message {} in session {}: {}",

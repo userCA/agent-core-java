@@ -5,7 +5,6 @@ import io.agentcore.model.Message;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 
 /**
  * Context window compactor interface.
@@ -50,13 +49,13 @@ public interface Compactor {
      * Rough token estimation: ~4 chars per token + fixed overhead per message.
      */
     static int estimateTokens(Message message) {
-        StringBuilder textParts = new StringBuilder();
+        int charCount = 0;
         int fixedOverhead = 0;
         switch (message) {
             case Message.UserMessage um -> {
                 for (var c : um.content()) {
                     if (c instanceof Content.TextContent tc) {
-                        textParts.append(tc.text());
+                        charCount += tc.text().length();
                     } else if (c instanceof Content.ImageContent) {
                         fixedOverhead += IMAGE_TOKEN_OVERHEAD;
                     }
@@ -65,12 +64,11 @@ public interface Compactor {
             case Message.AssistantMessage am -> {
                 for (var c : am.content()) {
                     if (c instanceof Content.TextContent tc) {
-                        textParts.append(tc.text());
+                        charCount += tc.text().length();
                     } else if (c instanceof Content.ToolCallContent tcc) {
-                        // Estimate tokens for tool call: name + serialized arguments
-                        textParts.append(tcc.name());
+                        charCount += tcc.name().length();
                         if (tcc.arguments() != null) {
-                            textParts.append(tcc.arguments().toString());
+                            charCount += tcc.arguments().toString().length();
                         }
                         fixedOverhead += TOOL_CALL_TOKEN_OVERHEAD;
                     }
@@ -79,17 +77,17 @@ public interface Compactor {
             case Message.ToolResultMessage trm -> {
                 for (var c : trm.content()) {
                     if (c instanceof Content.TextContent tc) {
-                        textParts.append(tc.text());
+                        charCount += tc.text().length();
                     } else if (c instanceof Content.ImageContent) {
                         fixedOverhead += IMAGE_TOKEN_OVERHEAD;
                     }
                 }
             }
             case Message.CustomMessage cm -> {
-                textParts.append(cm.content() != null ? cm.content().asText() : "");
+                charCount += cm.content() != null ? cm.content().asText().length() : 0;
             }
         }
-        return Math.max(1, textParts.length() / CHARS_PER_TOKEN + MESSAGE_BASE_OVERHEAD + fixedOverhead);
+        return Math.max(1, charCount / CHARS_PER_TOKEN + MESSAGE_BASE_OVERHEAD + fixedOverhead);
     }
 
     /**

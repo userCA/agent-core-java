@@ -9,6 +9,9 @@ import io.agentcore.model.Message;
 import io.agentcore.model.Message.*;
 import io.agentcore.llm.ProviderUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.*;
 
 /**
@@ -19,6 +22,7 @@ import java.util.*;
  */
 public final class MessageSerializer {
 
+    private static final Logger log = LoggerFactory.getLogger(MessageSerializer.class);
     private static final ObjectMapper OBJECT_MAPPER = ProviderUtils.mapper();
 
     private MessageSerializer() {}
@@ -152,7 +156,10 @@ public final class MessageSerializer {
                 }
                 yield new CustomMessage(customType, content, null, null, timestamp);
             }
-            default -> null;
+            default -> {
+                log.debug("Unknown message role '{}', wrapping as CustomMessage", role);
+                yield new CustomMessage("unknown:" + role, null, null, null, timestamp);
+            }
         };
     }
 

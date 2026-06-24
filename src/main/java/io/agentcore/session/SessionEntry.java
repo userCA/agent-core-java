@@ -24,7 +24,7 @@ public sealed interface SessionEntry {
 
     record MessageEntry(
         String id,
-        Object message,
+        Map<String, Object> message,
         String parentId
     ) implements SessionEntry {}
 

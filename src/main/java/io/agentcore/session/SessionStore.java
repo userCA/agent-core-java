@@ -36,6 +36,27 @@ public interface SessionStore extends AutoCloseable {
     List<SessionMeta> listSessions(String owner, int limit);
 
     /**
+     * Check if a session exists.
+     */
+    default boolean sessionExists(String sessionId) {
+        try {
+            loadSession(sessionId);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Delete a session and its data.
+     *
+     * @return true if the session was found and deleted
+     */
+    default boolean deleteSession(String sessionId) {
+        return false;
+    }
+
+    /**
      * Close the store and release resources.
      */
     void close();

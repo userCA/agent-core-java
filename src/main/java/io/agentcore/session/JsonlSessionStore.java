@@ -7,7 +7,7 @@ import io.agentcore.llm.ProviderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -47,6 +47,11 @@ public class JsonlSessionStore implements SessionStore {
     }
 
     @Override
+    public boolean sessionExists(String sessionId) {
+        return Files.exists(sessionPath(sessionId));
+    }
+
+    @Override
     public void createSession(String sessionId, SessionHeader header) {
         try {
             Map<String, Object> headerMap = new LinkedHashMap<>();
@@ -60,7 +65,7 @@ public class JsonlSessionStore implements SessionStore {
             Files.writeString(sessionPath(sessionId), line,
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to create session " + sessionId, e);
+            throw new SessionStoreException("Failed to create session " + sessionId, e);
         }
     }
 
@@ -69,10 +74,13 @@ public class JsonlSessionStore implements SessionStore {
         try {
             Map<String, Object> entryMap = entryToMap(entry);
             String line = MAPPER.writeValueAsString(entryMap) + "\n";
-            Files.writeString(sessionPath(sessionId), line,
-                    StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Path path = sessionPath(sessionId);
+            try (OutputStream out = new BufferedOutputStream(
+                    new FileOutputStream(path.toFile(), true))) {
+                out.write(line.getBytes(StandardCharsets.UTF_8));
+            }
         } catch (IOException e) {
-            throw new RuntimeException("Failed to append entry to session " + sessionId, e);
+            throw new SessionStoreException("Failed to append entry to session " + sessionId, e);
         }
     }
 
@@ -83,15 +91,15 @@ public class JsonlSessionStore implements SessionStore {
             throw new IllegalArgumentException("Session " + sessionId + " not found");
         }
 
-        try {
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-            if (lines.isEmpty()) {
-                throw new RuntimeException("Session file is empty");
+        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            // Read header
+            String headerLine = reader.readLine();
+            if (headerLine == null || headerLine.isBlank()) {
+                throw new SessionStoreException("Session file is empty: " + sessionId);
             }
 
-            // Parse header
             @SuppressWarnings("unchecked")
-            Map<String, Object> headerData = MAPPER.readValue(lines.get(0), Map.class);
+            Map<String, Object> headerData = MAPPER.readValue(headerLine, Map.class);
             SessionHeader header = new SessionHeader(
                     (String) headerData.get("id"),
                     (String) headerData.get("timestamp"),
@@ -99,10 +107,11 @@ public class JsonlSessionStore implements SessionStore {
                     (String) headerData.getOrDefault("version", "1")
             );
 
-            // Parse entries
+            // Parse entries line by line
             List<SessionEntry> entries = new ArrayList<>();
-            for (int i = 1; i < lines.size(); i++) {
-                String line = lines.get(i).strip();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.strip();
                 if (line.isEmpty()) continue;
                 try {
                     @SuppressWarnings("unchecked")
@@ -114,8 +123,10 @@ public class JsonlSessionStore implements SessionStore {
             }
 
             return new SessionSnapshot(header, entries);
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load session " + sessionId, e);
+            throw new SessionStoreException("Failed to load session " + sessionId, e);
         }
     }
 
@@ -132,17 +143,28 @@ public class JsonlSessionStore implements SessionStore {
                 if (result.size() >= limit) break;
                 try {
                     String sessionId = file.getFileName().toString().replace(".jsonl", "");
-                    List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-                    if (lines.isEmpty()) continue;
+                    // Read only header + first few lines for title extraction
+                    String timestamp = "";
+                    String title = "";
+                    int entryCount = 0;
+                    try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                        String headerLine = reader.readLine();
+                        if (headerLine == null) continue;
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> headerData = MAPPER.readValue(headerLine, Map.class);
+                        timestamp = (String) headerData.getOrDefault("timestamp", "");
+                        title = (String) headerData.getOrDefault("title", "");
 
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> headerData = MAPPER.readValue(lines.get(0), Map.class);
-                    String timestamp = (String) headerData.getOrDefault("timestamp", "");
-
-                    // Extract title from first user message
-                    String title = extractTitle(lines);
-
-                    result.add(new SessionMeta(sessionId, timestamp, lines.size() - 1, title));
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            entryCount++;
+                            if (title.isEmpty() && entryCount <= 20) {
+                                String extracted = extractTitleFromLine(line);
+                                if (!extracted.isEmpty()) title = extracted;
+                            }
+                        }
+                    }
+                    result.add(new SessionMeta(sessionId, timestamp, entryCount, title));
                 } catch (Exception e) {
                     log.debug("Skip malformed session file {}", file.getFileName(), e);
                 }
@@ -154,34 +176,40 @@ public class JsonlSessionStore implements SessionStore {
     }
 
     @Override
+    public boolean deleteSession(String sessionId) {
+        try {
+            return Files.deleteIfExists(sessionPath(sessionId));
+        } catch (IOException e) {
+            throw new SessionStoreException("Failed to delete session " + sessionId, e);
+        }
+    }
+
+    @Override
     public void close() {
         // No-op for file store
     }
 
     // ── Helpers ──────────────────────────────────────────────
 
-    private String extractTitle(List<String> lines) {
-        for (int i = 1; i < lines.size(); i++) {
-            String line = lines.get(i).strip();
-            if (line.isEmpty()) continue;
-            try {
+    private String extractTitleFromLine(String line) {
+        line = line.strip();
+        if (line.isEmpty()) return "";
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = MAPPER.readValue(line, Map.class);
+            if ("message".equals(data.get("type"))) {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> data = MAPPER.readValue(line, Map.class);
-                if ("message".equals(data.get("type"))) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> msg = (Map<String, Object>) data.get("message");
-                    if (msg != null && "user".equals(msg.get("role"))) {
-                        Object content = msg.get("content");
-                        String text = extractText(content);
-                        if (!text.isEmpty()) {
-                            return text.length() > TITLE_MAX_LENGTH ? text.substring(0, TITLE_MAX_LENGTH) + "..." : text;
-                        }
+                Map<String, Object> msg = (Map<String, Object>) data.get("message");
+                if (msg != null && "user".equals(msg.get("role"))) {
+                    Object content = msg.get("content");
+                    String text = extractText(content);
+                    if (!text.isEmpty()) {
+                        return text.length() > TITLE_MAX_LENGTH ? text.substring(0, TITLE_MAX_LENGTH) + "..." : text;
                     }
                 }
-            } catch (Exception e) {
-                log.debug("Skip malformed entry while extracting title", e);
-                continue;
             }
+        } catch (Exception e) {
+            log.debug("Skip malformed entry while extracting title", e);
         }
         return "";
     }
@@ -247,8 +275,12 @@ public class JsonlSessionStore implements SessionStore {
         String type = (String) data.get("type");
         String id = (String) data.getOrDefault("id", "");
         return switch (type) {
-            case "message" -> new SessionEntry.MessageEntry(
-                    id, data.get("message"), (String) data.get("parent_id"));
+            case "message" -> {
+                Object rawMsg = data.get("message");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> msgMap = rawMsg instanceof Map<?, ?> ? (Map<String, Object>) rawMsg : null;
+                yield new SessionEntry.MessageEntry(id, msgMap, (String) data.get("parent_id"));
+            }
             case "compaction" -> new SessionEntry.CompactionEntry(
                     id,
                     (String) data.getOrDefault("summary", ""),
