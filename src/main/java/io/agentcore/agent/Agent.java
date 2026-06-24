@@ -14,6 +14,8 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.Message;
@@ -155,6 +157,57 @@ public class Agent implements AutoCloseable {
 
     public void abort() {
         abortSignal.set(true);
+    }
+
+    // ── Async variants (virtual-thread backed) ──────────────────
+
+    private static final java.util.concurrent.ExecutorService VIRTUAL_EXECUTOR =
+            Executors.newVirtualThreadPerTaskExecutor();
+
+    /**
+     * Async version of {@link #prompt(String, Consumer)}.
+     * Runs the agent loop on a virtual thread.
+     */
+    public CompletableFuture<List<Message>> promptAsync(String text, Consumer<AgentEvent> onEvent) {
+        return promptAsync(text, onEvent, null);
+    }
+
+    /**
+     * Async version of {@link #prompt(String, Consumer, AgentLoopConfig.CompactCallback)}.
+     */
+    public CompletableFuture<List<Message>> promptAsync(String text, Consumer<AgentEvent> onEvent,
+                                                         AgentLoopConfig.CompactCallback compactCallback) {
+        return CompletableFuture.supplyAsync(() -> prompt(text, onEvent, compactCallback), VIRTUAL_EXECUTOR);
+    }
+
+    /**
+     * Async version of {@link #prompt(Message, Consumer)}.
+     */
+    public CompletableFuture<List<Message>> promptAsync(Message message, Consumer<AgentEvent> onEvent) {
+        return promptAsync(message, onEvent, null);
+    }
+
+    /**
+     * Async version of {@link #prompt(Message, Consumer, AgentLoopConfig.CompactCallback)}.
+     */
+    public CompletableFuture<List<Message>> promptAsync(Message message, Consumer<AgentEvent> onEvent,
+                                                         AgentLoopConfig.CompactCallback compactCallback) {
+        return CompletableFuture.supplyAsync(() -> prompt(message, onEvent, compactCallback), VIRTUAL_EXECUTOR);
+    }
+
+    /**
+     * Async version of {@link #continueLoop(Consumer)}.
+     */
+    public CompletableFuture<List<Message>> continueLoopAsync(Consumer<AgentEvent> onEvent) {
+        return continueLoopAsync(onEvent, null);
+    }
+
+    /**
+     * Async version of {@link #continueLoop(Consumer, AgentLoopConfig.CompactCallback)}.
+     */
+    public CompletableFuture<List<Message>> continueLoopAsync(Consumer<AgentEvent> onEvent,
+                                                               AgentLoopConfig.CompactCallback compactCallback) {
+        return CompletableFuture.supplyAsync(() -> continueLoop(onEvent, compactCallback), VIRTUAL_EXECUTOR);
     }
 
     /**
