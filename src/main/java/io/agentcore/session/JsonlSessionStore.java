@@ -161,6 +161,10 @@ public class JsonlSessionStore implements SessionStore {
                             if (title.isEmpty() && entryCount <= 20) {
                                 String extracted = extractTitleFromLine(line);
                                 if (!extracted.isEmpty()) title = extracted;
+                            } else if (!title.isEmpty() && entryCount > 20) {
+                                // Title found — count remaining lines via fast buffer read
+                                entryCount += countRemainingLines(reader);
+                                break;
                             }
                         }
                     }
@@ -190,6 +194,22 @@ public class JsonlSessionStore implements SessionStore {
     }
 
     // ── Helpers ──────────────────────────────────────────────
+
+    /**
+     * Count remaining non-empty lines using buffered byte reads
+     * to avoid allocating a String object per line.
+     */
+    private static int countRemainingLines(BufferedReader reader) throws IOException {
+        int count = 0;
+        char[] buf = new char[8192];
+        int n;
+        while ((n = reader.read(buf)) != -1) {
+            for (int i = 0; i < n; i++) {
+                if (buf[i] == '\n') count++;
+            }
+        }
+        return count;
+    }
 
     private String extractTitleFromLine(String line) {
         line = line.strip();
