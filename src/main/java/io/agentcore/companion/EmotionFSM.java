@@ -17,80 +17,82 @@ public final class EmotionFSM {
 
     private static final Logger log = LoggerFactory.getLogger(EmotionFSM.class);
 
-    // ── Emotion states ────────────────────────────────────────────────
+    // ── Emotion enum ──────────────────────────────────────────────────
 
-    public static final String NEUTRAL  = "NEUTRAL";
-    public static final String HAPPY    = "HAPPY";
-    public static final String EXCITED  = "EXCITED";
-    public static final String SLEEPY   = "SLEEPY";
-    public static final String WORRIED  = "WORRIED";
-    public static final String ANNOYED  = "ANNOYED";
+    /**
+     * Type-safe emotion states with built-in decay, eye, and mood metadata.
+     */
+    public enum Emotion {
+        NEUTRAL(-1, null, "awake"),
+        HAPPY(60.0, "♥", "happy"),
+        EXCITED(15.0, "✦", "happy"),
+        SLEEPY(-1, "-", "sleeping"),
+        WORRIED(90.0, "◉", "concerned"),
+        ANNOYED(45.0, "▼", "concerned");
 
-    public static final List<String> ALL_EMOTIONS =
-            List.of(NEUTRAL, HAPPY, EXCITED, SLEEPY, WORRIED, ANNOYED);
+        private final double decaySeconds;
+        private final String eye;
+        private final String mood;
+
+        Emotion(double decaySeconds, String eye, String mood) {
+            this.decaySeconds = decaySeconds;
+            this.eye = eye;
+            this.mood = mood;
+        }
+
+        /** Seconds before this emotion decays to NEUTRAL (-1 = never). */
+        public double decaySeconds() { return decaySeconds; }
+
+        /** Eye override for sprite rendering (null = use default). */
+        public String eye() { return eye; }
+
+        /** Frontend mood label. */
+        public String mood() { return mood; }
+    }
+
+    // Backward-compatible aliases
+    public static final Emotion NEUTRAL = Emotion.NEUTRAL;
+    public static final Emotion HAPPY = Emotion.HAPPY;
+    public static final Emotion EXCITED = Emotion.EXCITED;
+    public static final Emotion SLEEPY = Emotion.SLEEPY;
+    public static final Emotion WORRIED = Emotion.WORRIED;
+    public static final Emotion ANNOYED = Emotion.ANNOYED;
+
+    public static final List<Emotion> ALL_EMOTIONS = List.of(Emotion.values());
 
     // ── Transition table ──────────────────────────────────────────────
 
-    private static final Map<String, Map<String, String>> TRANSITIONS = new LinkedHashMap<>();
+    private static final Map<Emotion, Map<String, Emotion>> TRANSITIONS = new EnumMap<>(Emotion.class);
     static {
-        addTransitions(NEUTRAL, Map.of(
-                "pet", HAPPY, "tool_ok", NEUTRAL, "tool_fail", WORRIED,
-                "swear", ANNOYED, "idle_30s", SLEEPY, "idle_5min", SLEEPY,
-                "fail_streak_3", WORRIED));
-        addTransitions(HAPPY, Map.of(
-                "pet", EXCITED, "tool_ok", HAPPY, "tool_fail", NEUTRAL,
-                "swear", ANNOYED, "idle_30s", NEUTRAL, "idle_5min", SLEEPY,
-                "fail_streak_3", WORRIED));
-        addTransitions(EXCITED, Map.of(
-                "pet", EXCITED, "tool_ok", HAPPY, "tool_fail", NEUTRAL,
-                "swear", ANNOYED, "idle_30s", HAPPY, "idle_5min", SLEEPY,
-                "fail_streak_3", NEUTRAL));
-        addTransitions(SLEEPY, Map.of(
-                "pet", HAPPY, "tool_ok", NEUTRAL, "tool_fail", WORRIED,
-                "swear", NEUTRAL, "idle_30s", SLEEPY, "idle_5min", SLEEPY,
-                "fail_streak_3", WORRIED));
-        addTransitions(WORRIED, Map.of(
-                "pet", HAPPY, "tool_ok", HAPPY, "tool_fail", WORRIED,
-                "swear", ANNOYED, "idle_30s", NEUTRAL, "idle_5min", SLEEPY,
-                "fail_streak_3", ANNOYED));
-        addTransitions(ANNOYED, Map.of(
-                "pet", NEUTRAL, "tool_ok", NEUTRAL, "tool_fail", ANNOYED,
-                "swear", ANNOYED, "idle_30s", NEUTRAL, "idle_5min", SLEEPY,
-                "fail_streak_3", ANNOYED));
+        addTransitions(Emotion.NEUTRAL, Map.of(
+                "pet", Emotion.HAPPY, "tool_ok", Emotion.NEUTRAL, "tool_fail", Emotion.WORRIED,
+                "swear", Emotion.ANNOYED, "idle_30s", Emotion.SLEEPY, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.WORRIED));
+        addTransitions(Emotion.HAPPY, Map.of(
+                "pet", Emotion.EXCITED, "tool_ok", Emotion.HAPPY, "tool_fail", Emotion.NEUTRAL,
+                "swear", Emotion.ANNOYED, "idle_30s", Emotion.NEUTRAL, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.WORRIED));
+        addTransitions(Emotion.EXCITED, Map.of(
+                "pet", Emotion.EXCITED, "tool_ok", Emotion.HAPPY, "tool_fail", Emotion.NEUTRAL,
+                "swear", Emotion.ANNOYED, "idle_30s", Emotion.HAPPY, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.NEUTRAL));
+        addTransitions(Emotion.SLEEPY, Map.of(
+                "pet", Emotion.HAPPY, "tool_ok", Emotion.NEUTRAL, "tool_fail", Emotion.WORRIED,
+                "swear", Emotion.NEUTRAL, "idle_30s", Emotion.SLEEPY, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.WORRIED));
+        addTransitions(Emotion.WORRIED, Map.of(
+                "pet", Emotion.HAPPY, "tool_ok", Emotion.HAPPY, "tool_fail", Emotion.WORRIED,
+                "swear", Emotion.ANNOYED, "idle_30s", Emotion.NEUTRAL, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.ANNOYED));
+        addTransitions(Emotion.ANNOYED, Map.of(
+                "pet", Emotion.NEUTRAL, "tool_ok", Emotion.NEUTRAL, "tool_fail", Emotion.ANNOYED,
+                "swear", Emotion.ANNOYED, "idle_30s", Emotion.NEUTRAL, "idle_5min", Emotion.SLEEPY,
+                "fail_streak_3", Emotion.ANNOYED));
     }
 
-    private static void addTransitions(String from, Map<String, String> events) {
+    private static void addTransitions(Emotion from, Map<String, Emotion> events) {
         TRANSITIONS.put(from, events);
     }
-
-    // ── Decay ─────────────────────────────────────────────────────────
-
-    private static final Map<String, Double> DECAY_SECONDS = Map.of(
-            EXCITED, 15.0,
-            HAPPY, 60.0,
-            WORRIED, 90.0,
-            ANNOYED, 45.0,
-            SLEEPY, -1.0);  // never auto-decay
-
-    // ── Eye override per emotion ──────────────────────────────────────
-
-    private static final Map<String, String> EMOTION_EYE = Map.of(
-            NEUTRAL, "",   // null → use bones.eye
-            HAPPY, "♥",
-            EXCITED, "✦",
-            SLEEPY, "-",
-            WORRIED, "◉",
-            ANNOYED, "▼");
-
-    // ── Emotion → frontend mood ───────────────────────────────────────
-
-    private static final Map<String, String> EMOTION_TO_MOOD = Map.of(
-            NEUTRAL, "awake",
-            HAPPY, "happy",
-            EXCITED, "happy",
-            SLEEPY, "sleeping",
-            WORRIED, "concerned",
-            ANNOYED, "concerned");
 
     // ── Breed emotional params ────────────────────────────────────────
 
@@ -112,7 +114,7 @@ public final class EmotionFSM {
 
     // ── State ─────────────────────────────────────────────────────────
 
-    private String emotion = NEUTRAL;
+    private Emotion emotion = Emotion.NEUTRAL;
     private double mood = 50.0;
     private String lastEvent = "";
     private long lastEventAt = 0;
@@ -140,7 +142,7 @@ public final class EmotionFSM {
 
     // ── Read state ────────────────────────────────────────────────────
 
-    public String getEmotion()      { return emotion; }
+    public Emotion getEmotion()     { return emotion; }
     public double getMood()         { return mood; }
     public String getEyeOverride()  { return eyeOverride; }
     public String getFrontendMood() { return frontendMood; }
@@ -169,9 +171,9 @@ public final class EmotionFSM {
             effectiveEvent = "fail_streak_3";
         }
 
-        String target = applyModifiers(effectiveEvent);
-        if (target != null && !target.equals(emotion)) {
-            String old = emotion;
+        Emotion target = applyModifiers(effectiveEvent);
+        if (target != null && target != emotion) {
+            Emotion old = emotion;
             emotion = target;
             applyMoodChange(effectiveEvent);
             updateDerived();
@@ -181,10 +183,10 @@ public final class EmotionFSM {
         return changes;
     }
 
-    private String applyModifiers(String eventType) {
-        Map<String, String> events = TRANSITIONS.get(emotion);
+    private Emotion applyModifiers(String eventType) {
+        Map<String, Emotion> events = TRANSITIONS.get(emotion);
         if (events == null) return null;
-        String target = events.get(eventType);
+        Emotion target = events.get(eventType);
         if (target == null) return null;
 
         double resist = params.getOrDefault("annoy_resistance", 50.0) / 100.0;
@@ -192,19 +194,19 @@ public final class EmotionFSM {
         double worryTendency = params.getOrDefault("worry_tendency", 50.0) / 100.0;
 
         // annoy_resistance: reduce chance of ANNOYED transitions
-        if (ANNOYED.equals(target)) {
+        if (target == Emotion.ANNOYED) {
             if (random.nextDouble() > (1.0 - resist * 0.5)) {
                 return emotion;  // resisted
             }
         }
 
         // excite_ease: NEUTRAL→HAPPY can skip to EXCITED
-        if (HAPPY.equals(target) && NEUTRAL.equals(emotion) && exciteEase > 70) {
-            return EXCITED;
+        if (target == Emotion.HAPPY && emotion == Emotion.NEUTRAL && exciteEase > 70) {
+            return Emotion.EXCITED;
         }
 
         // worry_tendency: NEUTRAL→WORRIED more likely
-        if (WORRIED.equals(target) && worryTendency < 0.3 && random.nextDouble() < 0.5) {
+        if (target == Emotion.WORRIED && worryTendency < 0.3 && random.nextDouble() < 0.5) {
             return emotion;  // too carefree to worry
         }
 
@@ -217,9 +219,8 @@ public final class EmotionFSM {
     }
 
     private void updateDerived() {
-        eyeOverride = EMOTION_EYE.getOrDefault(emotion, null);
-        if (eyeOverride != null && eyeOverride.isEmpty()) eyeOverride = null;
-        frontendMood = EMOTION_TO_MOOD.getOrDefault(emotion, "awake");
+        eyeOverride = emotion.eye();
+        frontendMood = emotion.mood();
     }
 
     // ── Decay ─────────────────────────────────────────────────────────
@@ -230,14 +231,14 @@ public final class EmotionFSM {
     public List<String> checkDecay(double idleSeconds) {
         List<String> changes = new ArrayList<>();
 
-        if (NEUTRAL.equals(emotion) || SLEEPY.equals(emotion)) return changes;
+        if (emotion == Emotion.NEUTRAL || emotion == Emotion.SLEEPY) return changes;
 
-        double decayS = DECAY_SECONDS.getOrDefault(emotion, -1.0);
+        double decayS = emotion.decaySeconds();
         if (decayS <= 0) return changes;
 
         if (idleSeconds >= decayS) {
-            String old = emotion;
-            emotion = NEUTRAL;
+            Emotion old = emotion;
+            emotion = Emotion.NEUTRAL;
             mood = 50;
             updateDerived();
             changes.add(old + "→NEUTRAL (decay)");
@@ -252,9 +253,9 @@ public final class EmotionFSM {
      */
     public List<String> markIdle(double idleSeconds) {
         List<String> changes = new ArrayList<>();
-        if (idleSeconds >= 300 && !SLEEPY.equals(emotion)) {
-            String old = emotion;
-            emotion = SLEEPY;
+        if (idleSeconds >= 300 && emotion != Emotion.SLEEPY) {
+            Emotion old = emotion;
+            emotion = Emotion.SLEEPY;
             mood = Math.max(0, mood - 20);
             updateDerived();
             changes.add(old + "→SLEEPY (idle " + String.format("%.0f", idleSeconds) + "s)");
