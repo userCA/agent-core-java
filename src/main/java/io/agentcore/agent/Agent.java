@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.Message;
@@ -326,15 +327,13 @@ public class Agent implements AutoCloseable {
         StreamAccumulator accumulator = getOrCreateStreamAccumulator(config);
         AgentLoop loop = new AgentLoop(config, context, runner, accumulator);
 
-        // Single-element holder for lambda capture (loop.run is synchronous)
-        @SuppressWarnings("unchecked")
-        List<Message>[] produced = new List[]{List.of()};
+        AtomicReference<List<Message>> produced = new AtomicReference<>(List.of());
         try {
             loop.run(newMessages, abortSignal, evt -> {
                 toolCallTracker.onEvent(evt);
                 emitter.accept(evt);
                 if (evt instanceof AgentEvent.AgentEnd ae) {
-                    produced[0] = ae.messages();
+                    produced.set(ae.messages());
                 }
             });
         } catch (Exception e) {
@@ -357,7 +356,7 @@ public class Agent implements AutoCloseable {
             running.set(false);
         }
 
-        return produced[0].stream()
+        return produced.get().stream()
                 .filter(m -> m instanceof AssistantMessage)
                 .toList();
     }
