@@ -248,12 +248,7 @@ public final class AgentConfig {
         ModelInfo modelInfo = createModel();
         AuthSource authSource = createAuthSource();
 
-        AgentLoopConfig.ConvertToLlm converter;
-        if (providerInstance instanceof AnthropicProvider ap) {
-            converter = ap.createMessageConverter(4000)::convert;
-        } else {
-            converter = new MessageConverter()::convert;
-        }
+        AgentLoopConfig.ConvertToLlm converter = providerInstance.createMessageConverter()::apply;
 
         return AgentLoopConfig.builder()
                 .model(modelInfo)

@@ -3,7 +3,10 @@ package io.agentcore.llm;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +59,22 @@ public final class ProviderUtils {
                 || lower.contains("exceeds the maximum");
     }
 
+    private static final Set<Integer> RETRYABLE_STATUS_CODES = Set.of(429, 500, 502, 503, 504);
+
+    /**
+     * Build a {@link StreamEvent.StreamError} from an HTTP error response.
+     *
+     * @param statusCode HTTP status code
+     * @param bodyText   response body text
+     * @return a StreamError with retryable and overflow flags set
+     */
+    public static StreamEvent.StreamError httpError(int statusCode, String bodyText) {
+        boolean retryable = RETRYABLE_STATUS_CODES.contains(statusCode);
+        boolean overflow = isContextOverflow(bodyText);
+        return new StreamEvent.StreamError(
+                "HTTP " + statusCode + ": " + bodyText, retryable, overflow);
+    }
+
     /**
      * Serialize a Map to JSON string.
      */
@@ -72,6 +91,36 @@ public final class ProviderUtils {
      */
     public static ObjectMapper mapper() {
         return MAPPER;
+    }
+
+    /**
+     * Extract plain text from an OpenAI-format content value.
+     *
+     * <p>Handles:
+     * <ul>
+     *   <li>{@code String} — returned as-is</li>
+     *   <li>{@code List<Map>} — concatenates all "text" type blocks</li>
+     *   <li>Other — returns empty string</li>
+     * </ul>
+     */
+    public static String extractText(Object content) {
+        if (content instanceof String s) return s;
+        if (content instanceof List<?> list) {
+            StringBuilder sb = new StringBuilder();
+            for (Object c : list) {
+                if (c instanceof Map<?, ?> map) {
+                    Object type = map.get("type");
+                    if ("text".equals(type)) {
+                        Object textVal = map.get("text");
+                        if (textVal != null) sb.append(textVal);
+                    }
+                } else if (c instanceof String s) {
+                    sb.append(s);
+                }
+            }
+            return sb.toString();
+        }
+        return "";
     }
 
     /**

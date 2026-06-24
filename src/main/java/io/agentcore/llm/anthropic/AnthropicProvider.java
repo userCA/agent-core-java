@@ -10,6 +10,8 @@ import io.agentcore.llm.ModelProvider;
 import io.agentcore.llm.ProviderAuth;
 import io.agentcore.llm.StreamEvent;
 import io.agentcore.llm.StreamEvent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
  */
 public class AnthropicProvider implements ModelProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(AnthropicProvider.class);
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
@@ -75,6 +78,7 @@ public class AnthropicProvider implements ModelProvider {
     /**
      * Create a message converter that produces Anthropic-native messages.
      */
+    @Override
     public AnthropicMessageConverter createMessageConverter() {
         return createMessageConverter(4000);
     }
@@ -121,7 +125,6 @@ public class AnthropicProvider implements ModelProvider {
                 queue.offer(new StreamError("Stream failed: " + e.getMessage(), true, false));
             } finally {
                 done.set(true);
-                queue.offer(null);
             }
         });
 
@@ -203,9 +206,9 @@ public class AnthropicProvider implements ModelProvider {
         if (response.statusCode() >= 400) {
             try (var body = response.body()) {
                 String bodyText = new String(body.readAllBytes(), StandardCharsets.UTF_8);
-                boolean retryable = Set.of(429, 500, 502, 503, 504).contains(response.statusCode());
-                boolean overflow = ProviderUtils.isContextOverflow(bodyText);
-                queue.offer(new StreamError("HTTP " + response.statusCode() + ": " + bodyText, retryable, overflow));
+                var error = ProviderUtils.httpError(response.statusCode(), bodyText);
+                log.warn("Anthropic HTTP {}: retryable={}, overflow={}", response.statusCode(), error.retryable(), error.overflow());
+                queue.offer(error);
             }
             return;
         }
@@ -240,6 +243,7 @@ public class AnthropicProvider implements ModelProvider {
                 try {
                     event = MAPPER.readValue(data, MAP_TYPE);
                 } catch (Exception e) {
+                    log.debug("Failed to parse SSE data: {}", data, e);
                     continue;
                 }
 
@@ -351,7 +355,7 @@ public class AnthropicProvider implements ModelProvider {
         for (Map<String, Object> msg : messages) {
             String role = (String) msg.get("role");
             if ("system".equals(role)) {
-                String text = extractText(msg.get("content"));
+                String text = ProviderUtils.extractText(msg.get("content"));
                 if (!text.isEmpty()) system = text;
                 continue;
             }
@@ -363,7 +367,7 @@ public class AnthropicProvider implements ModelProvider {
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("type", "tool_result");
                 result.put("tool_use_id", msg.getOrDefault("tool_call_id", ""));
-                result.put("content", extractText(msg.get("content")));
+                result.put("content", ProviderUtils.extractText(msg.get("content")));
                 if (!out.isEmpty() && "user".equals(out.getLast().get("role"))) {
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> content = (List<Map<String, Object>>) out.getLast().get("content");
@@ -384,7 +388,7 @@ public class AnthropicProvider implements ModelProvider {
         for (Map<String, Object> msg : messages) {
             String role = (String) msg.get("role");
             if ("system".equals(role)) {
-                String text = extractText(msg.get("content"));
+                String text = ProviderUtils.extractText(msg.get("content"));
                 if (!text.isEmpty()) system = text;
                 continue;
             }
@@ -463,7 +467,7 @@ public class AnthropicProvider implements ModelProvider {
 
     private static List<Map<String, Object>> assistantToAnthropic(Map<String, Object> msg) {
         List<Map<String, Object>> out = new ArrayList<>();
-        String text = extractText(msg.get("content"));
+        String text = ProviderUtils.extractText(msg.get("content"));
         if (!text.isEmpty()) {
             out.add(new LinkedHashMap<>(Map.of("type", "text", "text", text)));
         }
@@ -488,26 +492,6 @@ public class AnthropicProvider implements ModelProvider {
         return out;
     }
 
-    private static String extractText(Object content) {
-        if (content instanceof String s) return s;
-        if (content instanceof List<?> list) {
-            StringBuilder sb = new StringBuilder();
-            for (Object c : list) {
-                if (c instanceof Map<?, ?> map) {
-                    Object type = map.get("type");
-                    if ("text".equals(type)) {
-                        Object textVal = map.get("text");
-                        if (textVal != null) sb.append(textVal);
-                    }
-                } else if (c instanceof String s) {
-                    sb.append(s);
-                }
-            }
-            return sb.toString();
-        }
-        return "";
-    }
-
     private static String[] splitDataUrl(String url) {
         // data:image/png;base64,ABC...
         String afterPrefix = url.substring(5); // strip "data:"
@@ -525,114 +509,5 @@ public class AnthropicProvider implements ModelProvider {
                 new ModelInfo(providerName, "claude-sonnet-4-6", 200_000, 8192, true, true),
                 new ModelInfo(providerName, "claude-opus-4-7", 200_000, 16384, true, true)
         );
-    }
-
-    // ── Anthropic-native message converter ───────────────────
-
-    /**
-     * Converts domain {@link Message} objects to Anthropic-native format.
-     */
-    public static class AnthropicMessageConverter {
-        private final int toolResultMaxChars;
-
-        public AnthropicMessageConverter(int toolResultMaxChars) {
-            this.toolResultMaxChars = toolResultMaxChars;
-        }
-
-        public List<Map<String, Object>> convert(List<Message> messages) {
-            List<Map<String, Object>> out = new ArrayList<>();
-            for (Message m : messages) {
-                switch (m) {
-                    case Message.UserMessage um -> {
-                        List<Map<String, Object>> blocks = new ArrayList<>();
-                        for (Content c : um.content()) {
-                            if (c instanceof Content.TextContent tc) {
-                                blocks.add(new LinkedHashMap<>(Map.of("type", "text", "text", tc.text())));
-                            } else if (c instanceof Content.ImageContent ic) {
-                                Map<String, Object> img = new LinkedHashMap<>();
-                                img.put("type", "image");
-                                img.put("source", Map.of(
-                                        "type", "base64",
-                                        "media_type", ic.mimeType(),
-                                        "data", ic.data()
-                                ));
-                                blocks.add(img);
-                            }
-                        }
-                        if (blocks.isEmpty()) {
-                            blocks.add(Map.of("type", "text", "text", ""));
-                        }
-                        Map<String, Object> msg = new LinkedHashMap<>();
-                        msg.put("role", "user");
-                        msg.put("content", blocks);
-                        out.add(msg);
-                    }
-                    case Message.AssistantMessage am -> {
-                        List<Map<String, Object>> blocks = new ArrayList<>();
-                        String text = am.content().stream()
-                                .filter(c -> c instanceof Content.TextContent)
-                                .map(c -> ((Content.TextContent) c).text())
-                                .collect(Collectors.joining());
-                        if (!text.isEmpty()) {
-                            blocks.add(new LinkedHashMap<>(Map.of("type", "text", "text", text)));
-                        }
-                        for (Content tc : am.content()) {
-                            if (tc instanceof Content.ToolCallContent tcc) {
-                                Map<String, Object> tu = new LinkedHashMap<>();
-                                tu.put("type", "tool_use");
-                                tu.put("id", tcc.id());
-                                tu.put("name", tcc.name());
-                                tu.put("input", tcc.arguments());
-                                blocks.add(tu);
-                            }
-                        }
-                        if (blocks.isEmpty()) {
-                            blocks.add(Map.of("type", "text", "text", ""));
-                        }
-                        Map<String, Object> msg = new LinkedHashMap<>();
-                        msg.put("role", "assistant");
-                        msg.put("content", blocks);
-                        out.add(msg);
-                    }
-                    case Message.ToolResultMessage trm -> {
-                        String text = trm.content().stream()
-                                .filter(c -> c instanceof Content.TextContent)
-                                .map(c -> ((Content.TextContent) c).text())
-                                .collect(Collectors.joining());
-                        if (text.length() > toolResultMaxChars) {
-                            text = text.substring(0, toolResultMaxChars)
-                                    + "\n...[truncated, " + text.length() + " chars total]";
-                        }
-                        Map<String, Object> resultBlock = new LinkedHashMap<>();
-                        resultBlock.put("type", "tool_result");
-                        resultBlock.put("tool_use_id", trm.toolCallId());
-                        resultBlock.put("content", text);
-
-                        if (!out.isEmpty() && "user".equals(out.getLast().get("role"))) {
-                            @SuppressWarnings("unchecked")
-                            List<Map<String, Object>> content = (List<Map<String, Object>>) out.getLast().get("content");
-                            content.add(resultBlock);
-                        } else {
-                            Map<String, Object> msg = new LinkedHashMap<>();
-                            msg.put("role", "user");
-                            msg.put("content", new ArrayList<>(List.of(resultBlock)));
-                            out.add(msg);
-                        }
-                    }
-                    case Message.CustomMessage cm -> {
-                        if ("compaction_summary".equals(cm.customType())) {
-                            String text = cm.content() != null ? cm.content().asText() : "";
-                            Map<String, Object> msg = new LinkedHashMap<>();
-                            msg.put("role", "user");
-                            msg.put("content", new ArrayList<>(List.of(
-                                    Map.of("type", "text", "text", "[Earlier conversation summary]\n" + text)
-                            )));
-                            out.add(msg);
-                        }
-                    }
-                }
-            }
-            return out;
-        }
     }
 }

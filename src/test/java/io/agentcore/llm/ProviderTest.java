@@ -6,6 +6,7 @@ import io.agentcore.model.Message;
 import io.agentcore.model.Message.*;
 import io.agentcore.llm.openai.OpenAIProvider;
 import io.agentcore.llm.anthropic.AnthropicProvider;
+import io.agentcore.llm.anthropic.AnthropicMessageConverter;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -111,7 +112,7 @@ class ProviderTest {
     @Nested
     class AnthropicConverterTest {
 
-        private final AnthropicProvider.AnthropicMessageConverter converter =
+        private final AnthropicMessageConverter converter =
                 new AnthropicProvider().createMessageConverter();
 
         @Test

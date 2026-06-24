@@ -4,6 +4,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 /**
  * LLM provider interface — all model adapters implement this.
@@ -59,6 +60,20 @@ public interface ModelProvider {
             String systemPrompt,
             ProviderAuth auth) {
         return stream(model, messages, tools, systemPrompt, "off", null, null, null, auth);
+    }
+
+    /**
+     * Create a message converter for this provider's native format.
+     *
+     * <p>Default implementation returns the OpenAI-format {@link MessageConverter}.
+     * Providers with a native format (e.g. Anthropic) should override this.
+     *
+     * @return a function that converts domain {@link io.agentcore.model.Message} lists
+     *         to provider-native dict lists
+     */
+    default Function<List<io.agentcore.model.Message>, List<Map<String, Object>>> createMessageConverter() {
+        MessageConverter converter = new MessageConverter();
+        return converter::convert;
     }
 
     /**

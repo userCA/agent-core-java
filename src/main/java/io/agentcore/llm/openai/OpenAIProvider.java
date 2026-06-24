@@ -171,9 +171,9 @@ public class OpenAIProvider implements ModelProvider {
         if (response.statusCode() >= 400) {
             try (var body = response.body()) {
                 String bodyText = new String(body.readAllBytes(), StandardCharsets.UTF_8);
-                boolean retryable = Set.of(429, 500, 502, 503, 504).contains(response.statusCode());
-                boolean overflow = ProviderUtils.isContextOverflow(bodyText);
-                queue.offer(new StreamError("HTTP " + response.statusCode() + ": " + bodyText, retryable, overflow));
+                var error = ProviderUtils.httpError(response.statusCode(), bodyText);
+                log.warn("OpenAI HTTP {}: retryable={}, overflow={}", response.statusCode(), error.retryable(), error.overflow());
+                queue.offer(error);
             }
             return;
         }
