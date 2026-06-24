@@ -48,8 +48,13 @@ public final class AgentLoopConfig {
     /**
      * Tool execution configuration: timeout, result size, and execution mode.
      */
-    public record ToolConfig(Double timeout, int resultMaxChars, ToolExecutionMode execution) {
-        public static final ToolConfig DEFAULT = new ToolConfig(120.0, 4000, ToolExecutionMode.PARALLEL);
+    public record ToolConfig(Double timeout, int resultMaxChars, ToolExecutionMode execution, int maxParallelTools) {
+        public static final ToolConfig DEFAULT = new ToolConfig(120.0, 4000, ToolExecutionMode.PARALLEL, 10);
+
+        /** Backward-compatible constructor without maxParallelTools. */
+        public ToolConfig(Double timeout, int resultMaxChars, ToolExecutionMode execution) {
+            this(timeout, resultMaxChars, execution, 10);
+        }
     }
 
     // ── Required fields ────────────────────────────────────────
@@ -85,7 +90,8 @@ public final class AgentLoopConfig {
         this.authResolver = b.authResolver;
         this.retryConfig = new RetryConfig(b.maxRetries, b.retryBaseDelay, b.retryMaxDelay);
         this.toolConfig = new ToolConfig(b.toolTimeout, b.toolResultMaxChars,
-                b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL);
+                b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL,
+                b.maxParallelTools);
         this.transformContext = b.transformContext;
         this.thinkingLevel = b.thinkingLevel != null ? b.thinkingLevel : "off";
         this.temperature = b.temperature;
@@ -241,6 +247,7 @@ public final class AgentLoopConfig {
         b.retryBaseDelay = this.retryConfig.baseDelay();
         b.retryMaxDelay = this.retryConfig.maxDelay();
         b.toolResultMaxChars = this.toolConfig.resultMaxChars();
+        b.maxParallelTools = this.toolConfig.maxParallelTools();
         b.compactCallback = this.compactCallback;
         b.getSteeringMessages = this.getSteeringMessages;
         b.getFollowUpMessages = this.getFollowUpMessages;
@@ -269,6 +276,7 @@ public final class AgentLoopConfig {
         private double retryBaseDelay = 1.0;
         private double retryMaxDelay = 60.0;
         private int toolResultMaxChars = 4000;
+        private int maxParallelTools = 10;
         private CompactCallback compactCallback;
         private MessageDrainer getSteeringMessages;
         private MessageDrainer getFollowUpMessages;
@@ -295,6 +303,7 @@ public final class AgentLoopConfig {
         public Builder retryBaseDelay(double v) { this.retryBaseDelay = v; return this; }
         public Builder retryMaxDelay(double v) { this.retryMaxDelay = v; return this; }
         public Builder toolResultMaxChars(int v) { this.toolResultMaxChars = v; return this; }
+        public Builder maxParallelTools(int v) { this.maxParallelTools = v; return this; }
         public Builder compactCallback(CompactCallback v) { this.compactCallback = v; return this; }
         public Builder getSteeringMessages(MessageDrainer v) { this.getSteeringMessages = v; return this; }
         public Builder getFollowUpMessages(MessageDrainer v) { this.getFollowUpMessages = v; return this; }
@@ -319,6 +328,7 @@ public final class AgentLoopConfig {
             this.toolTimeout = c.timeout();
             this.toolResultMaxChars = c.resultMaxChars();
             this.toolExecution = c.execution();
+            this.maxParallelTools = c.maxParallelTools();
             return this;
         }
 

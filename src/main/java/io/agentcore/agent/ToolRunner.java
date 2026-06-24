@@ -71,6 +71,7 @@ public class ToolRunner implements AutoCloseable {
     private final Double defaultTimeout;
     private final int toolResultMaxChars;
     private final ExecutorService executor;
+    private final Semaphore parallelSemaphore;
 
     // Volatile hooks — resolved at execution time, not construction time.
     // This allows Agent to update hooks dynamically (e.g. after adding extensions).
@@ -90,6 +91,8 @@ public class ToolRunner implements AutoCloseable {
         this.registry = registry;
         this.defaultTimeout = toolConfig != null ? toolConfig.timeout() : null;
         this.toolResultMaxChars = toolConfig != null ? toolConfig.resultMaxChars() : 4000;
+        int maxParallel = toolConfig != null ? toolConfig.maxParallelTools() : 10;
+        this.parallelSemaphore = new Semaphore(maxParallel);
         this.beforeToolCall = beforeToolCall;
         this.afterToolCall = afterToolCall;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
@@ -184,7 +187,7 @@ public class ToolRunner implements AutoCloseable {
             }
         }
 
-        // Run in parallel using StructuredTaskScope for lifecycle safety
+        // Run in parallel using StructuredTaskScope with semaphore-bounded concurrency
         ToolCallResult[] results = new ToolCallResult[calls.size()];
         try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
             List<StructuredTaskScope.Subtask<Integer>> subtasks = new ArrayList<>(calls.size());
@@ -192,7 +195,12 @@ public class ToolRunner implements AutoCloseable {
                 final int idx = i;
                 final ToolCallContent tc = calls.get(i);
                 subtasks.add(scope.fork(() -> {
-                    results[idx] = runSingleTool(tc, signal, null, onEvent);
+                    parallelSemaphore.acquire();
+                    try {
+                        results[idx] = runSingleTool(tc, signal, null, onEvent);
+                    } finally {
+                        parallelSemaphore.release();
+                    }
                     return idx;
                 }));
             }
