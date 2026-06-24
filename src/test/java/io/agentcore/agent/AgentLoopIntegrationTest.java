@@ -306,7 +306,7 @@ class AgentLoopIntegrationTest {
                     .convertToLlm(new MessageConverter()::convert)
                     .authResolver(name -> new ProviderAuth("test-key"))
                     .toolRegistry(registry)
-                    .toolExecution("parallel")
+                    .toolExecution(AgentLoopConfig.ToolExecutionMode.PARALLEL)
                     .maxRetries(0)
                     .build();
 

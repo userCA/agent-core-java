@@ -26,16 +26,7 @@ public final class AgentLoopConfig {
      * Tool execution mode: sequential or parallel.
      */
     public enum ToolExecutionMode {
-        SEQUENTIAL, PARALLEL;
-        
-        public static ToolExecutionMode fromString(String value) {
-            if (value == null) return PARALLEL;
-            return switch (value.toLowerCase()) {
-                case "sequential" -> SEQUENTIAL;
-                case "parallel" -> PARALLEL;
-                default -> PARALLEL;
-            };
-        }
+        SEQUENTIAL, PARALLEL
     }
 
     /**
@@ -291,7 +282,6 @@ public final class AgentLoopConfig {
         public Builder transformContext(TransformContext v) { this.transformContext = v; return this; }
         public Builder thinkingLevel(String v) { this.thinkingLevel = v; return this; }
         public Builder toolExecution(ToolExecutionMode v) { this.toolExecution = v; return this; }
-        public Builder toolExecution(String v) { this.toolExecution = ToolExecutionMode.fromString(v); return this; }
         public Builder temperature(Double v) { this.temperature = v; return this; }
         public Builder maxTokens(Integer v) { this.maxTokens = v; return this; }
         public Builder toolRegistry(ToolRegistry v) { this.toolRegistry = v; return this; }
