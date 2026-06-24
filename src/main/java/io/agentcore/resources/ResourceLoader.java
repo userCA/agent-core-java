@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -31,6 +34,7 @@ import org.slf4j.LoggerFactory;
 public final class ResourceLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceLoader.class);
+    private static final int DEFAULT_WALK_DEPTH = 5;
 
     private final Path cwd;
     private final List<String> extraSkillPaths;
@@ -54,25 +58,77 @@ public final class ResourceLoader {
     // ── search paths ──────────────────────────────────────────────────
 
     List<Path> searchPaths(String resourceType, List<String> extras) {
-        List<Path> paths = new ArrayList<>();
+        Set<Path> uniquePaths = new LinkedHashSet<>();
+
         for (String p : extras) {
             Path resolved = Path.of(p.replaceFirst("^~", System.getProperty("user.home")));
-            if (Files.exists(resolved)) paths.add(resolved.toAbsolutePath());
+            if (Files.exists(resolved)) uniquePaths.add(resolved.toAbsolutePath().normalize());
         }
         Path localDir = cwd.resolve(".pi").resolve(resourceType);
-        if (Files.isDirectory(localDir)) paths.add(localDir);
+        if (Files.isDirectory(localDir)) uniquePaths.add(localDir.toAbsolutePath().normalize());
 
         Path homeDir = Path.of(System.getProperty("user.home"), ".pi", "agent", resourceType);
-        if (Files.isDirectory(homeDir)) paths.add(homeDir);
+        if (Files.isDirectory(homeDir)) uniquePaths.add(homeDir.toAbsolutePath().normalize());
 
         String envVar = System.getenv("AGENT_CORE_" + resourceType.toUpperCase() + "_PATH");
         if (envVar != null) {
             for (String p : envVar.split(":")) {
                 Path resolved = Path.of(p.replaceFirst("^~", System.getProperty("user.home")));
-                if (Files.exists(resolved)) paths.add(resolved.toAbsolutePath());
+                if (Files.exists(resolved)) uniquePaths.add(resolved.toAbsolutePath().normalize());
             }
         }
-        return paths;
+        return List.copyOf(uniquePaths);
+    }
+
+    // ── generic walk-and-load ────────────────────────────────────────
+
+    /**
+     * Generic resource walker: scans search directories, filters files,
+     * loads items, deduplicates by name, and reports collisions.
+     */
+    private <T> List<T> walkAndLoad(
+            String resourceType,
+            List<String> extras,
+            Predicate<String> fileNameFilter,
+            BiFunction<Path, DiagnosticsCollector, T> fileLoader,
+            Function<T, String> nameExtractor,
+            Function<T, String> originExtractor,
+            String collisionLabel,
+            DiagnosticsCollector diag) {
+
+        Map<String, T> items = new LinkedHashMap<>();
+        Set<String> seenPaths = new HashSet<>();
+
+        for (Path dir : searchPaths(resourceType, extras)) {
+            try (Stream<Path> stream = Files.walk(dir, DEFAULT_WALK_DEPTH)) {
+                for (Path file : stream.toList()) {
+                    if (!Files.isRegularFile(file)) continue;
+                    if (!fileNameFilter.test(file.getFileName().toString())) continue;
+
+                    String resolved = file.toAbsolutePath().normalize().toString();
+                    if (!seenPaths.add(resolved)) continue;
+
+                    T item = fileLoader.apply(file, diag);
+                    if (item == null) continue;
+
+                    String name = nameExtractor.apply(item);
+                    T existing = items.get(name);
+                    if (existing != null) {
+                        String existingOrigin = originExtractor.apply(existing);
+                        String newOrigin = originExtractor.apply(item);
+                        diag.collision(
+                                collisionLabel + " \"" + name + "\" collision",
+                                existingOrigin != null ? existingOrigin : "",
+                                newOrigin != null ? newOrigin : "");
+                    } else {
+                        items.put(name, item);
+                    }
+                }
+            } catch (IOException e) {
+                diag.warning("Failed to scan " + resourceType + ": " + e.getMessage(), dir.toString());
+            }
+        }
+        return List.copyOf(items.values());
     }
 
     // ── skills ────────────────────────────────────────────────────────
@@ -81,35 +137,17 @@ public final class ResourceLoader {
 
     public SkillLoadResult loadSkills() {
         DiagnosticsCollector diag = new DiagnosticsCollector();
-        Map<String, Skill> skills = new LinkedHashMap<>();
-        Set<String> seenPaths = new HashSet<>();
-
-        for (Path dir : searchPaths("skills", extraSkillPaths)) {
-            try (Stream<Path> stream = Files.walk(dir)) {
-                for (Path file : stream.toList()) {
-                    if (!file.getFileName().toString().equals("SKILL.md")) continue;
-                    String resolved = file.toAbsolutePath().normalize().toString();
-                    if (seenPaths.contains(resolved)) continue;
-                    seenPaths.add(resolved);
-
+        List<Skill> skills = walkAndLoad(
+                "skills", extraSkillPaths,
+                name -> name.equals("SKILL.md"),
+                (file, d) -> {
                     SkillLoader.LoadResult result = SkillLoader.loadSkillFromFile(file);
-                    Skill skill = result.skill();
-                    if (skill == null) continue;
-
-                    Skill existing = skills.get(skill.name());
-                    if (existing != null) {
-                        diag.collision(
-                                "Skill name \"" + skill.name() + "\" collision",
-                                existing.filePath(), skill.filePath());
-                    } else {
-                        skills.put(skill.name(), skill);
-                    }
-                }
-            } catch (IOException e) {
-                diag.warning("Failed to scan skills: " + e.getMessage(), dir.toString());
-            }
-        }
-        return new SkillLoadResult(List.copyOf(skills.values()), diag.getItems());
+                    return result.skill();
+                },
+                Skill::name,
+                Skill::filePath,
+                "Skill name", diag);
+        return new SkillLoadResult(skills, diag.getItems());
     }
 
     // ── prompts ───────────────────────────────────────────────────────
@@ -118,32 +156,14 @@ public final class ResourceLoader {
 
     public PromptLoadResult loadPromptTemplates() {
         DiagnosticsCollector diag = new DiagnosticsCollector();
-        Map<String, PromptTemplate> prompts = new LinkedHashMap<>();
-
-        for (Path dir : searchPaths("prompts", extraPromptPaths)) {
-            try (Stream<Path> stream = Files.walk(dir)) {
-                for (Path file : stream.toList()) {
-                    if (!file.getFileName().toString().endsWith(".md")) continue;
-
-                    PromptTemplate pt = PromptLoader.loadPromptFromFile(
-                            file.toAbsolutePath().toString(), diag);
-                    if (pt == null) continue;
-
-                    PromptTemplate existing = prompts.get(pt.name());
-                    if (existing != null) {
-                        diag.collision(
-                                "Prompt template \"" + pt.name() + "\" collision",
-                                existing.source() != null ? existing.source().origin() : "",
-                                pt.source() != null ? pt.source().origin() : "");
-                    } else {
-                        prompts.put(pt.name(), pt);
-                    }
-                }
-            } catch (IOException e) {
-                diag.warning("Failed to scan prompts: " + e.getMessage(), dir.toString());
-            }
-        }
-        return new PromptLoadResult(List.copyOf(prompts.values()), diag.getItems());
+        List<PromptTemplate> prompts = walkAndLoad(
+                "prompts", extraPromptPaths,
+                name -> name.endsWith(".md"),
+                (file, d) -> PromptLoader.loadPromptFromFile(file.toAbsolutePath().toString(), d),
+                PromptTemplate::name,
+                pt -> pt.source() != null ? pt.source().origin() : "",
+                "Prompt template", diag);
+        return new PromptLoadResult(prompts, diag.getItems());
     }
 
     // ── themes ────────────────────────────────────────────────────────
@@ -152,38 +172,30 @@ public final class ResourceLoader {
 
     public ThemeLoadResult loadThemes() {
         DiagnosticsCollector diag = new DiagnosticsCollector();
-        Map<String, Theme> themes = new LinkedHashMap<>();
-
-        for (Path dir : searchPaths("themes", extraThemePaths)) {
-            try (Stream<Path> stream = Files.walk(dir)) {
-                for (Path file : stream.toList()) {
-                    if (!file.getFileName().toString().endsWith(".json")) continue;
-
-                    Theme theme = ThemeLoader.loadThemeFromFile(
-                            file.toAbsolutePath().toString(), diag);
-                    if (theme == null) continue;
-
-                    Theme existing = themes.get(theme.name());
-                    if (existing != null) {
-                        diag.collision(
-                                "Theme \"" + theme.name() + "\" collision",
-                                existing.source() != null ? existing.source().origin() : "",
-                                theme.source() != null ? theme.source().origin() : "");
-                    } else {
-                        themes.put(theme.name(), theme);
-                    }
-                }
-            } catch (IOException e) {
-                diag.warning("Failed to scan themes: " + e.getMessage(), dir.toString());
-            }
-        }
-        return new ThemeLoadResult(List.copyOf(themes.values()), diag.getItems());
+        List<Theme> themes = walkAndLoad(
+                "themes", extraThemePaths,
+                name -> name.endsWith(".json"),
+                (file, d) -> ThemeLoader.loadThemeFromFile(file.toAbsolutePath().toString(), d),
+                Theme::name,
+                t -> t.source() != null ? t.source().origin() : "",
+                "Theme", diag);
+        return new ThemeLoadResult(themes, diag.getItems());
     }
 
     // ── context files ─────────────────────────────────────────────────
 
     public List<ContextFile> loadContextFiles() {
         return new ContextFileLoader().load(cwd);
+    }
+
+    // ── personas ──────────────────────────────────────────────────────
+
+    public record PersonaLoadResult(List<Persona> personas, List<ResourceDiagnostic> diagnostics) {}
+
+    public PersonaLoadResult loadPersonas() {
+        DiagnosticsCollector diag = new DiagnosticsCollector();
+        List<Persona> personas = PersonaLoader.loadPersonas(cwd, diag);
+        return new PersonaLoadResult(personas, diag.getItems());
     }
 
     // ── extension specs ───────────────────────────────────────────────
@@ -196,6 +208,48 @@ public final class ResourceLoader {
                 .map(Path::toString).toList();
         List<ExtensionSpec> specs = ExtensionSpecLoader.discoverSpecs(paths, diag);
         return new ExtensionLoadResult(specs, diag.getItems());
+    }
+
+    // ── aggregate ─────────────────────────────────────────────────────
+
+    /**
+     * Aggregate result from loading all resource types.
+     */
+    public record AllResources(
+            List<Skill> skills,
+            List<PromptTemplate> prompts,
+            List<Theme> themes,
+            List<Persona> personas,
+            List<ContextFile> contextFiles,
+            List<ExtensionSpec> extensionSpecs,
+            List<ResourceDiagnostic> diagnostics) {}
+
+    /**
+     * Load all resource types in one call, aggregating diagnostics.
+     */
+    public AllResources loadAll() {
+        var skillResult = loadSkills();
+        var promptResult = loadPromptTemplates();
+        var themeResult = loadThemes();
+        var personaResult = loadPersonas();
+        var contextFiles = loadContextFiles();
+        var extResult = loadExtensionSpecs();
+
+        List<ResourceDiagnostic> allDiag = new ArrayList<>();
+        allDiag.addAll(skillResult.diagnostics());
+        allDiag.addAll(promptResult.diagnostics());
+        allDiag.addAll(themeResult.diagnostics());
+        allDiag.addAll(personaResult.diagnostics());
+        allDiag.addAll(extResult.diagnostics());
+
+        return new AllResources(
+                skillResult.skills(),
+                promptResult.prompts(),
+                themeResult.themes(),
+                personaResult.personas(),
+                contextFiles,
+                extResult.specs(),
+                List.copyOf(allDiag));
     }
 
     /** Returns the configured working directory. */
