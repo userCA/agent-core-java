@@ -71,19 +71,6 @@ public final class AgentContext {
         }
     }
 
-    /** @deprecated Use {@link ThinkingLevel#OFF} instead */
-    @Deprecated public static final String THINKING_OFF = "off";
-    /** @deprecated Use {@link ThinkingLevel#MINIMAL} instead */
-    @Deprecated public static final String THINKING_MINIMAL = "minimal";
-    /** @deprecated Use {@link ThinkingLevel#LOW} instead */
-    @Deprecated public static final String THINKING_LOW = "low";
-    /** @deprecated Use {@link ThinkingLevel#MEDIUM} instead */
-    @Deprecated public static final String THINKING_MEDIUM = "medium";
-    /** @deprecated Use {@link ThinkingLevel#HIGH} instead */
-    @Deprecated public static final String THINKING_HIGH = "high";
-    /** @deprecated Use {@link ThinkingLevel#XHIGH} instead */
-    @Deprecated public static final String THINKING_XHIGH = "xhigh";
-
     private volatile String systemPrompt;
     private final List<Message> messages;
 

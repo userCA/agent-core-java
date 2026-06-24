@@ -70,12 +70,12 @@ class CoreAdvancedTest {
 
         @Test
         void thinkingLevel_constants() {
-            assertEquals("off", AgentContext.THINKING_OFF);
-            assertEquals("minimal", AgentContext.THINKING_MINIMAL);
-            assertEquals("low", AgentContext.THINKING_LOW);
-            assertEquals("medium", AgentContext.THINKING_MEDIUM);
-            assertEquals("high", AgentContext.THINKING_HIGH);
-            assertEquals("xhigh", AgentContext.THINKING_XHIGH);
+            assertEquals("off", AgentContext.ThinkingLevel.OFF.value());
+            assertEquals("minimal", AgentContext.ThinkingLevel.MINIMAL.value());
+            assertEquals("low", AgentContext.ThinkingLevel.LOW.value());
+            assertEquals("medium", AgentContext.ThinkingLevel.MEDIUM.value());
+            assertEquals("high", AgentContext.ThinkingLevel.HIGH.value());
+            assertEquals("xhigh", AgentContext.ThinkingLevel.XHIGH.value());
         }
 
         @Test
