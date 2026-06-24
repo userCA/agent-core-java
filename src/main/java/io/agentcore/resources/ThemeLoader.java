@@ -4,6 +4,7 @@ import io.agentcore.resources.ResourceTypes.SourceInfo;
 import io.agentcore.resources.ResourceTypes.Theme;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentcore.llm.ProviderUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public final class ThemeLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ThemeLoader.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = ProviderUtils.mapper();
 
     private ThemeLoader() {}
 

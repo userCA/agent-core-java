@@ -3,6 +3,7 @@ package io.agentcore.resources;
 import io.agentcore.resources.ResourceTypes.Persona;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentcore.llm.ProviderUtils;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -20,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public final class PersonaLoader {
 
     private static final Logger log = LoggerFactory.getLogger(PersonaLoader.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = ProviderUtils.mapper();
 
     private PersonaLoader() {}
 
