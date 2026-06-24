@@ -3,7 +3,7 @@ package io.agentcore.retrieval;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
-import io.agentcore.tools.ToolResult;
+import io.agentcore.model.ToolResult;
 
 import java.util.List;
 import java.util.Map;

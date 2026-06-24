@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nintendo Chat Assistant App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'n-canvas': '#7a8aba',
+            'n-canvas-soft': '#9fbee7',
+            'n-periwinkle': '#8ba1d4',
+            'n-chrome': '#3d4f97',
+            'n-muted': '#60619c',
+            'n-carbon': '#21242e',
+            'n-platinum': '#dedede',
+            'n-surface': '#ffffff',
+            'n-signal': '#f68d1f',
+            'n-amber': '#ecab37',
+            'n-gold': '#e48600',
+            'n-red': '#e60012',
+            'n-ink': '#21242e',
+            'n-ink-soft': '#3d4f97',
+            'n-teal': '#206479',
+          },
+          fontFamily: {
+            'display': ['"Arial Black"', 'Arial', 'sans-serif'],
+            'body': ['Arial', 'Helvetica', 'sans-serif'],
+            'pixel': ['VT323', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --n-canvas: #7a8aba;
+      --n-carbon: #21242e;
+      --n-signal: #f68d1f;
+      --n-amber: #ecab37;
+      --n-chrome: #3d4f97;
+      --n-platinum: #dedede;
+      --n-surface: #ffffff;
+    }
+
+    body {
+      background: #4a5578;
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+
+    .phone-frame {
+      width: 100%;
+      max-width: 390px;
+      height: 844px;
+      background: #1a1c24;
+      border-radius: 48px;
+      padding: 14px;
+      box-shadow:
+        0 0 0 2px #3d4f97,
+        0 24px 60px rgba(0,0,0,0.5),
+        inset 0 0 0 2px #60619c;
+      position: relative;
+    }
+
+    .app-container {
+      width: 100%;
+      height: 100%;
+      background: var(--n-canvas);
+      border-radius: 36px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Carbon command bar with halftone texture */
+    .carbon-bar {
+      background: var(--n-carbon);
+      position: relative;
+      border-bottom: 3px solid var(--n-chrome);
+    }
+    .carbon-bar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px);
+      background-size: 4px 4px;
+      pointer-events: none;
+    }
+
+    /* Beveled plate panels */
+    .bevel-panel {
+      background: var(--n-surface);
+      border: 2px solid var(--n-chrome);
+      box-shadow:
+        inset 2px 2px 0 rgba(255,255,255,0.7),
+        inset -2px -2px 0 rgba(61,79,151,0.5),
+        4px 4px 0 rgba(33,36,46,0.15);
+    }
+
+    .bevel-inset {
+      background: var(--n-platinum);
+      border: 2px solid var(--n-chrome);
+      box-shadow:
+        inset 2px 2px 0 rgba(61,79,151,0.3),
+        inset -2px -2px 0 rgba(255,255,255,0.5);
+    }
+
+    /* Nintendo button styles */
+    .n-btn {
+      background: var(--n-amber);
+      border: 2px solid var(--n-carbon);
+      color: var(--n-carbon);
+      font-family: 'VT323', monospace;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow:
+        inset 2px 2px 0 rgba(255,255,255,0.4),
+        inset -2px -2px 0 rgba(0,0,0,0.15),
+        3px 3px 0 rgba(33,36,46,0.25);
+      transition: transform 0.08s ease, box-shadow 0.08s ease;
+    }
+    .n-btn:active {
+      transform: translateY(2px);
+      box-shadow:
+        inset 2px 2px 0 rgba(0,0,0,0.15),
+        inset -2px -2px 0 rgba(255,255,255,0.3),
+        1px 1px 0 rgba(33,36,46,0.25);
+    }
+
+    .n-btn-signal {
+      background: var(--n-signal);
+      color: white;
+    }
+
+    .n-btn-carbon {
+      background: var(--n-carbon);
+      color: white;
+      border-color: var(--n-chrome);
+    }
+
+    .n-btn-action {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    /* Logo pill */
+    .logo-pill {
+      background: white;
+      border: 2px solid var(--n-red);
+      border-radius: 9999px;
+      padding: 2px 10px;
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 12px;
+      color: var(--n-red);
+      letter-spacing: -0.5px;
+      box-shadow: 2px 2px 0 rgba(0,0,0,0.2);
+    }
+
+    /* Screen management */
+    .screen {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .screen.active {
+      display: flex;
+    }
+
+    /* Message bubbles */
+    .msg-ai {
+      background: white;
+      border: 2px solid var(--n-chrome);
+      border-radius: 4px 16px 16px 4px;
+      box-shadow: 3px 3px 0 rgba(33,36,46,0.1);
+    }
+    .msg-user {
+      background: var(--n-canvas-soft);
+      border: 2px solid var(--n-chrome);
+      border-radius: 16px 4px 4px 16px;
+      box-shadow: 3px 3px 0 rgba(33,36,46,0.1);
+    }
+
+    /* Tool card */
+    .tool-card {
+      background: var(--n-platinum);
+      border: 2px solid var(--n-chrome);
+      border-radius: 4px;
+      box-shadow:
+        inset 2px 2px 0 rgba(255,255,255,0.5),
+        inset -2px -2px 0 rgba(61,79,151,0.2);
+    }
+
+    /* Pet panel */
+    .side-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 85%;
+      height: 100%;
+      background: var(--n-canvas-soft);
+      border-left: 4px solid var(--n-chrome);
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+    }
+    .side-panel.open {
+      transform: translateX(0);
+    }
+
+    /* Bottom sheet */
+    .bottom-sheet {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--n-canvas);
+      border-top: 4px solid var(--n-chrome);
+      border-radius: 24px 24px 0 0;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+      z-index: 40;
+      max-height: 70%;
+      display: flex;
+      flex-direction: column;
+    }
+    .bottom-sheet.open {
+      transform: translateY(0);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(33,36,46,0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 30;
+    }
+    .overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Mascot avatar */
+    .mascot {
+      width: 56px;
+      height: 56px;
+      background: var(--n-surface);
+      border: 3px solid var(--n-carbon);
+      border-radius: 50%;
+      position: relative;
+      box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+    .mascot::before {
+      content: '';
+      position: absolute;
+      top: 16px;
+      left: 12px;
+      width: 10px;
+      height: 10px;
+      background: var(--n-carbon);
+      border-radius: 50%;
+      box-shadow: 20px 0 0 var(--n-carbon);
+    }
+    .mascot::after {
+      content: '';
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 20px;
+      height: 6px;
+      background: var(--n-red);
+      border-radius: 0 0 10px 10px;
+    }
+
+    /* Dotted divider */
+    .dotted-line {
+      height: 2px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--n-muted) 0px,
+        var(--n-muted) 4px,
+        transparent 4px,
+        transparent 8px
+      );
+      opacity: 0.6;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--n-chrome); border-radius: 3px; }
+
+    /* Cursor pointer */
+    button, [role="button"] { cursor: pointer; }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="phone-frame">
+    <div class="app-container" id="app">
+
+      <!-- Header -->
+      <header class="carbon-bar h-14 flex items-center justify-between px-3 shrink-0 z-20">
+        <div class="flex items-center gap-2">
+          <button id="btn-back" class="hidden w-11 h-11 flex items-center justify-center text-n-canvas-soft hover:text-white focus-ring" aria-label="返回" onclick="showScreen('chat')">
+            <i data-lucide="chevron-left" class="w-6 h-6"></i>
+          </button>
+          <div class="logo-pill">AGENT</div>
+          <span id="header-title" class="text-white font-bold text-sm tracking-wide ml-2" style="font-family: 'Arial Black', Arial, sans-serif;">CHAT</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="w-11 h-11 flex items-center justify-center text-n-gold hover:text-white focus-ring" aria-label="聊天历史" onclick="showScreen('history')">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+          </button>
+          <button class="w-11 h-11 flex items-center justify-center text-n-canvas-soft hover:text-white focus-ring" aria-label="设置">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="flex-1 relative overflow-hidden">
+
+        <!-- Chat Screen -->
+        <section id="screen-chat" class="screen active">
+          <div class="flex-1 overflow-y-auto p-3 space-y-4">
+            <!-- Mascot welcome -->
+            <div class="flex gap-3">
+              <div class="mascot shrink-0"></div>
+              <div class="msg-ai p-3 max-w-[75%]">
+                <p class="text-sm text-n-ink leading-relaxed">It's-a me, your assistant! 今天想聊点什么？我可以帮你写代码、查资料，或者陪你玩！</p>
+              </div>
+            </div>
+
+            <!-- AI Message -->
+            <div class="flex gap-3">
+              <div class="mascot shrink-0"></div>
+              <div class="flex-1 max-w-[80%]">
+                <div class="msg-ai p-3">
+                  <p class="text-sm text-n-ink leading-relaxed mb-2">我已经分析了 AgentLoop.java，建议把状态机抽出来：</p>
+                  <div class="bevel-inset p-2 font-pixel text-sm text-n-ink-soft">
+                    <code>public enum AgentState {
+  IDLE, THINKING, TOOL_CALL
+}</code>
+                  </div>
+                </div>
+                <div class="flex gap-2 mt-2">
+                  <button class="n-btn px-3 py-1.5 h-9 rounded-sm" aria-label="复制">复制</button>
+                  <button class="n-btn px-3 py-1.5 h-9 rounded-sm" aria-label="重新生成">重试</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Message -->
+            <div class="flex justify-end">
+              <div class="msg-user p-3 max-w-[75%]">
+                <p class="text-sm text-n-ink leading-relaxed">帮我生成重构后的状态机草图。</p>
+              </div>
+            </div>
+
+            <!-- Tool call message -->
+            <div class="flex gap-3">
+              <div class="mascot shrink-0"></div>
+              <div class="flex-1 max-w-[80%]">
+                <div class="msg-ai p-3">
+                  <p class="text-sm text-n-ink leading-relaxed mb-2">正在调用代码分析工具…</p>
+                  <div class="tool-card p-3">
+                    <div class="flex items-center gap-2 mb-2 pb-2 border-b-2 border-dashed border-n-chrome/30">
+                      <i data-lucide="terminal" class="w-4 h-4 text-n-ink-soft"></i>
+                      <span class="font-pixel text-n-ink-soft">CODE_SEARCH</span>
+                    </div>
+                    <pre class="text-xs text-n-ink-soft font-pixel leading-relaxed"><code>Found 3 references to
+AgentLoop in src/main/java</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- History Screen -->
+        <section id="screen-history" class="screen">
+          <div class="flex-1 overflow-y-auto p-3">
+            <div class="bevel-panel p-3 mb-3">
+              <div class="flex items-center gap-2 mb-3">
+                <i data-lucide="list" class="w-4 h-4 text-n-signal"></i>
+                <span class="font-pixel text-n-ink text-sm tracking-wide">CHAT HISTORY</span>
+              </div>
+              <div class="space-y-2">
+                <button class="w-full bevel-inset p-3 text-left hover:bg-n-surface transition-colors">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-sm font-bold text-n-ink">重构 AgentLoop 核心循环</div>
+                      <div class="text-xs text-n-ink-soft mt-1">建议先抽离 AgentStateMachine…</div>
+                    </div>
+                    <span class="text-xs font-pixel text-n-muted">10:24</span>
+                  </div>
+                </button>
+                <button class="w-full bevel-inset p-3 text-left hover:bg-n-surface transition-colors">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-sm font-bold text-n-ink">v2 迁移审计报告</div>
+                      <div class="text-xs text-n-ink-soft mt-1">Fix P0/P1/P2 issues…</div>
+                    </div>
+                    <span class="text-xs font-pixel text-n-muted">昨天</span>
+                  </div>
+                </button>
+                <button class="w-full bevel-inset p-3 text-left hover:bg-n-surface transition-colors">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-sm font-bold text-n-ink">设计系统整理</div>
+                      <div class="text-xs text-n-ink-soft mt-1">Colors, typography, components…</div>
+                    </div>
+                    <span class="text-xs font-pixel text-n-muted">2天前</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Chat Input Bar -->
+      <div id="chat-input-bar" class="shrink-0 p-3 border-t-4 border-n-chrome bg-n-canvas-soft">
+        <div class="flex items-end gap-2">
+          <button class="n-btn n-btn-action shrink-0" aria-label="宠物陪伴" onclick="togglePetPanel()">
+            <div class="mascot" style="width:32px;height:32px;border-width:2px;"></div>
+          </button>
+          <div class="flex-1 bevel-inset flex items-end px-3 py-2">
+            <textarea
+              id="message-input"
+              rows="1"
+              class="w-full bg-transparent text-n-ink text-sm outline-none resize-none"
+              placeholder="输入消息…"
+              aria-label="消息输入框"
+            ></textarea>
+          </div>
+          <button class="n-btn n-btn-signal n-btn-action shrink-0" aria-label="发送" onclick="sendMessage()">
+            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+          </button>
+          <button class="n-btn n-btn-carbon n-btn-action shrink-0" aria-label="技能工具" onclick="toggleToolsSheet()">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Pet Companion Side Panel -->
+      <div id="pet-panel" class="side-panel">
+        <div class="carbon-bar h-14 flex items-center justify-between px-4 shrink-0">
+          <div class="flex items-center gap-2">
+            <div class="mascot" style="width:36px;height:36px;"></div>
+            <span class="text-white font-bold text-sm" style="font-family: 'Arial Black', Arial, sans-serif;">BUDDY</span>
+          </div>
+          <button class="w-11 h-11 flex items-center justify-center text-n-canvas-soft hover:text-white focus-ring" aria-label="关闭" onclick="togglePetPanel()">
+            <i data-lucide="x" class="w-6 h-6"></i>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4">
+          <div class="bevel-panel p-4 text-center mb-4">
+            <div class="mascot mx-auto mb-3" style="width:80px;height:80px;"></div>
+            <div class="font-display text-n-ink text-lg mb-1">Lv. 12</div>
+            <div class="font-pixel text-n-ink-soft text-sm">CODE HELPER</div>
+            <div class="mt-3 bevel-inset h-3 rounded-full overflow-hidden">
+              <div class="h-full bg-n-signal" style="width: 68%;"></div>
+            </div>
+            <div class="text-xs text-n-ink-soft mt-1">友好度 68%</div>
+          </div>
+
+          <div class="bevel-panel p-3 mb-4">
+            <div class="font-pixel text-n-ink text-sm mb-2">STATUS</div>
+            <div class="space-y-2 text-sm text-n-ink-soft">
+              <div class="flex justify-between"><span>心情</span><span class="text-n-signal">开心</span></div>
+              <div class="flex justify-between"><span>能量</span><span>85%</span></div>
+              <div class="flex justify-between"><span>陪伴时长</span><span>2h 14m</span></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button class="n-btn py-3 rounded-sm" onclick="petAction('feed')">喂食</button>
+            <button class="n-btn py-3 rounded-sm" onclick="petAction('play')">玩耍</button>
+            <button class="n-btn py-3 rounded-sm" onclick="petAction('train')">训练</button>
+            <button class="n-btn py-3 rounded-sm" onclick="petAction('sleep')">休息</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools Bottom Sheet -->
+      <div id="tools-sheet" class="bottom-sheet">
+        <div class="p-4">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <i data-lucide="zap" class="w-5 h-5 text-n-signal"></i>
+              <span class="font-display text-n-ink text-lg">TOOLS</span>
+            </div>
+            <button class="w-11 h-11 flex items-center justify-center text-n-ink-soft hover:text-n-ink focus-ring" aria-label="关闭" onclick="toggleToolsSheet()">
+              <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="search" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">CODE SEARCH</div>
+              <div class="text-xs text-n-ink-soft mt-1">搜索代码库</div>
+            </button>
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="git-branch" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">GIT DIFF</div>
+              <div class="text-xs text-n-ink-soft mt-1">查看变更</div>
+            </button>
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="play" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">TEST RUN</div>
+              <div class="text-xs text-n-ink-soft mt-1">运行测试</div>
+            </button>
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="file-code" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">REFACTOR</div>
+              <div class="text-xs text-n-ink-soft mt-1">重构建议</div>
+            </button>
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="bug" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">DEBUG</div>
+              <div class="text-xs text-n-ink-soft mt-1">调试分析</div>
+            </button>
+            <button class="tool-card p-4 text-left hover:bg-n-surface transition-colors focus-ring">
+              <i data-lucide="book-open" class="w-6 h-6 text-n-signal mb-2"></i>
+              <div class="font-pixel text-n-ink text-sm">DOCS</div>
+              <div class="text-xs text-n-ink-soft mt-1">查询文档</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overlay -->
+      <div id="overlay" class="overlay" onclick="closeAllPanels()"></div>
+
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    function showScreen(name) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('screen-' + name).classList.add('active');
+
+      const backBtn = document.getElementById('btn-back');
+      const title = document.getElementById('header-title');
+      const inputBar = document.getElementById('chat-input-bar');
+
+      if (name === 'history') {
+        backBtn.classList.remove('hidden');
+        title.textContent = 'HISTORY';
+        inputBar.classList.add('hidden');
+      } else {
+        backBtn.classList.add('hidden');
+        title.textContent = 'CHAT';
+        inputBar.classList.remove('hidden');
+      }
+    }
+
+    function toggleToolsSheet() {
+      const sheet = document.getElementById('tools-sheet');
+      const overlay = document.getElementById('overlay');
+      sheet.classList.toggle('open');
+      overlay.classList.toggle('open');
+    }
+
+    function togglePetPanel() {
+      const panel = document.getElementById('pet-panel');
+      const overlay = document.getElementById('overlay');
+      panel.classList.toggle('open');
+      overlay.classList.toggle('open');
+    }
+
+    function closeAllPanels() {
+      document.getElementById('tools-sheet').classList.remove('open');
+      document.getElementById('pet-panel').classList.remove('open');
+      document.getElementById('overlay').classList.remove('open');
+    }
+
+    function petAction(action) {
+      console.log('Pet action:', action);
+      // Visual feedback could be added here
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('message-input');
+      const value = input.value.trim();
+      if (!value) return;
+      console.log('Send:', value);
+      input.value = '';
+      input.style.height = 'auto';
+    }
+
+    const textarea = document.getElementById('message-input');
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+    });
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 package io.agentcore.tools;
 
-import io.agentcore.core.*;
-import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content.ToolCallContent;
-import io.agentcore.core.Message.*;
+import io.agentcore.agent.*;
+import io.agentcore.model.Content.TextContent;
+import io.agentcore.model.Content.ToolCallContent;
+import io.agentcore.model.Message.*;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.agentcore.model.AgentEvent;
+import io.agentcore.model.ToolResult;
+import io.agentcore.model.Message;
 
 /**
  * Tests for Phase 3: Tool system, Session stores, Compactor.
@@ -126,7 +129,7 @@ class Phase3Test {
                 }
             });
 
-            var runner = new ToolRunner(registry, null, null, null, null);
+            var runner = new ToolRunner(registry, null, null, null);
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "echo", Map.of("text", "hello")))
                     .build();
@@ -147,7 +150,7 @@ class Phase3Test {
         @Test
         void toolNotFound() {
             var registry = new ToolRegistry();
-            var runner = new ToolRunner(registry, null, null, null, null);
+            var runner = new ToolRunner(registry, null, null, null);
 
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "nonexistent", Map.of()))
@@ -171,7 +174,7 @@ class Phase3Test {
                 });
             }
 
-            var runner = new ToolRunner(registry, null, null, null, null);
+            var runner = new ToolRunner(registry, null, null, null);
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "tool_a", Map.of()))
                     .addContent(new ToolCallContent("tc2", "tool_b", Map.of()))
@@ -269,13 +272,13 @@ class Phase3Test {
         void tokenEstimation() {
             var msg = new UserMessage(List.of(new TextContent("Hello, this is a test message")),
                     System.currentTimeMillis() / 1000.0);
-            int tokens = io.agentcore.compaction.Compactor.estimateTokens(msg);
+            int tokens = io.agentcore.session.compaction.Compactor.estimateTokens(msg);
             assertTrue(tokens > 0);
         }
 
         @Test
         void shouldCompactThreshold() {
-            var compactor = new io.agentcore.compaction.LLMSummaryCompactor(null, 0.8, 2);
+            var compactor = new io.agentcore.session.compaction.LLMSummaryCompactor(null, 0.8, 2);
 
             // Create messages that exceed 80% of a 100-token window
             List<Message> messages = new java.util.ArrayList<>();
@@ -291,7 +294,7 @@ class Phase3Test {
 
         @Test
         void compactKeepsRecent() {
-            var compactor = new io.agentcore.compaction.LLMSummaryCompactor(
+            var compactor = new io.agentcore.session.compaction.LLMSummaryCompactor(
                     msgs -> "Summary of " + msgs.size() + " messages",
                     0.8, 2);
 
@@ -310,7 +313,7 @@ class Phase3Test {
 
         @Test
         void compactEmpty() {
-            var compactor = new io.agentcore.compaction.LLMSummaryCompactor();
+            var compactor = new io.agentcore.session.compaction.LLMSummaryCompactor();
             var result = compactor.compact(List.of(), "manual", null, null);
             assertEquals("", result.summary());
             assertEquals(0, result.keptCount());

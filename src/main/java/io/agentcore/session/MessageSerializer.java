@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.TextNode;
 
-import io.agentcore.core.Content;
-import io.agentcore.core.Message;
-import io.agentcore.core.Message.*;
-import io.agentcore.providers.ProviderUtils;
+import io.agentcore.model.Content;
+import io.agentcore.model.Message;
+import io.agentcore.model.Message.*;
+import io.agentcore.llm.ProviderUtils;
 
 import java.util.*;
 

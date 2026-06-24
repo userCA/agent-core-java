@@ -1,7 +1,7 @@
 package io.agentcore.observability;
 
-import io.agentcore.core.AgentEvent;
-import io.agentcore.core.AgentEvent.*;
+import io.agentcore.model.AgentEvent;
+import io.agentcore.model.AgentEvent.*;
 import io.agentcore.extensions.Extension;
 
 import java.util.Map;

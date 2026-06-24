@@ -3,7 +3,7 @@ package io.agentcore.tools;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import io.agentcore.tools.util.FileMutationQueue;
+import io.agentcore.model.ToolResult;
 
 /**
  * Context passed to a tool during execution.
@@ -13,21 +13,14 @@ import io.agentcore.tools.util.FileMutationQueue;
  * @param signal         abort signal (check to support cancellation)
  * @param onUpdate       callback for intermediate result updates (nullable)
  * @param metadata       extra metadata injected by hooks
- * @param mutationQueue  mutation queue for state-changing tools (nullable)
  * @param terminateSignal  set to true by the tool to request agent loop termination
  */
 public record ToolContext(
         AtomicBoolean signal,
         Consumer<ToolResult> onUpdate,
         Map<String, Object> metadata,
-        FileMutationQueue mutationQueue,
         AtomicBoolean terminateSignal
 ) {
-    /** Backward-compatible constructor without terminate signal. */
-    public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
-                       Map<String, Object> metadata, FileMutationQueue mutationQueue) {
-        this(signal, onUpdate, metadata, mutationQueue, new AtomicBoolean(false));
-    }
 
     public ToolContext {
         if (signal == null) signal = new AtomicBoolean(false);

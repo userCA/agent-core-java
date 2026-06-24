@@ -1,6 +1,10 @@
 package io.agentcore.tools;
 
-import io.agentcore.core.Content.TextContent;
+import io.agentcore.model.Content.TextContent;
+import io.agentcore.tools.builtin.CheckVideoTool;
+import io.agentcore.tools.external.AgnesImageTool;
+import io.agentcore.tools.external.AgnesVideoTool;
+import io.agentcore.tools.external.FeishuCLITool;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 

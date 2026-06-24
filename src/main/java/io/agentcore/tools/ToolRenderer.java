@@ -1,6 +1,7 @@
 package io.agentcore.tools;
 
 import java.util.Map;
+import io.agentcore.model.ToolResult;
 
 /**
  * Tool rendering interface for frontend display.

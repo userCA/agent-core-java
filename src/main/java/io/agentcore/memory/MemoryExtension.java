@@ -1,13 +1,13 @@
 package io.agentcore.memory;
 
-import io.agentcore.core.AgentEvent;
-import io.agentcore.core.AgentEvent.MessageEnd;
-import io.agentcore.core.AgentEvent.TurnEnd;
-import io.agentcore.core.Content;
-import io.agentcore.core.Message;
-import io.agentcore.core.Message.UserMessage;
+import io.agentcore.model.AgentEvent;
+import io.agentcore.model.AgentEvent.MessageEnd;
+import io.agentcore.model.AgentEvent.TurnEnd;
+import io.agentcore.model.Content;
+import io.agentcore.model.Message;
+import io.agentcore.model.Message.UserMessage;
 import io.agentcore.extensions.Extension;
-import io.agentcore.providers.LlmMessageUtils;
+import io.agentcore.llm.LlmMessageUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

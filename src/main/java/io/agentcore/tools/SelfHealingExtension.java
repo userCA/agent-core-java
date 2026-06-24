@@ -1,11 +1,11 @@
 package io.agentcore.tools;
 
-import io.agentcore.core.Content;
-import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content.ToolCallContent;
+import io.agentcore.model.Content;
+import io.agentcore.model.Content.TextContent;
+import io.agentcore.model.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.HookTypes.*;
-import io.agentcore.tools.util.BashOperations;
+import io.agentcore.tools.shell.BashOperations;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import io.agentcore.model.ToolResult;
 
 /**
  * Self-healing extension — detect common sandbox errors and apply fixes.

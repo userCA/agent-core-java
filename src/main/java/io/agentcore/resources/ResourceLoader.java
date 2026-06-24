@@ -2,8 +2,8 @@ package io.agentcore.resources;
 
 import io.agentcore.resources.ContextFileLoader.ContextFile;
 import io.agentcore.resources.ResourceTypes.*;
-import io.agentcore.skills.Skill;
-import io.agentcore.skills.SkillLoader;
+import io.agentcore.skill.Skill;
+import io.agentcore.skill.SkillLoader;
 
 import java.io.IOException;
 import java.nio.file.Files;

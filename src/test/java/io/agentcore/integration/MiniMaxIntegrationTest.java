@@ -1,14 +1,14 @@
 package io.agentcore.integration;
 
-import io.agentcore.core.Agent;
-import io.agentcore.core.AgentEvent;
-import io.agentcore.core.AgentLoopConfig;
-import io.agentcore.core.Message;
-import io.agentcore.core.Message.AssistantMessage;
-import io.agentcore.core.AgentEvent.*;
-import io.agentcore.providers.openai.OpenAIProvider;
-import io.agentcore.http.AgentHttpServer;
-import io.agentcore.providers.*;
+import io.agentcore.agent.Agent;
+import io.agentcore.model.AgentEvent;
+import io.agentcore.agent.AgentLoopConfig;
+import io.agentcore.model.Message;
+import io.agentcore.model.Message.AssistantMessage;
+import io.agentcore.model.AgentEvent.*;
+import io.agentcore.llm.openai.OpenAIProvider;
+import io.agentcore.app.http.AgentHttpServer;
+import io.agentcore.llm.*;
 import io.agentcore.tools.*;
 
 import org.junit.jupiter.api.*;
@@ -23,6 +23,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.agentcore.model.ToolResult;
 
 /**
  * End-to-end integration test using MiniMax-M2.7 via OpenAI-compatible API.

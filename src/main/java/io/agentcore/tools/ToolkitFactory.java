@@ -1,12 +1,13 @@
 package io.agentcore.tools;
 
+import io.agentcore.tools.builtin.*;
+import io.agentcore.tools.external.*;
 import io.agentcore.tools.mcp.MCPManager;
-import io.agentcore.tools.util.BashOperations;
-import io.agentcore.tools.util.FileMutationQueue;
-import io.agentcore.tools.util.FileOperations;
-import io.agentcore.tools.util.LocalBashOperations;
-import io.agentcore.tools.util.LocalFileOperations;
-import io.agentcore.tools.util.SandboxQuota;
+import io.agentcore.tools.shell.BashOperations;
+import io.agentcore.tools.shell.FileOperations;
+import io.agentcore.tools.shell.LocalBashOperations;
+import io.agentcore.tools.shell.LocalFileOperations;
+import io.agentcore.tools.shell.SandboxQuota;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,8 +19,8 @@ import java.util.Map;
  * Factory for creating pre-configured {@link ToolRegistry} instances
  * with file/bash tools and confirm.
  *
- * <p>All tools use the utility layer ({@link FileOperations}, {@link LocalBashOperations},
- * {@link FileMutationQueue}) for security and consistency.
+ * <p>All tools use the utility layer ({@link FileOperations}, {@link LocalBashOperations})
+ * for security and consistency.
  */
 public final class ToolkitFactory {
 
@@ -114,16 +115,15 @@ public final class ToolkitFactory {
             Path cwd = workingDirectory != null
                     ? workingDirectory : Path.of("").toAbsolutePath();
             FileOperations fileOps = new LocalFileOperations(cwd, quota);
-            FileMutationQueue mutationQueue = new FileMutationQueue();
             ToolRegistry registry = new ToolRegistry();
 
             if (includeRead) {
-                registry.register(new ReadTool(fileOps, mutationQueue));
+                registry.register(new ReadTool(fileOps));
             }
 
             if (includeWrite) {
-                registry.register(new WriteTool(fileOps, mutationQueue));
-                registry.register(new EditTool(fileOps, mutationQueue));
+                registry.register(new WriteTool(fileOps));
+                registry.register(new EditTool(fileOps));
             }
 
             if (includeSearch) {

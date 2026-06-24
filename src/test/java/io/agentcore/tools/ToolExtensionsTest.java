@@ -1,9 +1,10 @@
 package io.agentcore.tools;
 
-import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content.ToolCallContent;
+import io.agentcore.model.Content.TextContent;
+import io.agentcore.tools.builtin.ReadTool;
+import io.agentcore.model.Content.ToolCallContent;
 import io.agentcore.extensions.HookTypes.*;
-import io.agentcore.tools.util.SandboxQuota;
+import io.agentcore.tools.shell.SandboxQuota;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.agentcore.model.ToolResult;
+import io.agentcore.model.Content;
 
 /**
  * Tests for tool extensions: SandboxPolicyExtension, SelfHealingExtension,
@@ -216,8 +219,8 @@ class ToolExtensionsTest {
 
         @Test
         void readFileNotFound(@TempDir Path dir) throws Exception {
-            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
-            var tool = new ReadTool(fileOps, null);
+            var fileOps = new io.agentcore.tools.shell.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps);
 
             var result = tool.execute("tc1", Map.of("path", "nonexistent.txt"), null);
 
@@ -233,8 +236,8 @@ class ToolExtensionsTest {
         @Test
         void readFileSuccess(@TempDir Path dir) throws Exception {
             Files.writeString(dir.resolve("test.txt"), "Hello World\nLine 2");
-            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
-            var tool = new ReadTool(fileOps, null);
+            var fileOps = new io.agentcore.tools.shell.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps);
 
             var result = tool.execute("tc1", Map.of("path", "test.txt"), null);
 
@@ -255,8 +258,8 @@ class ToolExtensionsTest {
             }
             Files.writeString(dir.resolve("big.txt"), sb.toString());
 
-            var fileOps = new io.agentcore.tools.util.LocalFileOperations(dir);
-            var tool = new ReadTool(fileOps, null, 32000, 10);
+            var fileOps = new io.agentcore.tools.shell.LocalFileOperations(dir);
+            var tool = new ReadTool(fileOps, 32000, 10);
 
             var result = tool.execute("tc1", Map.of("path", "big.txt"), null);
 
@@ -267,8 +270,8 @@ class ToolExtensionsTest {
 
         @Test
         void requirePathParameter() throws Exception {
-            var fileOps = new io.agentcore.tools.util.LocalFileOperations();
-            var tool = new ReadTool(fileOps, null);
+            var fileOps = new io.agentcore.tools.shell.LocalFileOperations();
+            var tool = new ReadTool(fileOps);
 
             var result = tool.execute("tc1", Map.of(), null);
             assertTrue(result.text().contains("ERROR"));

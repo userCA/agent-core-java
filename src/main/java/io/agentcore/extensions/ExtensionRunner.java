@@ -1,6 +1,6 @@
 package io.agentcore.extensions;
 
-import io.agentcore.core.Content;
+import io.agentcore.model.Content;
 import io.agentcore.extensions.HookTypes.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -154,7 +154,7 @@ public final class ExtensionRunner {
     /**
      * Forward an agent event to all extensions.
      */
-    public void onEvent(io.agentcore.core.AgentEvent evt) {
+    public void onEvent(io.agentcore.model.AgentEvent evt) {
         for (Extension ext : extensions) {
             try {
                 ext.onEvent(evt);

@@ -2,15 +2,15 @@ package io.agentcore.session;
 
 import com.fasterxml.jackson.databind.node.TextNode;
 
-import io.agentcore.compaction.CompactionResult;
-import io.agentcore.compaction.Compactor;
-import io.agentcore.core.Agent;
-import io.agentcore.core.AgentEvent;
-import io.agentcore.core.AgentEvent.*;
-import io.agentcore.core.AgentLoopConfig;
-import io.agentcore.core.Content;
-import io.agentcore.core.Message;
-import io.agentcore.core.Message.*;
+import io.agentcore.session.compaction.CompactionResult;
+import io.agentcore.session.compaction.Compactor;
+import io.agentcore.agent.Agent;
+import io.agentcore.model.AgentEvent;
+import io.agentcore.model.AgentEvent.*;
+import io.agentcore.agent.AgentLoopConfig;
+import io.agentcore.model.Content;
+import io.agentcore.model.Message;
+import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.ExtensionRunner;
 

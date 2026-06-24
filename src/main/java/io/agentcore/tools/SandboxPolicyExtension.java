@@ -1,9 +1,9 @@
 package io.agentcore.tools;
 
-import io.agentcore.core.Content.ToolCallContent;
+import io.agentcore.model.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.HookTypes.*;
-import io.agentcore.tools.util.SandboxQuota;
+import io.agentcore.tools.shell.SandboxQuota;
 
 import java.util.List;
 import java.util.Map;

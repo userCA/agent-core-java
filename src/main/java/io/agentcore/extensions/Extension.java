@@ -1,6 +1,6 @@
 package io.agentcore.extensions;
 
-import io.agentcore.core.AgentEvent;
+import io.agentcore.model.AgentEvent;
 import io.agentcore.extensions.HookTypes.*;
 
 import java.util.List;

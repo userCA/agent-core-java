@@ -1,8 +1,9 @@
 package io.agentcore;
 
+import io.agentcore.app.cli.AgentCli;
 import io.agentcore.config.AgentConfig;
-import io.agentcore.core.Agent;
-import io.agentcore.http.AgentHttpServer;
+import io.agentcore.agent.Agent;
+import io.agentcore.app.http.AgentHttpServer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,15 +43,52 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         // ── Load configuration ─────────────────────────────────
-        // AgentConfig.load() reads agent.properties then overlays env vars
         AgentConfig config = AgentConfig.load();
         log.info("Configuration: {}", config);
 
-        // ── Create agent ───────────────────────────────────────
+        // ── Parse CLI flags ────────────────────────────────────
+        boolean cliMode = false;
+        boolean noTools = false;
+        String singlePrompt = null;
+
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--cli" -> cliMode = true;
+                case "--no-tools" -> noTools = true;
+                case "-p", "--prompt" -> {
+                    cliMode = true;
+                    singlePrompt = (i + 1 < args.length) ? args[++i] : "-";
+                }
+            }
+        }
+
+        if (cliMode) {
+            int exitCode = runCli(config, !noTools, singlePrompt);
+            if (exitCode != 0) System.exit(exitCode);
+        } else {
+            runServer(config);
+        }
+    }
+
+    // ── CLI Mode ─────────────────────────────────────────────
+
+    private static int runCli(AgentConfig config, boolean withTools, String singlePrompt) {
+        try (AgentCli cli = new AgentCli(config, withTools, singlePrompt == null)) {
+            if (singlePrompt != null) {
+                return cli.executeSingle(singlePrompt);
+            } else {
+                cli.run();
+                return 0;
+            }
+        }
+    }
+
+    // ── Server Mode (default) ────────────────────────────────
+
+    private static void runServer(AgentConfig config) throws Exception {
         Agent agent = config.createAgent();
         log.info("Agent created with provider={}, model={}", config.getProvider(), config.getModel());
 
-        // ── Start HTTP SSE server ──────────────────────────────
         AgentHttpServer server = AgentHttpServer.builder()
                 .port(config.getHttpPort())
                 .agentFactory(() -> config.createAgent())
@@ -66,7 +104,6 @@ public class Main {
         log.info("  GET  /api/health     — health check");
         log.info("  POST /api/human-input — provide human input for HITL");
 
-        // ── Register shutdown hook ─────────────────────────────
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutting down...");
             try {
@@ -77,7 +114,6 @@ public class Main {
             }
         }));
 
-        // Keep the main thread alive
         Thread.currentThread().join();
     }
 }

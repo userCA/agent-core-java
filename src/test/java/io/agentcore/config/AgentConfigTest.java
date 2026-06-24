@@ -1,9 +1,9 @@
 package io.agentcore.config;
 
-import io.agentcore.providers.ModelInfo;
-import io.agentcore.providers.ModelProvider;
-import io.agentcore.providers.anthropic.AnthropicProvider;
-import io.agentcore.providers.openai.OpenAIProvider;
+import io.agentcore.llm.ModelInfo;
+import io.agentcore.llm.ModelProvider;
+import io.agentcore.llm.anthropic.AnthropicProvider;
+import io.agentcore.llm.openai.OpenAIProvider;
 
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;

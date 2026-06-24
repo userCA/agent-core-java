@@ -1,10 +1,10 @@
 package io.agentcore.config;
 
-import io.agentcore.core.Agent;
-import io.agentcore.core.AgentLoopConfig;
-import io.agentcore.providers.*;
-import io.agentcore.providers.anthropic.AnthropicProvider;
-import io.agentcore.providers.openai.OpenAIProvider;
+import io.agentcore.agent.Agent;
+import io.agentcore.agent.AgentLoopConfig;
+import io.agentcore.llm.*;
+import io.agentcore.llm.anthropic.AnthropicProvider;
+import io.agentcore.llm.openai.OpenAIProvider;
 import io.agentcore.tools.ToolRegistry;
 
 import org.slf4j.Logger;

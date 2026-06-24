@@ -1,9 +1,9 @@
 package io.agentcore.observability;
 
-import io.agentcore.core.AgentEvent.*;
-import io.agentcore.core.Message.AssistantMessage;
-import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content;
+import io.agentcore.model.AgentEvent.*;
+import io.agentcore.model.Message.AssistantMessage;
+import io.agentcore.model.Content.TextContent;
+import io.agentcore.model.Content;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +47,7 @@ class ObservabilityExtensionTest {
         ObservabilityExtension ext = new ObservabilityExtension("s2", "", "", sink);
 
         ext.onEvent(new ToolExecutionStart("tc1", "bash", Map.of("command", "ls")));
-        ext.onEvent(new ToolExecutionEnd("tc1", "bash", new io.agentcore.tools.ToolResult("output"), false));
+        ext.onEvent(new ToolExecutionEnd("tc1", "bash", new io.agentcore.model.ToolResult("output"), false));
 
         assertEquals("agent.tool_call.start", sink.eventTypes.get(0));
         assertEquals("agent.tool_call.end", sink.eventTypes.get(1));

@@ -3,7 +3,7 @@ package io.agentcore.session;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
-import io.agentcore.providers.ProviderUtils;
+import io.agentcore.llm.ProviderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,10 +1,10 @@
 package io.agentcore.tools.mcp;
 
-import io.agentcore.core.Content.TextContent;
+import io.agentcore.model.Content.TextContent;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
-import io.agentcore.tools.ToolResult;
+import io.agentcore.model.ToolResult;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

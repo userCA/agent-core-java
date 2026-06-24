@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Creative Studio — AI Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Patrick+Hand&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            peach: { DEFAULT: '#f4b89a', light: '#f8c4a8', dark: '#e8a584', 50: '#fef6f2', 100: '#fdeee6', 200: '#f9d5c4' },
+            cream: { DEFAULT: '#f9f1d8', 50: '#fdfbf5', 100: '#f9f1d8', 200: '#f5e9c8', 300: '#eddfc0' },
+            ink: { DEFAULT: '#3e2723', muted: '#6d4c41', light: 'rgba(62,39,35,0.35)', lighter: 'rgba(62,39,35,0.12)' },
+            sage: { DEFAULT: '#a5b5a3', light: '#c5d4c3', dark: '#8a9e88' },
+            sky: { DEFAULT: '#a8c4d9', light: '#c8dce8', dark: '#8aaac4' },
+            rose: { DEFAULT: '#d4a5a5', light: '#e5c5c5', dark: '#c08a8a' },
+            warm: { white: '#fdfbf5', border: '#eddfc0', borderActive: 'rgba(62,39,35,0.4)' }
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], hand: ['Patrick Hand', 'cursive'], comic: ['Comic Neue', 'cursive'] },
+          borderRadius: { pill: '9999px', card: '18px', btn: '14px' },
+          boxShadow: {
+            btnDark: '3px 3px 0 #3e2723',
+            card: '4px 4px 0 #3e2723',
+            float: '6px 6px 0 #3e2723',
+            soft: '3px 3px 0 rgba(62,39,35,0.15)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f4b89a; display: flex; align-items: center; justify-content: center; }
+
+    /* Phone frame */
+    .phone-frame { width: 390px; height: 844px; max-height: 95vh; background: #f9f1d8; border-radius: 48px; box-shadow: 8px 8px 0 #3e2723, 0 25px 80px rgba(0,0,0,0.15); border: 4px solid #3e2723; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+    .phone-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 150px; height: 34px; background: #3e2723; border-radius: 0 0 20px 20px; z-index: 100; }
+    .phone-home-bar { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; background: #3e2723; border-radius: 3px; z-index: 100; opacity: 0.3; }
+
+    /* Scrollbars */
+    .custom-scroll::-webkit-scrollbar { width: 0; }
+    .custom-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes popIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+    @keyframes wiggle { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+
+    .anim-fade-in { animation: fadeIn 0.25s ease-out forwards; }
+    .anim-slide-right { animation: slideInRight 0.25s ease-out forwards; }
+    .anim-slide-left { animation: slideInLeft 0.25s ease-out forwards; }
+    .anim-pop { animation: popIn 0.2s ease-out forwards; }
+    .anim-float { animation: float 3s ease-in-out infinite; }
+    .anim-wiggle { animation: wiggle 2s ease-in-out infinite; }
+    .anim-typing-dot { animation: typing 1.4s ease-in-out infinite; }
+    .anim-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .anim-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .anim-fade-in, .anim-slide-right, .anim-slide-left, .anim-pop, .anim-float, .anim-wiggle, .anim-typing-dot { animation: none; opacity: 1; transform: none; }
+    }
+
+    /* Focus states */
+    button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px dashed #3e2723; outline-offset: 3px; border-radius: 4px; }
+
+    /* Tool palette grid */
+    .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+    /* Pet companion */
+    .pet-bubble { position: relative; }
+    .pet-bubble::after { content: ''; position: absolute; bottom: -8px; left: 20px; width: 14px; height: 14px; background: #3e2723; transform: rotate(45deg); border-radius: 3px; }
+
+    /* Message bubbles */
+    .msg-user { background: #3e2723; color: #fdfbf5; border-radius: 18px 18px 4px 18px; border: 3px solid #3e2723; }
+    .msg-ai { background: #fdfbf5; color: #3e2723; border: 3px solid #3e2723; border-radius: 18px 18px 18px 4px; }
+
+    /* Skill cards */
+    .skill-card { transition: transform 0.15s ease; border: 3px solid #3e2723; }
+    .skill-card:active { transform: scale(0.96) translate(1px, 1px); }
+
+    /* Project item */
+    .project-item { transition: transform 0.15s ease; border: 2px solid transparent; }
+    .project-item:hover { transform: translate(-2px, -2px); background: rgba(62,39,35,0.04); }
+    .project-item.active { background: rgba(62,39,35,0.08); border-color: #3e2723; box-shadow: 3px 3px 0 #3e2723; }
+
+    /* Input area */
+    .input-area { background: #fdfbf5; border: 3px solid #3e2723; transition: transform 0.15s ease; border-radius: 18px; }
+    .input-area:focus-within { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 #3e2723; }
+
+    /* Overlay */
+    .overlay { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+
+    /* Dashed divider */
+    .dashed-divider { border: none; border-top: 2px dashed #3e2723; opacity: 0.3; margin: 12px 0; }
+
+    /* Hand-drawn button style */
+    .hand-btn { border: 3px solid #3e2723; box-shadow: 3px 3px 0 #3e2723; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .hand-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #3e2723; }
+    .hand-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #3e2723; }
+
+    /* Stitched border effect */
+    .stitched { border: 3px dashed #3e2723; border-radius: 16px; padding: 2px; }
+
+    /* Hand-drawn rounded corners (imperfect) */
+    .wobbly-rounded { border-radius: 18px 14px 20px 16px; }
+
+    /* Heart icon for HP style */
+    .heart-icon { color: #d4a5a5; }
+
+    /* Progress bar hand-drawn */
+    .hand-progress { border: 2px solid #3e2723; border-radius: 10px; overflow: hidden; background: #fdfbf5; }
+    .hand-progress-fill { border-radius: 8px; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="phone-frame" id="app">
+    <div class="phone-notch"></div>
+    <div class="phone-home-bar"></div>
+
+    <!-- Header -->
+    <header class="flex items-center justify-between px-5 pt-12 pb-3 bg-cream-100 z-10 shrink-0" style="border-bottom: 3px dashed #3e2723; opacity: 0.4;">
+      <button id="menuBtn" class="w-11 h-11 flex items-center justify-center rounded-btn hand-btn bg-cream-50" aria-label="Open projects menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="stroke-linecap: round;">
+          <line x1="4" y1="6" x2="20" y2="6" style="stroke-dasharray: 20; stroke-dashoffset: 0;" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+        </svg>
+      </button>
+      <div class="flex flex-col items-center">
+        <span id="currentProjectName" class="text-sm font-bold text-ink" style="font-family: 'Patrick Hand', cursive; font-size: 1.1rem;">Website Redesign</span>
+        <span class="text-xs text-ink-muted" style="font-family: 'Comic Neue', cursive;">Creative Studio</span>
+      </div>
+      <button id="toolsBtn" class="w-11 h-11 flex items-center justify-center rounded-btn hand-btn bg-cream-50" aria-label="Open tools palette">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" style="stroke-dasharray: 63; stroke-dashoffset: 2;" />
+          <path d="M12 2a10 10 0 0 1 10 10" style="stroke-dasharray: 20; stroke-dashoffset: 0;" />
+          <path d="M12 12 L12 8" />
+          <path d="M12 12 L16 12" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- Chat Canvas -->
+    <main id="chatCanvas" class="flex-1 overflow-y-auto custom-scroll px-4 py-4 relative bg-cream-50">
+      <div id="messagesContainer" class="space-y-4 pb-20">
+        <!-- Messages rendered by JS -->
+      </div>
+
+      <!-- Pet Companion -->
+      <div id="petCompanion" class="fixed bottom-24 right-6 z-30 anim-pop" style="display: none;">
+        <div class="pet-bubble bg-ink text-warm-white px-3 py-2 rounded-card text-xs font-medium shadow-float max-w-[200px] mb-3" style="font-family: 'Comic Neue', cursive; border: 3px solid #3e2723;">
+          <span id="petText">Try the refactor brush on this function!</span>
+        </div>
+        <button id="petAvatar" class="w-14 h-14 rounded-pill bg-cream-200 flex items-center justify-center shadow-card anim-float anim-wiggle" style="border: 3px solid #3e2723; box-shadow: 4px 4px 0 #3e2723;" aria-label="Creative assistant mascot">
+          <!-- Cute hand-drawn star/mascot face -->
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <!-- Star body -->
+            <path d="M16 2 L19 11 L29 11 L21 17 L24 27 L16 21 L8 27 L11 17 L3 11 L13 11 Z" fill="#f8c4a8" stroke="#3e2723" stroke-width="2" stroke-linejoin="round" />
+            <!-- Eyes -->
+            <circle cx="12" cy="14" r="2" fill="#3e2723" />
+            <circle cx="20" cy="14" r="2" fill="#3e2723" />
+            <!-- Smile -->
+            <path d="M13 18 Q16 21 19 18" stroke="#3e2723" stroke-width="1.5" fill="none" stroke-linecap="round" />
+            <!-- Cheeks -->
+            <circle cx="10" cy="16" r="2.5" fill="#d4a5a5" opacity="0.6" />
+            <circle cx="22" cy="16" r="2.5" fill="#d4a5a5" opacity="0.6" />
+          </svg>
+        </button>
+      </div>
+    </main>
+
+    <!-- Typing Indicator -->
+    <div id="typingIndicator" class="px-5 pb-2 hidden">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-pill bg-cream-200 flex items-center justify-center" style="border: 2px solid #3e2723;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="4" ry="4" style="stroke-dasharray: 60; stroke-dashoffset: 1;" />
+            <circle cx="9" cy="10" r="1.5" fill="#6d4c41" stroke="none" />
+            <circle cx="15" cy="10" r="1.5" fill="#6d4c41" stroke="none" />
+            <path d="M9 15 Q12 18 15 15" stroke="#6d4c41" stroke-width="1.5" fill="none" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="flex gap-1 px-3 py-2 bg-cream-50 border-2 border-ink rounded-btn" style="border: 2px solid #3e2723; border-radius: 14px 14px 14px 4px;">
+          <span class="w-2 h-2 rounded-pill bg-ink-muted anim-typing-dot"></span>
+          <span class="w-2 h-2 rounded-pill bg-ink-muted anim-typing-dot"></span>
+          <span class="w-2 h-2 rounded-pill bg-ink-muted anim-typing-dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="px-4 pb-8 pt-2 bg-cream-100 shrink-0 z-20" style="border-top: 3px dashed #3e2723; opacity: 0.4;">
+      <div class="input-area px-3 py-2 flex items-end gap-2">
+        <button id="attachBtn" class="w-11 h-11 flex items-center justify-center rounded-btn hand-btn bg-cream-50 shrink-0" aria-label="Attach file">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" style="stroke-dasharray: 80; stroke-dashoffset: 0;" />
+          </svg>
+        </button>
+        <textarea id="messageInput" rows="1" placeholder="Describe your idea..." class="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted resize-none outline-none py-2.5 min-h-[44px] max-h-[120px]" style="field-sizing: content; font-family: 'Comic Neue', cursive; font-size: 0.95rem;"></textarea>
+        <button id="sendBtn" class="w-11 h-11 flex items-center justify-center rounded-pill bg-ink text-warm-white transition-all hover:opacity-90 active:scale-95 shrink-0 hand-btn" style="background: #3e2723;" aria-label="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fdfbf5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" style="stroke-linejoin: round;" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex items-center justify-center gap-1.5 mt-2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" style="stroke-linejoin: round;" />
+        </svg>
+        <span class="text-[11px] text-ink-muted" style="font-family: 'Comic Neue', cursive;">AI-powered creative assistant</span>
+      </div>
+    </div>
+
+    <!-- Projects Panel (Slide-over) -->
+    <div id="projectsOverlay" class="overlay fixed inset-0 bg-ink/20 z-40 hidden transition-opacity duration-200">
+      <div id="projectsPanel" class="absolute top-0 left-0 h-full w-[300px] bg-cream-100 shadow-float transform -translate-x-full transition-transform duration-250" style="border-right: 4px solid #3e2723; box-shadow: 6px 0 0 #3e2723;">
+        <div class="pt-12 px-5 pb-4">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-bold text-ink" style="font-family: 'Patrick Hand', cursive; font-size: 1.4rem;">Projects</h2>
+            <button id="closeProjectsBtn" class="w-10 h-10 flex items-center justify-center rounded-btn hand-btn bg-cream-50" aria-label="Close projects panel">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <button id="newProjectBtn" class="w-full flex items-center gap-3 px-4 py-3 rounded-btn border-2 border-dashed border-ink-light hover:border-ink hover:bg-cream-50 transition-all mb-4 hand-btn" style="border: 3px dashed #3e2723; font-family: 'Comic Neue', cursive;" aria-label="Create new project">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span class="text-sm text-ink-muted">New Project</span>
+          </button>
+          <div id="projectsList" class="space-y-2">
+            <!-- Projects rendered by JS -->
+          </div>
+        </div>
+        <div class="absolute bottom-8 left-5 right-5">
+          <div class="flex items-center gap-3 px-4 py-3 rounded-card bg-cream-50 border-2 border-cream-300" style="border: 3px solid #3e2723; box-shadow: 3px 3px 0 #3e2723;">
+            <div class="w-10 h-10 rounded-pill bg-ink flex items-center justify-center" style="border: 2px solid #3e2723; background: #a5b5a3;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fdfbf5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-bold text-ink" style="font-family: 'Comic Neue', cursive;">Designer</p>
+              <p class="text-xs text-ink-muted" style="font-family: 'Comic Neue', cursive;">Pro Plan</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tools Palette (Slide-over) -->
+    <div id="toolsOverlay" class="overlay fixed inset-0 bg-ink/20 z-40 hidden transition-opacity duration-200">
+      <div id="toolsPanel" class="absolute top-0 right-0 h-full w-[300px] bg-cream-100 shadow-float transform translate-x-full transition-transform duration-250" style="border-left: 4px solid #3e2723; box-shadow: -6px 0 0 #3e2723;">
+        <div class="pt-12 px-5 pb-4">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-bold text-ink" style="font-family: 'Patrick Hand', cursive; font-size: 1.4rem;">Skill Brushes</h2>
+            <button id="closeToolsBtn" class="w-10 h-10 flex items-center justify-center rounded-btn hand-btn bg-cream-50" aria-label="Close tools palette">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <p class="text-xs text-ink-muted mb-4" style="font-family: 'Comic Neue', cursive;">Select a brush to apply to your canvas</p>
+          <div id="toolsGrid" class="tool-grid">
+            <!-- Tools rendered by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      // Data
+      const projects = [
+        { id: 'p1', name: 'Website Redesign', lastMessage: 'Let me refine the hero section...', time: '2m ago', unread: 0, active: true },
+        { id: 'p2', name: 'Mobile App UI', lastMessage: 'The navigation flow looks good', time: '1h ago', unread: 2, active: false },
+        { id: 'p3', name: 'Brand Guidelines', lastMessage: 'Color palette approved', time: '3h ago', unread: 0, active: false },
+        { id: 'p4', name: 'Design System', lastMessage: 'Component library updated', time: '1d ago', unread: 1, active: false },
+        { id: 'p5', name: 'Landing Page', lastMessage: 'A/B test results ready', time: '2d ago', unread: 0, active: false }
+      ];
+
+      const tools = [
+        { id: 'code-search', name: 'Code Search', icon: 'search', desc: 'Find code patterns', color: '#a8c4d9', svg: '<circle cx="11" cy="11" r="8" stroke-dasharray="50" stroke-dashoffset="1"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' },
+        { id: 'git-diff', name: 'Git Diff', icon: 'git-compare', desc: 'Review changes', color: '#c5d4c3', svg: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v6a3 3 0 0 0 3 3h6"/><path d="M18 15V9a3 3 0 0 0-3-3h-6"/>' },
+        { id: 'test-run', name: 'Test Run', icon: 'play-circle', desc: 'Run test suite', color: '#e5c5c5', svg: '<circle cx="12" cy="12" r="10" stroke-dasharray="63" stroke-dashoffset="1"/><polygon points="10 8 16 12 10 16 10 8"/>' },
+        { id: 'refactor', name: 'Refactor', icon: 'wand-2', desc: 'Restructure code', color: '#f8c4a8', svg: '<path d="M21 12a9 9 0 0 1-9 9"/><path d="M3.6 9L6 12l-2.4 3"/><path d="M12 3a9 9 0 0 1 9 9"/><path d="M20.4 15L18 12l2.4-3"/>' },
+        { id: 'debug', name: 'Debug', icon: 'bug', desc: 'Trace issues', color: '#eddfc0', svg: '<rect x="8" y="6" width="8" height="10" rx="4" ry="4"/><path d="M8 10h-3a2 2 0 0 0-2 2v1"/><path d="M16 10h3a2 2 0 0 1 2 2v1"/><path d="M12 16v3"/>' },
+        { id: 'docs', name: 'Docs', icon: 'book-open', desc: 'Generate docs', color: '#a8c4d9', svg: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' },
+        { id: 'optimize', name: 'Optimize', icon: 'gauge', desc: 'Performance', color: '#c5d4c3', svg: '<path d="M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0 -20 0" stroke-dasharray="63" stroke-dashoffset="1"/><path d="M12 2v10l4 4"/>' },
+        { id: 'lint', name: 'Lint', icon: 'check-circle', desc: 'Code quality', color: '#e5c5c5', svg: '<circle cx="12" cy="12" r="10" stroke-dasharray="63" stroke-dashoffset="1"/><polyline points="9 12 12 15 16 10"/>' },
+        { id: 'deploy', name: 'Deploy', icon: 'rocket', desc: 'Ship changes', color: '#f8c4a8', svg: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M15 12v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>' }
+      ];
+
+      const petSuggestions = [
+        'Try the refactor brush on this function!',
+        'The debug tool might help trace this issue.',
+        'Generate docs for the new API endpoint?',
+        'Run tests before committing changes.',
+        'Search for similar patterns in the codebase.',
+        'Consider optimizing this loop structure.'
+      ];
+
+      let currentProject = projects[0];
+      let messages = {
+        p1: [
+          { id: 1, type: 'ai', text: 'Welcome to your creative studio. I am here to help you design, code, and ship beautiful experiences. What shall we work on today?', time: '9:41 AM' },
+          { id: 2, type: 'user', text: 'I need to redesign the hero section of our landing page. The current one feels too generic.', time: '9:42 AM' },
+          { id: 3, type: 'ai', text: 'I understand. A hero section should tell a story in 3 seconds. Let us explore some directions: bold typography with minimal imagery, a warm gradient canvas, or an interactive element that responds to scroll. Which direction resonates with you?', time: '9:42 AM' },
+          { id: 4, type: 'user', text: 'I like the bold typography idea. Can you show me a layout with oversized headings?', time: '9:43 AM' },
+          { id: 5, type: 'ai', text: 'Absolutely. Here is a concept: a full-bleed cream background with a single massive heading set in Inter at 72px, left-aligned with generous padding. Below it, a subtle subheading in muted gray. The CTA is a dark pill button with an inset shadow for depth. Clean, confident, human.', time: '9:44 AM', tool: 'design-preview' }
+        ],
+        p2: [
+          { id: 1, type: 'ai', text: 'Mobile App UI project loaded. Ready to iterate on the navigation flow.', time: '8:30 AM' },
+          { id: 2, type: 'user', text: 'The tab bar feels cramped on smaller screens.', time: '8:32 AM' },
+          { id: 3, type: 'ai', text: 'Consider a floating action bar instead of a fixed tab bar. It frees up vertical space and creates a more modern feel. We could also collapse less-used tabs into a "More" menu.', time: '8:33 AM' }
+        ],
+        p3: [
+          { id: 1, type: 'ai', text: 'Brand Guidelines project ready. The color palette has been approved by the client.', time: 'Yesterday' },
+          { id: 2, type: 'user', text: 'Great. Can we document the typography scale?', time: 'Yesterday' },
+          { id: 3, type: 'ai', text: 'Documented. Heading: 32px/40px semibold, Body: 16px/24px regular, Caption: 12px/16px medium. All set in Inter with -0.01em letter-spacing for headings.', time: 'Yesterday' }
+        ],
+        p4: [
+          { id: 1, type: 'ai', text: 'Design System updated. 12 new components added to the library.', time: '2 days ago' }
+        ],
+        p5: [
+          { id: 1, type: 'ai', text: 'Landing Page A/B test complete. Variant B outperformed by 23%.', time: '3 days ago' },
+          { id: 2, type: 'user', text: 'Let us implement Variant B then.', time: '3 days ago' }
+        ]
+      };
+
+      // DOM refs
+      const $ = id => document.getElementById(id);
+      const messagesContainer = $('messagesContainer');
+      const projectsList = $('projectsList');
+      const toolsGrid = $('toolsGrid');
+      const messageInput = $('messageInput');
+      const currentProjectName = $('currentProjectName');
+      const typingIndicator = $('typingIndicator');
+      const petCompanion = $('petCompanion');
+      const petText = $('petText');
+
+      // Render messages
+      function renderMessages() {
+        const msgs = messages[currentProject.id] || [];
+        messagesContainer.innerHTML = '';
+        msgs.forEach((msg, i) => {
+          const el = document.createElement('div');
+          el.className = `flex ${msg.type === 'user' ? 'justify-end anim-slide-right' : 'justify-start anim-slide-left'}`;
+          el.style.animationDelay = `${i * 0.05}s`;
+
+          if (msg.type === 'user') {
+            el.innerHTML = `
+              <div class="max-w-[80%]">
+                <div class="msg-user px-4 py-3 text-sm leading-relaxed shadow-soft" style="box-shadow: 3px 3px 0 #3e2723;">
+                  ${escapeHtml(msg.text)}
+                </div>
+                <p class="text-[10px] text-ink-muted mt-1 text-right pr-1" style="font-family: 'Comic Neue', cursive;">${msg.time}</p>
+              </div>
+            `;
+          } else {
+            const toolBadge = msg.tool ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-cream-200 rounded-pill text-[10px] text-ink-muted mt-2" style="border: 2px solid #3e2723; font-family: 'Comic Neue', cursive;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3v4"/><path d="M14 7h8"/><path d="M10 21V7"/><path d="M6 21V11"/><path d="M2 21V17"/></svg> ${msg.tool}</span>` : '';
+            el.innerHTML = `
+              <div class="max-w-[85%] flex gap-2">
+                <div class="w-8 h-8 rounded-pill bg-cream-200 flex items-center justify-center shrink-0 mt-1" style="border: 2px solid #3e2723;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="4" ry="4" style="stroke-dasharray: 60; stroke-dashoffset: 1;" />
+                    <circle cx="9" cy="10" r="1.5" fill="#6d4c41" stroke="none" />
+                    <circle cx="15" cy="10" r="1.5" fill="#6d4c41" stroke="none" />
+                    <path d="M9 15 Q12 18 15 15" stroke="#6d4c41" stroke-width="1.5" fill="none" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <div>
+                  <div class="msg-ai px-4 py-3 text-sm leading-relaxed shadow-soft" style="box-shadow: 3px 3px 0 #3e2723;">
+                    ${escapeHtml(msg.text)}
+                  </div>
+                  ${toolBadge}
+                  <p class="text-[10px] text-ink-muted mt-1 pl-1" style="font-family: 'Comic Neue', cursive;">${msg.time}</p>
+                </div>
+              </div>
+            `;
+          }
+          messagesContainer.appendChild(el);
+        });
+        scrollToBottom();
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function scrollToBottom() {
+        const canvas = $('chatCanvas');
+        canvas.scrollTop = canvas.scrollHeight;
+      }
+
+      // Render projects
+      function renderProjects() {
+        projectsList.innerHTML = '';
+        projects.forEach(p => {
+          const el = document.createElement('button');
+          el.className = `project-item w-full flex items-center gap-3 px-4 py-3 rounded-btn text-left ${p.id === currentProject.id ? 'active' : ''}`;
+          el.setAttribute('aria-label', `Switch to project ${p.name}`);
+          el.innerHTML = `
+            <div class="w-10 h-10 rounded-btn flex items-center justify-center shrink-0" style="background: ${p.id === currentProject.id ? '#f8c4a8' : '#f5e9c8'}; border: 2px solid #3e2723;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" style="stroke-dasharray: 60; stroke-dashoffset: 0;" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-ink truncate" style="font-family: 'Comic Neue', cursive;">${p.name}</span>
+                ${p.unread > 0 ? `<span class="w-5 h-5 rounded-pill bg-ink text-warm-white text-[10px] flex items-center justify-center font-bold" style="background: #d4a5a5; border: 2px solid #3e2723; color: #3e2723;">${p.unread}</span>` : ''}
+              </div>
+              <p class="text-xs text-ink-muted truncate mt-0.5" style="font-family: 'Comic Neue', cursive;">${p.lastMessage}</p>
+            </div>
+            <span class="text-[10px] text-ink-muted shrink-0" style="font-family: 'Comic Neue', cursive;">${p.time}</span>
+          `;
+          el.addEventListener('click', () => switchProject(p.id));
+          projectsList.appendChild(el);
+        });
+      }
+
+      // Render tools
+      function renderTools() {
+        toolsGrid.innerHTML = '';
+        tools.forEach(t => {
+          const el = document.createElement('button');
+          el.className = 'skill-card flex flex-col items-center gap-2 p-3 rounded-card bg-cream-50 hover:shadow-card';
+          el.style.background = t.color;
+          el.setAttribute('aria-label', `Activate ${t.name} skill`);
+          el.innerHTML = `
+            <div class="w-10 h-10 rounded-btn flex items-center justify-center" style="background: rgba(253,251,245,0.8); border: 2px solid #3e2723;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3e2723" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                ${t.svg}
+              </svg>
+            </div>
+            <span class="text-xs font-bold text-ink" style="font-family: 'Comic Neue', cursive;">${t.name}</span>
+            <span class="text-[10px] text-ink-muted" style="font-family: 'Comic Neue', cursive;">${t.desc}</span>
+          `;
+          el.addEventListener('click', () => activateTool(t));
+          toolsGrid.appendChild(el);
+        });
+      }
+
+      // Switch project
+      function switchProject(id) {
+        const p = projects.find(x => x.id === id);
+        if (!p || p.id === currentProject.id) return;
+        currentProject = p;
+        projects.forEach(x => { x.active = x.id === id; x.unread = 0; });
+        currentProjectName.textContent = p.name;
+        renderProjects();
+        renderMessages();
+        closeProjects();
+      }
+
+      // Activate tool
+      function activateTool(tool) {
+        const text = messageInput.value;
+        messageInput.value = text ? `${text} [${tool.name}]` : `Using ${tool.name}...`;
+        messageInput.focus();
+        closeTools();
+        showPet(`The ${tool.name.toLowerCase()} brush is ready. Apply it to your canvas!`);
+      }
+
+      // Send message
+      function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+        if (!messages[currentProject.id]) messages[currentProject.id] = [];
+        messages[currentProject.id].push({ id: Date.now(), type: 'user', text, time: timeStr });
+        messageInput.value = '';
+        renderMessages();
+
+        // Show typing
+        typingIndicator.classList.remove('hidden');
+        scrollToBottom();
+
+        // AI response after delay
+        setTimeout(() => {
+          typingIndicator.classList.add('hidden');
+          const responses = [
+            'I see. Let me think through this with you. The approach has merit, and I can help refine it further.',
+            'That is an interesting direction. Have you considered how this scales across different screen sizes?',
+            'I have analyzed the pattern. Here is what I found: the structure is sound, but we could simplify the nested logic.',
+            'Great insight. Let me apply the relevant skill brush to help you move forward.',
+            'I understand the intent. Let us break this into manageable steps and tackle them one at a time.'
+          ];
+          const response = responses[Math.floor(Math.random() * responses.length)];
+          messages[currentProject.id].push({ id: Date.now() + 1, type: 'ai', text: response, time: timeStr });
+          renderMessages();
+
+          // Random pet suggestion
+          if (Math.random() > 0.5) {
+            setTimeout(() => showPet(petSuggestions[Math.floor(Math.random() * petSuggestions.length)]), 800);
+          }
+        }, 1500 + Math.random() * 1000);
+      }
+
+      // Pet companion
+      let petTimeout;
+      function showPet(text) {
+        petText.textContent = text;
+        petCompanion.style.display = 'block';
+        clearTimeout(petTimeout);
+        petTimeout = setTimeout(() => { petCompanion.style.display = 'none'; }, 5000);
+      }
+
+      // Panel controls
+      function openProjects() {
+        $('projectsOverlay').classList.remove('hidden');
+        setTimeout(() => {
+          $('projectsPanel').classList.remove('-translate-x-full');
+        }, 10);
+      }
+      function closeProjects() {
+        $('projectsPanel').classList.add('-translate-x-full');
+        setTimeout(() => { $('projectsOverlay').classList.add('hidden'); }, 250);
+      }
+      function openTools() {
+        $('toolsOverlay').classList.remove('hidden');
+        setTimeout(() => {
+          $('toolsPanel').classList.remove('translate-x-full');
+        }, 10);
+      }
+      function closeTools() {
+        $('toolsPanel').classList.add('translate-x-full');
+        setTimeout(() => { $('toolsOverlay').classList.add('hidden'); }, 250);
+      }
+
+      // Event listeners
+      $('menuBtn').addEventListener('click', openProjects);
+      $('toolsBtn').addEventListener('click', openTools);
+      $('closeProjectsBtn').addEventListener('click', closeProjects);
+      $('closeToolsBtn').addEventListener('click', closeTools);
+      $('projectsOverlay').addEventListener('click', e => { if (e.target === $('projectsOverlay')) closeProjects(); });
+      $('toolsOverlay').addEventListener('click', e => { if (e.target === $('toolsOverlay')) closeTools(); });
+      $('sendBtn').addEventListener('click', sendMessage);
+      $('attachBtn').addEventListener('click', () => showPet('Attach files by dragging them into the canvas area.'));
+      $('petAvatar').addEventListener('click', () => showPet(petSuggestions[Math.floor(Math.random() * petSuggestions.length)]));
+      $('newProjectBtn').addEventListener('click', () => {
+        showPet('New project creation coming soon!');
+        closeProjects();
+      });
+
+      messageInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // Auto-resize textarea
+      messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+
+      // Initial pet greeting
+      setTimeout(() => showPet('Welcome to your studio! I am here to spark ideas.'), 1200);
+
+      // Init
+      renderMessages();
+      renderProjects();
+      renderTools();
+    })();
+  </script>
+</body>
+</html>

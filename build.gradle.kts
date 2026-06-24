@@ -1,6 +1,12 @@
 plugins {
     `java-library`
+    application
     jacoco
+}
+
+application {
+    mainClass.set("io.agentcore.Main")
+    applicationDefaultJvmArgs = listOf("--enable-preview")
 }
 
 java {
@@ -39,6 +45,10 @@ tasks.test {
 
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("--enable-preview")
+}
+
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`
 }
 
 jacoco {

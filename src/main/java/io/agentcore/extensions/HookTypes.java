@@ -1,7 +1,7 @@
 package io.agentcore.extensions;
 
-import io.agentcore.core.Content.ToolCallContent;
-import io.agentcore.tools.ToolResult;
+import io.agentcore.model.Content.ToolCallContent;
+import io.agentcore.model.ToolResult;
 
 import java.util.List;
 import java.util.Map;
@@ -114,7 +114,7 @@ public final class HookTypes {
          * @param terminate override terminate flag (null = keep original)
          */
         record ModifyResult(
-                List<io.agentcore.core.Content> content,
+                List<io.agentcore.model.Content> content,
                 Object details,
                 Boolean isError,
                 Boolean terminate
@@ -124,7 +124,7 @@ public final class HookTypes {
             }
 
             /** Convenience: modify only content. */
-            public ModifyResult(List<io.agentcore.core.Content> content) {
+            public ModifyResult(List<io.agentcore.model.Content> content) {
                 this(content, null, null, null);
             }
         }

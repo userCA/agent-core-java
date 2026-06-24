@@ -1,7 +1,7 @@
 package io.agentcore.retrieval;
 
 import io.agentcore.tools.ToolContext;
-import io.agentcore.tools.ToolResult;
+import io.agentcore.model.ToolResult;
 
 import org.junit.jupiter.api.*;
 
