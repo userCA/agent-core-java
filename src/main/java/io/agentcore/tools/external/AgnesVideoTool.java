@@ -95,12 +95,12 @@ public class AgnesVideoTool implements Tool {
 
         String apiKey = AgnesApiConfig.getApiKey();
         if (apiKey == null) {
-            return new ToolResult("错误：未设置 AGNES_API_KEY 环境变量");
+            return ToolResult.error("config", "未设置 AGNES_API_KEY 环境变量");
         }
 
         // Validate keyframes mode
         if ("keyframes".equals(mode) && params.get("images") == null && image == null) {
-            return new ToolResult("错误：关键帧模式（keyframes）必须提供 images 参数（至少2张图片URL）。");
+            return ToolResult.error("missing_param", "关键帧模式（keyframes）必须提供 images 参数（至少2张图片URL）。");
         }
 
         // Validate num_frames
@@ -145,13 +145,13 @@ public class AgnesVideoTool implements Tool {
             if (submitResp.statusCode() >= 400) {
                 String errorText = submitResp.body().length() > 500
                         ? submitResp.body().substring(0, 500) : submitResp.body();
-                return new ToolResult("API 错误 (" + submitResp.statusCode() + "): " + errorText);
+                return ToolResult.error("api_error", "API 错误 (" + submitResp.statusCode() + "): " + errorText);
             }
 
             JsonNode data = MAPPER.readTree(submitResp.body());
             String taskId = data.has("id") ? data.get("id").asText("") : "";
             if (taskId.isEmpty()) {
-                return new ToolResult("创建视频任务失败: " + submitResp.body());
+                return ToolResult.error("task_failed", "创建视频任务失败: " + submitResp.body());
             }
 
             // Quick poll
@@ -192,7 +192,7 @@ public class AgnesVideoTool implements Tool {
                         videoUrl = pollData.get("video_url").asText("");
                     }
                     if (videoUrl.isEmpty()) {
-                        return new ToolResult("视频生成完成但未返回视频URL。任务ID: " + taskId);
+                        return ToolResult.error("no_url", "视频生成完成但未返回视频URL。任务ID: " + taskId);
                     }
 
                     String seconds = pollData.has("seconds") ? pollData.get("seconds").asText("?") : "?";
@@ -210,15 +210,15 @@ public class AgnesVideoTool implements Tool {
                             details, null);
                 } else if ("failed".equals(status)) {
                     String error = pollData.has("error") ? pollData.get("error").asText("") : "unknown";
-                    return new ToolResult("视频生成失败。任务ID: " + taskId + "，错误: " + error);
+                    return ToolResult.error("video_failed", "视频生成失败。任务ID: " + taskId + "，错误: " + error);
                 }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new ToolResult("视频生成被中断");
+            return ToolResult.error("interrupted", "视频生成被中断");
         } catch (Exception e) {
             log.debug("Agnes video generation failed", e);
-            return new ToolResult("生成失败: " + e.getMessage());
+            return ToolResult.error("video_failed", e.getMessage());
         }
     }
 

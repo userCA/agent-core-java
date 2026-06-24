@@ -8,7 +8,7 @@
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Patrick+Hand&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
@@ -45,9 +45,9 @@
                         }
                     },
                     fontFamily: {
-                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-                        hand: ['"Patrick Hand"', 'cursive'],
-                        comic: ['"Comic Neue"', 'cursive'],
+                        sans: ['Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'system-ui', '-apple-system', 'sans-serif'],
+                        hand: ['ZCOOL KuaiLe', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'cursive'],
+                        comic: ['ZCOOL KuaiLe', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'cursive'],
                     },
                     borderRadius: {
                         'button': '10px',
@@ -67,7 +67,7 @@
         * { -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; overflow: hidden; }
         body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, sans-serif;
             background: #f4b89a;
             display: flex;
             align-items: center;
@@ -81,8 +81,8 @@
             max-height: 98vh;
             background: #f9f1d8;
             border-radius: 40px;
-            border: 3px solid #3d2b1f;
-            box-shadow: 6px 6px 0 #3d2b1f, 0 25px 80px rgba(61,43,31,0.15);
+            border: 1.5px solid #3d2b1f;
+            box-shadow: 1px 1px 0 #3d2b1f, 0 25px 80px rgba(61,43,31,0.15);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -148,7 +148,7 @@
 
         /* Hand-drawn outline style */
         .hand-drawn {
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-radius: 14px;
         }
         .hand-drawn-sm {
@@ -156,11 +156,11 @@
             border-radius: 10px;
         }
         .hand-drawn-pill {
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-radius: 9999px;
         }
         .hand-drawn-circle {
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-radius: 50%;
         }
 
@@ -174,23 +174,23 @@
         .msg-user {
             background: #3d2b1f;
             color: #fdf6e3;
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-radius: 16px 16px 4px 16px;
-            box-shadow: 2px 2px 0 rgba(61,43,31,0.2);
+            box-shadow: 1px 1px 0 rgba(61,43,31,0.2);
         }
         .msg-ai {
             background: #fffbf0;
             color: #3d2b1f;
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-radius: 16px 16px 16px 4px;
-            box-shadow: 2px 2px 0 rgba(61,43,31,0.15);
+            box-shadow: 1px 1px 0 rgba(61,43,31,0.15);
         }
 
         /* Input focus */
         .input-focus:focus {
             outline: none;
             border-color: #3d2b1f;
-            box-shadow: 3px 3px 0 #3d2b1f;
+            box-shadow: 1px 1px 0 #3d2b1f;
         }
 
         /* Tool pills */
@@ -208,8 +208,8 @@
         .btn-dark {
             background: #3d2b1f;
             color: #fdf6e3;
-            border: 2.5px solid #3d2b1f;
-            box-shadow: 2px 2px 0 rgba(61,43,31,0.3);
+            border: 1.5px solid #3d2b1f;
+            box-shadow: 1px 1px 0 rgba(61,43,31,0.3);
             transition: all 0.15s ease;
         }
         .btn-dark:active { transform: scale(0.96); box-shadow: 1px 1px 0 rgba(61,43,31,0.3); }
@@ -217,7 +217,7 @@
         /* Card hover */
         .journal-card {
             transition: all 0.15s ease;
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
         }
         .journal-card:active {
             transform: scale(0.98);
@@ -235,7 +235,7 @@
         /* Bottom sheet */
         .bottom-sheet {
             transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-            border: 2.5px solid #3d2b1f;
+            border: 1.5px solid #3d2b1f;
             border-bottom: none;
         }
         .bottom-sheet.hidden-sheet {
@@ -323,7 +323,7 @@
                     <h1 class="text-sm font-bold text-ink tracking-tight font-hand" style="font-size: 16px;">Journal</h1>
                     <span class="text-[11px] text-ink-muted flex items-center gap-1 font-comic">
                         <span class="w-2 h-2 rounded-full bg-accent-sage border-2 border-ink"></span>
-                        Online
+                        在线
                     </span>
                 </div>
                 <button onclick="toggleCompanionPanel()" class="w-10 h-10 flex items-center justify-center rounded-button hover:bg-ink/5 transition-colors" aria-label="Open companion panel">
@@ -351,7 +351,7 @@
                     </div>
                     <div class="flex-1">
                         <div class="msg-ai inline-block px-4 py-3 max-w-[85%] text-[15px] leading-relaxed shadow-card">
-                            Good morning. What would you like to explore in your journal today?
+                            早上好. What would you like to explore in your journal today?
                         </div>
                         <span class="text-[10px] text-ink-muted mt-1 ml-1 block font-comic">8:32 AM</span>
                     </div>
@@ -715,7 +715,7 @@
                         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="#f4a8a8" stroke="#3d2b1f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
                         </svg>
-                        <span class="text-xs font-bold text-ink uppercase tracking-wide font-hand" style="font-size: 13px;">Mood</span>
+                        <span class="text-xs font-bold text-ink uppercase tracking-wide font-hand" style="font-size: 13px;">心情</span>
                     </div>
                     <div class="flex items-center gap-3">
                         <div class="flex-1 h-3 hand-progress">
@@ -777,7 +777,7 @@
                         Poke
                     </button>
                     <button onclick="petReaction('feed')" class="flex-1 py-2.5 bg-cream-card border-2 border-ink rounded-button text-xs font-bold text-ink hover:bg-cream-warm transition-all active:scale-95 shadow-card font-comic">
-                        Feed Snack
+                        喂食 Snack
                     </button>
                     <button onclick="petReaction('praise')" class="flex-1 py-2.5 bg-cream-card border-2 border-ink rounded-button text-xs font-bold text-ink hover:bg-cream-warm transition-all active:scale-95 shadow-card font-comic">
                         Praise

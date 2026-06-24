@@ -72,7 +72,7 @@ public class MCPToolAdapter implements Tool {
             String text = extractMcpResult(result);
             return new ToolResult(List.of(new TextContent(text)));
         } catch (Exception e) {
-            return new ToolResult("MCP tool error: " + e.getMessage());
+            return ToolResult.error("mcp_error", e.getMessage());
         }
     }
 

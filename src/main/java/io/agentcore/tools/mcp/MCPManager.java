@@ -2,6 +2,7 @@ package io.agentcore.tools.mcp;
 
 import io.agentcore.tools.ToolDefinition;
 import io.agentcore.tools.ToolRegistry;
+import io.agentcore.tools.ToolSource;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -168,7 +169,7 @@ public class MCPManager {
                         adapter.definition().description(),
                         adapter.definition().parameters()));
             }
-            registry.register(adapter);
+            registry.register(adapter, new ToolSource.McpServer(adapter.serverName()));
             count++;
         }
         return count;

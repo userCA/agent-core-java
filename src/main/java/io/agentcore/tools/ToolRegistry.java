@@ -1,31 +1,72 @@
 package io.agentcore.tools;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Registry that holds tool instances and provides lookup.
+ *
+ * <p>Uses {@link ConcurrentHashMap} for thread-safe reads with
+ * registration/unregistration guarded by synchronization.
+ * Supports {@link ToolLifecycle} for tools that need startup/shutdown hooks.
  *
  * <p>Mirrors Python {@code agent_core/tools/base.py} ToolRegistry.
  */
 public class ToolRegistry {
 
-    private final Map<String, Tool> tools = Collections.synchronizedMap(new LinkedHashMap<>());
-    private final Map<String, Object> sources = Collections.synchronizedMap(new LinkedHashMap<>());
+    private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
+
+    private final Map<String, Tool> tools = new ConcurrentHashMap<>();
+    private final Map<String, ToolSource> sources = new ConcurrentHashMap<>();
 
     /**
-     * Register a tool.
+     * Register a tool with default builtin source.
      */
     public void register(Tool tool) {
-        register(tool, null);
+        register(tool, ToolSource.Builtin.INSTANCE);
     }
 
     /**
      * Register a tool with an associated source.
      */
-    public void register(Tool tool, Object source) {
+    public void register(Tool tool, ToolSource source) {
         String name = tool.definition().name();
+
+        // Lifecycle: call start() before registration
+        if (tool instanceof ToolLifecycle lifecycle) {
+            try {
+                lifecycle.start();
+            } catch (Exception e) {
+                log.warn("Tool '{}' lifecycle start() failed, skipping registration", name, e);
+                return;
+            }
+        }
+
         tools.put(name, tool);
-        sources.put(name, source);
+        sources.put(name, source != null ? source : ToolSource.Builtin.INSTANCE);
+    }
+
+    /**
+     * Unregister a tool by name, calling its lifecycle stop() if applicable.
+     *
+     * @return true if the tool was found and removed
+     */
+    public boolean unregister(String name) {
+        Tool removed = tools.remove(name);
+        sources.remove(name);
+
+        if (removed instanceof ToolLifecycle lifecycle) {
+            try {
+                lifecycle.stop();
+            } catch (Exception e) {
+                log.warn("Tool '{}' lifecycle stop() failed", name, e);
+            }
+        }
+
+        return removed != null;
     }
 
     /**
@@ -44,7 +85,7 @@ public class ToolRegistry {
                         e.getValue().definition().name(),
                         e.getValue().definition().description(),
                         e.getValue().definition().parameters(),
-                        sources.get(e.getKey())
+                        sources.getOrDefault(e.getKey(), ToolSource.Builtin.INSTANCE)
                 ))
                 .toList();
     }
@@ -86,5 +127,20 @@ public class ToolRegistry {
      */
     public int size() {
         return tools.size();
+    }
+
+    /**
+     * Shut down all tools that implement {@link ToolLifecycle}.
+     */
+    public void shutdown() {
+        for (var entry : tools.entrySet()) {
+            if (entry.getValue() instanceof ToolLifecycle lifecycle) {
+                try {
+                    lifecycle.stop();
+                } catch (Exception e) {
+                    log.warn("Tool '{}' lifecycle stop() failed during shutdown", entry.getKey(), e);
+                }
+            }
+        }
     }
 }

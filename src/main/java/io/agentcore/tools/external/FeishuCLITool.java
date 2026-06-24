@@ -75,7 +75,7 @@ public class FeishuCLITool implements Tool {
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
         String raw = ((String) params.getOrDefault("command", "")).trim();
         if (raw.isEmpty()) {
-            return new ToolResult("Error: 'command' parameter is required");
+            return ToolResult.error("missing_param", "'command' parameter is required");
         }
 
         // Parse command args — split by spaces respecting quotes
@@ -83,7 +83,7 @@ public class FeishuCLITool implements Tool {
         try {
             args = splitArgs(raw);
         } catch (Exception e) {
-            return new ToolResult("Invalid command syntax: " + e.getMessage());
+            return ToolResult.error("invalid_syntax", e.getMessage());
         }
 
         int timeout = TIMEOUT_DEFAULT;
@@ -173,14 +173,14 @@ public class FeishuCLITool implements Tool {
 
         } catch (java.io.IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("No such file")) {
-                return new ToolResult(
+                return ToolResult.error("not_found",
                         "lark-cli not found. Install: npm install -g @larksuite/cli\n"
                                 + "Then configure: lark-cli config init --new");
             }
-            return new ToolResult("Error: " + e.getMessage());
+            return ToolResult.error("io_error", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new ToolResult("Command interrupted");
+            return ToolResult.error("interrupted", "Command interrupted");
         }
     }
 

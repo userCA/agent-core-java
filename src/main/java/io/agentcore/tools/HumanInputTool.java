@@ -49,7 +49,7 @@ public class HumanInputTool implements Tool {
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
         String prompt = (String) params.get("prompt");
         if (prompt == null || prompt.isBlank()) {
-            return new ToolResult("ERROR: 'prompt' parameter is required");
+            return ToolResult.error("missing_param", "'prompt' parameter is required");
         }
 
         // Check if user input was already provided (HITL re-execution path)

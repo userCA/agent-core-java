@@ -57,12 +57,12 @@ public class CheckVideoTool implements Tool {
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
         String taskId = (String) params.getOrDefault("task_id", "");
         if (taskId.isEmpty()) {
-            return new ToolResult("请提供 task_id");
+            return ToolResult.error("missing_param", "请提供 task_id");
         }
 
         String apiKey = AgnesApiConfig.getApiKey();
         if (apiKey == null) {
-            return new ToolResult("错误：未设置 AGNES_API_KEY");
+            return ToolResult.error("config", "未设置 AGNES_API_KEY");
         }
 
         try (HttpClient client = HttpClient.newBuilder()
@@ -77,7 +77,7 @@ public class CheckVideoTool implements Tool {
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
-                return new ToolResult("查询失败 (HTTP " + response.statusCode() + ")");
+                return ToolResult.error("api_error", "查询失败 (HTTP " + response.statusCode() + ")");
             }
 
             JsonNode data = MAPPER.readTree(response.body());
@@ -108,16 +108,16 @@ public class CheckVideoTool implements Tool {
                                     + "\n**分辨率**: " + sizeStr + " | **时长**: " + seconds + "s")),
                             details, null);
                 }
-                return new ToolResult("视频已完成但未返回URL。任务ID: " + taskId);
+                return ToolResult.error("no_url", "视频已完成但未返回URL。任务ID: " + taskId);
             } else if ("failed".equals(status)) {
                 String error = data.has("error") ? data.get("error").asText("") : "";
-                return new ToolResult("视频生成失败。任务ID: " + taskId + "，错误: " + error);
+                return ToolResult.error("video_failed", "视频生成失败。任务ID: " + taskId + "，错误: " + error);
             } else {
                 return new ToolResult("视频仍在生成中。状态: " + status + " (" + progress + "%)，任务ID: " + taskId);
             }
         } catch (Exception e) {
             log.debug("Check video status failed", e);
-            return new ToolResult("查询失败: " + e.getMessage());
+            return ToolResult.error("query_failed", e.getMessage());
         }
     }
 }

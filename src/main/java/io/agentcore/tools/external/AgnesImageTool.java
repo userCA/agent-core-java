@@ -70,7 +70,7 @@ public class AgnesImageTool implements Tool {
 
         String apiKey = AgnesApiConfig.getApiKey();
         if (apiKey == null) {
-            return new ToolResult("错误：未设置 AGNES_API_KEY 环境变量");
+            return ToolResult.error("config", "未设置 AGNES_API_KEY 环境变量");
         }
 
         // Build request body
@@ -112,13 +112,13 @@ public class AgnesImageTool implements Tool {
             if (response.statusCode() >= 400) {
                 String errorText = response.body().length() > 500
                         ? response.body().substring(0, 500) : response.body();
-                return new ToolResult("API 错误 (" + response.statusCode() + "): " + errorText);
+                return ToolResult.error("api_error", "API 错误 (" + response.statusCode() + "): " + errorText);
             }
 
             JsonNode data = MAPPER.readTree(response.body());
             JsonNode results = data.get("data");
             if (results == null || !results.isArray() || results.isEmpty()) {
-                return new ToolResult("未生成图片: " + response.body());
+                return ToolResult.error("no_result", "未生成图片: " + response.body());
             }
 
             List<String> urls = new ArrayList<>();
@@ -130,7 +130,7 @@ public class AgnesImageTool implements Tool {
             }
 
             if (urls.isEmpty()) {
-                return new ToolResult("生成失败：未返回图片URL");
+                return ToolResult.error("no_url", "生成失败：未返回图片URL");
             }
 
             // Output image URLs wrapped in markdown
@@ -153,7 +153,7 @@ public class AgnesImageTool implements Tool {
                     details, null);
         } catch (Exception e) {
             log.debug("Agnes image generation failed", e);
-            return new ToolResult("生成失败: " + e.getMessage());
+            return ToolResult.error("image_failed", e.getMessage());
         }
     }
 }

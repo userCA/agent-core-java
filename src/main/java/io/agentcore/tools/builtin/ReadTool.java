@@ -1,6 +1,8 @@
 package io.agentcore.tools.builtin;
 
 import io.agentcore.model.Content.TextContent;
+import io.agentcore.tools.ParamSchema;
+import io.agentcore.tools.ToolParams;
 import io.agentcore.tools.shell.FileOperations;
 import io.agentcore.tools.shell.Truncation;
 
@@ -21,6 +23,18 @@ public class ReadTool implements Tool {
     private static final int DEFAULT_MAX_BYTES = 32000;
     private static final int DEFAULT_MAX_LINES = 500;
 
+    private static final ToolDefinition DEF = new ToolDefinition(
+            "read",
+            "Read file contents with optional offset and limit. "
+                    + "Output is automatically truncated if too large.",
+            ParamSchema.object()
+                    .prop("path", ParamSchema.string("File path").required())
+                    .prop("offset", ParamSchema.integer("0-indexed line offset (default 0)").defaultValue(0))
+                    .prop("limit", ParamSchema.integer("Max lines to read"))
+                    .build(),
+            null, null, null
+    );
+
     private final FileOperations fileOps;
     private final int maxBytes;
     private final int maxLines;
@@ -37,33 +51,23 @@ public class ReadTool implements Tool {
 
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition(
-                "read",
-                "Read file contents with optional offset and limit. "
-                        + "Output is automatically truncated if too large.",
-                Map.of("type", "object", "properties", Map.of(
-                        "path", Map.of("type", "string",
-                                "description", "File path"),
-                        "offset", Map.of("type", "integer",
-                                "description", "0-indexed line offset (default 0)"),
-                        "limit", Map.of("type", "integer",
-                                "description", "Max lines to read")
-                ), "required", List.of("path")),
-                null, null, null
-        );
+        return DEF;
     }
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        String path = (String) params.get("path");
-        if (path == null || path.isBlank()) {
-            return new ToolResult("ERROR: 'path' parameter is required");
+        ToolParams p = new ToolParams(params);
+
+        String path;
+        try {
+            path = p.requireString("path");
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("missing_param", e.getMessage());
         }
 
-        Object offsetObj = params.get("offset");
-        int offset = offsetObj instanceof Number n ? n.intValue() : 0;
-        Object limitObj = params.get("limit");
-        Integer limit = limitObj instanceof Number n ? n.intValue() : null;
+        int offset = p.getInt("offset", 0);
+        Integer limit = p.has("limit") ? p.getInt("limit", -1) : null;
+        if (limit != null && limit == -1) limit = null;
 
         try {
             String content = fileOps.read(path, offset, limit);
@@ -88,22 +92,16 @@ public class ReadTool implements Tool {
                     List.of(new TextContent(content)),
                     details, null);
         } catch (NoSuchFileException e) {
-            return new ToolResult(
-                    List.of(new TextContent("File not found: " + path)),
-                    Map.of("error", "not_found"), null);
+            return ToolResult.error("not_found", "File not found: " + path);
         } catch (java.nio.file.FileSystemException e) {
             if (e.getMessage() != null && e.getMessage().contains("Is a directory")) {
-                return new ToolResult(
-                        List.of(new TextContent("Path is a directory: " + path)),
-                        Map.of("error", "is_directory"), null);
+                return ToolResult.error("is_directory", "Path is a directory: " + path);
             }
-            return new ToolResult(
-                    List.of(new TextContent(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())),
-                    Map.of("error", "read_failed"), null);
+            return ToolResult.error("read_failed",
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         } catch (Exception e) {
-            return new ToolResult(
-                    List.of(new TextContent(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())),
-                    Map.of("error", "read_failed"), null);
+            return ToolResult.error("read_failed",
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
     }
 }

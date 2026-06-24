@@ -1,5 +1,6 @@
 package io.agentcore.tools.builtin;
 
+import io.agentcore.tools.ParamSchema;
 import io.agentcore.tools.shell.SecurityUtils;
 
 import java.net.URI;
@@ -50,8 +51,7 @@ public class HttpTool implements Tool, AutoCloseable {
         this.toolDescription = description;
         this.method = method;
         this.urlTemplate = urlTemplate;
-        this.inputSchema = inputSchema != null ? inputSchema : Map.of(
-                "type", "object", "properties", Map.of());
+        this.inputSchema = inputSchema != null ? inputSchema : ParamSchema.object().build();
         this.headers = headers;
         this.bearerToken = bearerToken;
         this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
@@ -61,7 +61,7 @@ public class HttpTool implements Tool, AutoCloseable {
                 .build();
     }
 
-    /** Simplified constructor for a generic GET/POST tool. */
+    /** Simplified constructor for a general GET/POST tool. */
     public HttpTool(String method, String urlTemplate) {
         this("http", "Make HTTP requests to external APIs.",
                 method, urlTemplate, null, null, null, DEFAULT_TIMEOUT_SECONDS);
@@ -112,9 +112,9 @@ public class HttpTool implements Tool, AutoCloseable {
 
             return new ToolResult("[status_code=" + response.statusCode() + "]\n" + response.body());
         } catch (SecurityException e) {
-            return new ToolResult("Request blocked: " + e.getMessage());
+            return ToolResult.error("ssrf_blocked", e.getMessage());
         } catch (Exception e) {
-            return new ToolResult("HTTP error: " + e.getMessage());
+            return ToolResult.error("http_failed", e.getMessage());
         }
     }
 

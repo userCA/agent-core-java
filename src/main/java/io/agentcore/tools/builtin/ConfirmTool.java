@@ -3,6 +3,7 @@ package io.agentcore.tools.builtin;
 import java.util.List;
 import java.util.Map;
 import io.agentcore.model.ToolResult;
+import io.agentcore.tools.ParamSchema;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
@@ -15,31 +16,32 @@ import io.agentcore.tools.ToolDefinition;
  */
 public class ConfirmTool implements Tool {
 
+    private static final ToolDefinition DEF = new ToolDefinition(
+            "confirm",
+            "Ask the user for confirmation or input before proceeding. "
+                    + "Use this when you need explicit user approval for an action.",
+            ParamSchema.object()
+                    .prop("prompt", ParamSchema.string("Question or message to show the user").required())
+                    .prop("fields", ParamSchema.array("Optional input field definitions for structured input"))
+                    .build(),
+            null, null, null
+    );
+
     public ConfirmTool() {
     }
 
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition(
-                "confirm",
-                "Ask the user for confirmation or input before proceeding. "
-                        + "Use this when you need explicit user approval for an action.",
-                Map.of("type", "object", "properties", Map.of(
-                        "prompt", Map.of("type", "string",
-                                "description", "Question or message to show the user"),
-                        "fields", Map.of("type", "array",
-                                "description", "Optional input field definitions for structured input")
-                ), "required", List.of("prompt")),
-                null, null, null
-        );
+        return DEF;
     }
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        String prompt = (String) params.get("prompt");
-        if (prompt == null || prompt.isBlank()) {
-            return new ToolResult("ERROR: 'prompt' parameter is required");
+        Object promptObj = params.get("prompt");
+        if (promptObj == null || (promptObj instanceof String s && s.isBlank())) {
+            return ToolResult.error("missing_param", "'prompt' parameter is required");
         }
+        String prompt = String.valueOf(promptObj);
 
         // Suspend tool execution — the agent loop will catch this and
         // emit a HumanInputRequest event, pausing until the user responds.

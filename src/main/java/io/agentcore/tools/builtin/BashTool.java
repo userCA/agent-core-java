@@ -1,5 +1,7 @@
 package io.agentcore.tools.builtin;
 
+import io.agentcore.tools.ParamSchema;
+import io.agentcore.tools.ToolParams;
 import io.agentcore.tools.shell.BashOperations;
 import io.agentcore.tools.shell.BashResult;
 import io.agentcore.tools.shell.SecurityUtils;
@@ -31,12 +33,10 @@ public class BashTool implements Tool {
             "bash",
             "Execute a bash command. Use for complex operations; "
                     + "prefer specialized tools (read/write/edit/grep/find/ls) for file operations.",
-            Map.of("type", "object", "properties", Map.of(
-                    "command", Map.of("type", "string",
-                            "description", "Bash command to execute"),
-                    "timeout", Map.of("type", "integer",
-                            "description", "Timeout in seconds (1-300, default 60)")
-            ), "required", List.of("command")),
+            ParamSchema.object()
+                    .prop("command", ParamSchema.string("Bash command to execute").required())
+                    .prop("timeout", ParamSchema.integer("Timeout in seconds (1-300, default 60)").defaultValue(60))
+                    .build(),
             null, null, null
     );
 
@@ -53,20 +53,23 @@ public class BashTool implements Tool {
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        Object cmdObj = params.get("command");
-        if (cmdObj == null || !(cmdObj instanceof String command) || command.isBlank()) {
-            return new ToolResult("ERROR: 'command' parameter is required and must be a non-empty string");
+        ToolParams p = new ToolParams(params);
+
+        String command;
+        try {
+            command = p.requireString("command");
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("missing_param", e.getMessage());
         }
 
-        if (SecurityUtils.isDangerousCommand(command)) {
-            return new ToolResult("ERROR: Command blocked: appears to be a dangerous operation "
-                    + "(e.g., rm -rf /, fork bomb, reverse shell, system shutdown). "
-                    + "Use safer alternatives or specialized tools.");
+        if (SecurityUtils.isDestructive(command)) {
+            return ToolResult.error("blocked",
+                    "Command blocked: appears to be a dangerous operation "
+                            + "(e.g., rm -rf /, fork bomb, reverse shell, system shutdown). "
+                            + "Use safer alternatives or specialized tools.");
         }
 
-        Object timeoutObj = params.get("timeout");
-        double timeout = timeoutObj instanceof Number n ? n.doubleValue() : 60.0;
-        timeout = Math.max(1.0, Math.min(300.0, timeout));
+        double timeout = Math.max(1.0, Math.min(300.0, p.getDouble("timeout", 60.0)));
 
         CompletableFuture<BashResult> future = bashOps.execute(
                 command, null, timeout, null, null, null);
@@ -120,7 +123,7 @@ public class BashTool implements Tool {
                     List.of(new io.agentcore.model.Content.TextContent(finalOutput)),
                     details, null);
         } catch (Exception e) {
-            return new ToolResult("Error executing command: " + e.getMessage());
+            return ToolResult.error("bash_failed", e.getMessage());
         }
     }
 

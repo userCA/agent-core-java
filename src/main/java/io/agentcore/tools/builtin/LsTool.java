@@ -1,5 +1,7 @@
 package io.agentcore.tools.builtin;
 
+import io.agentcore.tools.ParamSchema;
+import io.agentcore.tools.ToolParams;
 import io.agentcore.tools.shell.FileInfo;
 import io.agentcore.tools.shell.FileOperations;
 
@@ -15,6 +17,15 @@ import io.agentcore.tools.ToolDefinition;
  */
 public class LsTool implements Tool {
 
+    private static final ToolDefinition DEF = new ToolDefinition(
+            "ls",
+            "List directory contents. Shows [D] for directories and [F] for files.",
+            ParamSchema.object()
+                    .prop("path", ParamSchema.string("Directory path (default: working directory)"))
+                    .build(),
+            null, null, null
+    );
+
     private final FileOperations fileOps;
 
     public LsTool(FileOperations fileOps) {
@@ -23,20 +34,13 @@ public class LsTool implements Tool {
 
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition(
-                "ls",
-                "List directory contents. Shows [D] for directories and [F] for files.",
-                Map.of("type", "object", "properties", Map.of(
-                        "path", Map.of("type", "string",
-                                "description", "Directory path (default: working directory)")
-                )),
-                null, null, null
-        );
+        return DEF;
     }
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        String path = (String) params.getOrDefault("path", fileOps.cwd().toString());
+        ToolParams p = new ToolParams(params);
+        String path = p.getString("path", fileOps.cwd().toString());
 
         try {
             List<FileInfo> files = fileOps.ls(path);
@@ -46,7 +50,7 @@ public class LsTool implements Tool {
             }
             return new ToolResult(sb.toString());
         } catch (Exception e) {
-            return new ToolResult("Error listing directory: " + e.getMessage());
+            return ToolResult.error("ls_failed", e.getMessage());
         }
     }
 }

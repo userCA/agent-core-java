@@ -3,6 +3,7 @@ package io.agentcore.tools;
 import io.agentcore.model.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
 import io.agentcore.extensions.HookTypes.*;
+import io.agentcore.tools.shell.SecurityUtils;
 import io.agentcore.tools.shell.SandboxQuota;
 
 import java.util.List;
@@ -31,21 +32,6 @@ public class SandboxPolicyExtension implements Extension {
             Pattern.compile("\\bcurl\\b"),
             Pattern.compile("\\bwget\\b"),
             Pattern.compile("\\bgit\\b.*\\bclone\\b")
-    );
-
-    /** Patterns that are always denied regardless of sandbox. */
-    private static final List<Pattern> DANGEROUS_PATTERNS = List.of(
-            Pattern.compile("\\brm\\s+-rf\\s+/"),
-            Pattern.compile("\\brm\\s+-rf\\s+/\\*"),
-            Pattern.compile("\\bchmod\\s+777\\s+/"),
-            Pattern.compile("\\bmkfs\\."),
-            Pattern.compile("\\bdd\\s+if="),
-            Pattern.compile(">\\s*/dev/sda"),
-            Pattern.compile(">\\s*/dev/nvme"),
-            Pattern.compile("\\bshutdown\\b"),
-            Pattern.compile("\\breboot\\b"),
-            Pattern.compile("\\bfork\\s+bomb"),
-            Pattern.compile(":\\(\\)\\s*\\{\\s*:\\|:")
     );
 
     /** Pre-defined quota profiles for different command types. */
@@ -81,13 +67,11 @@ public class SandboxPolicyExtension implements Extension {
         Object cmdObj = context.arguments().get("command");
         if (!(cmdObj instanceof String command) || command.isEmpty()) return null;
 
-        // 1. Block dangerous commands
-        for (Pattern pattern : DANGEROUS_PATTERNS) {
-            if (pattern.matcher(command).find()) {
-                return new ToolCallHookResult.Block(
-                        "Dangerous command pattern detected: '" + pattern.pattern() + "'. "
-                                + "This operation is blocked to prevent system damage.");
-            }
+        // 1. Block destructive commands (delegated to SecurityUtils)
+        if (SecurityUtils.isDestructive(command)) {
+            return new ToolCallHookResult.Block(
+                    "Dangerous command pattern detected. "
+                            + "This operation is blocked to prevent system damage.");
         }
 
         // 2. Pick quota based on command content
@@ -130,12 +114,5 @@ public class SandboxPolicyExtension implements Extension {
         }
 
         return QUOTA_MATRIX.get("default");
-    }
-
-    private String extractToolName(Object toolCallObj) {
-        if (toolCallObj instanceof ToolCallContent tc) {
-            return tc.name();
-        }
-        return null;
     }
 }

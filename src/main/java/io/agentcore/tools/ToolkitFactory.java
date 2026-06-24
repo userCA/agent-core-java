@@ -21,6 +21,13 @@ import java.util.Map;
  *
  * <p>All tools use the utility layer ({@link FileOperations}, {@link LocalBashOperations})
  * for security and consistency.
+ *
+ * <p>Pre-defined profiles:
+ * <ul>
+ *   <li>{@link #standard()} — full read/write/search/bash/confirm</li>
+ *   <li>{@link #readOnly()} — read, grep, find, ls, bash (no write/edit)</li>
+ *   <li>{@link #minimal()} — read, grep, find, ls only</li>
+ * </ul>
  */
 public final class ToolkitFactory {
 
@@ -28,37 +35,27 @@ public final class ToolkitFactory {
 
     private ToolkitFactory() {}
 
-    /**
-     * Creates a standard toolkit with all file/bash tools and confirm.
-     */
+    /** Creates a standard toolkit with all file/bash tools and confirm. */
     public static ToolRegistry standard() {
         return builder().build();
     }
 
-    /**
-     * Creates a standard toolkit with the given sandbox quota.
-     */
+    /** Creates a standard toolkit with the given sandbox quota. */
     public static ToolRegistry standard(SandboxQuota quota) {
         return builder().quota(quota).build();
     }
 
-    /**
-     * Creates a read-only toolkit (read, grep, find, ls, bash).
-     */
+    /** Creates a read-only toolkit (read, grep, find, ls, bash). */
     public static ToolRegistry readOnly() {
         return builder().includeWrite(false).build();
     }
 
-    /**
-     * Creates a minimal toolkit (read, grep, find, ls only).
-     */
+    /** Creates a minimal toolkit (read, grep, find, ls only). */
     public static ToolRegistry minimal() {
         return builder().includeBash(false).includeWrite(false).build();
     }
 
-    /**
-     * Returns a new builder for fine-grained configuration.
-     */
+    /** Returns a new builder for fine-grained configuration. */
     public static Builder builder() {
         return new Builder();
     }
@@ -81,11 +78,7 @@ public final class ToolkitFactory {
         private Map<String, String> httpHeaders;
         private String httpBearerToken;
 
-        public Builder workingDirectory(String v) {
-            workingDirectory = Path.of(v);
-            return this;
-        }
-
+        public Builder workingDirectory(String v) { workingDirectory = Path.of(v); return this; }
         public Builder workingDirectory(Path v) { workingDirectory = v; return this; }
         public Builder quota(SandboxQuota v) { quota = v; return this; }
         public Builder includeBash(boolean v) { includeBash = v; return this; }
@@ -98,9 +91,7 @@ public final class ToolkitFactory {
         public Builder includeFeishu(boolean v) { includeFeishu = v; return this; }
         public Builder includeMcp(boolean v) { includeMcp = v; return this; }
 
-        /**
-         * Enable an HTTP tool with the given URL template and method.
-         */
+        /** Enable an HTTP tool with the given URL template and method. */
         public Builder http(String method, String url) {
             includeHttp = true;
             httpMethod = method;
@@ -148,17 +139,18 @@ public final class ToolkitFactory {
                         httpHeaders, httpBearerToken, 30));
             }
 
+            // External tools — registered with typed source
             if (includeAgnesImage) {
-                registry.register(new AgnesImageTool());
+                registry.register(new AgnesImageTool(), new ToolSource.External("agnes"));
             }
 
             if (includeAgnesVideo) {
-                registry.register(new AgnesVideoTool());
-                registry.register(new CheckVideoTool());
+                registry.register(new AgnesVideoTool(), new ToolSource.External("agnes"));
+                registry.register(new CheckVideoTool(), new ToolSource.External("agnes"));
             }
 
             if (includeFeishu) {
-                registry.register(new FeishuCLITool());
+                registry.register(new FeishuCLITool(), new ToolSource.External("feishu"));
             }
 
             if (includeMcp) {

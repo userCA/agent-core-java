@@ -1,5 +1,7 @@
 package io.agentcore.tools.builtin;
 
+import io.agentcore.tools.ParamSchema;
+import io.agentcore.tools.ToolParams;
 import io.agentcore.tools.shell.FileOperations;
 
 import java.util.List;
@@ -16,6 +18,17 @@ public class FindTool implements Tool {
 
     private static final int MAX_DISPLAY_RESULTS = 500;
 
+    private static final ToolDefinition DEF = new ToolDefinition(
+            "find",
+            "Find files by name pattern (glob). "
+                    + "Searches recursively up to 20 levels deep.",
+            ParamSchema.object()
+                    .prop("pattern", ParamSchema.string("Filename glob pattern (e.g. '*.java', 'pom.xml')").required())
+                    .prop("path", ParamSchema.string("Root directory (default: working directory)"))
+                    .build(),
+            null, null, null
+    );
+
     private final FileOperations fileOps;
 
     public FindTool(FileOperations fileOps) {
@@ -24,28 +37,21 @@ public class FindTool implements Tool {
 
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition(
-                "find",
-                "Find files by name pattern (glob). "
-                        + "Searches recursively up to 20 levels deep.",
-                Map.of("type", "object", "properties", Map.of(
-                        "pattern", Map.of("type", "string",
-                                "description", "Filename glob pattern (e.g. '*.java', 'pom.xml')"),
-                        "path", Map.of("type", "string",
-                                "description", "Root directory (default: working directory)")
-                ), "required", List.of("pattern")),
-                null, null, null
-        );
+        return DEF;
     }
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        String pattern = (String) params.get("pattern");
-        if (pattern == null || pattern.isBlank()) {
-            return new ToolResult("ERROR: 'pattern' parameter is required");
+        ToolParams p = new ToolParams(params);
+
+        String pattern;
+        try {
+            pattern = p.requireString("pattern");
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("missing_param", e.getMessage());
         }
 
-        String path = (String) params.getOrDefault("path", fileOps.cwd().toString());
+        String path = p.getString("path", fileOps.cwd().toString());
 
         try {
             List<String> results = fileOps.find(path, pattern);
@@ -57,7 +63,7 @@ public class FindTool implements Tool {
             }
             return new ToolResult(output);
         } catch (Exception e) {
-            return new ToolResult("Error finding files: " + e.getMessage());
+            return ToolResult.error("find_failed", e.getMessage());
         }
     }
 }

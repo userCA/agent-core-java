@@ -12,25 +12,68 @@ import java.util.regex.Pattern;
  *
  * <p>Consolidates path traversal prevention, dangerous command detection,
  * and SSRF protection into a single dependency-free utility class.
+ *
+ * <p>Dangerous command detection uses two severity levels:
+ * <ul>
+ *   <li>{@link #isDestructive(String)} — always blocked (rm -rf /, fork bombs, etc.)</li>
+ *   <li>{@link #isSuspicious(String)} — potentially risky, needs closer inspection</li>
+ * </ul>
  */
 public final class SecurityUtils {
 
     private SecurityUtils() {}
 
-    // ── Dangerous command detection ──
+    // ── Dangerous command detection (two severity levels) ──
 
-    private static final Pattern DANGEROUS_CMD_PATTERN = Pattern.compile(
-            "(?i)(rm\\s+-rf\\s+/|mkfs|dd\\s+if=|:\\(\\)\\{\\s*:\\|:&\\s*\\}\\s*;:|fork\\s*bomb"
-            + "|chmod\\s+-R\\s+777|curl.*\\|\\s*sh|wget.*\\|\\s*sh|nc\\s+-[el]"
-            + "|bash\\s+-i|/dev/sda|>\\s*/dev/sda|shutdown|reboot|halt|poweroff|init\\s+[06])"
+    /**
+     * Always-destructive patterns: commands that cause irreversible system damage.
+     * These should always be blocked.
+     */
+    private static final Pattern DESTRUCTIVE_PATTERN = Pattern.compile(
+            "(?i)(rm\\s+-rf\\s+/|rm\\s+-rf\\s+/\\*|mkfs|dd\\s+if="
+            + "|:\\(\\)\\{\\s*:\\|:&\\s*\\}\\s*;:|fork\\s*bomb"
+            + "|chmod\\s+-R\\s+777\\s+/|chmod\\s+777\\s+/"
+            + "|curl.*\\|\\s*sh|wget.*\\|\\s*sh"
+            + "|nc\\s+-[el]|bash\\s+-i"
+            + "|>\\s*/dev/sda|>\\s*/dev/nvme"
+            + "|shutdown|reboot|halt|poweroff|init\\s+[06])"
     );
 
     /**
-     * Returns {@code true} if the command matches known destructive patterns
-     * (e.g. {@code rm -rf /}, fork bombs, disk formatting).
+     * Suspicious patterns: commands that are risky but may be legitimate.
+     * Used by sandbox policy for closer inspection/quota adjustment.
      */
+    private static final Pattern SUSPICIOUS_PATTERN = Pattern.compile(
+            "(?i)(rm\\s+-rf|chmod\\s+-R\\s+777|killall|pkill|kill\\s+-9"
+            + "|sudo\\s+|su\\s+-|passwd|useradd|userdel|groupadd"
+            + "|iptables|ip\\s+link|ifconfig)"
+    );
+
+    /**
+     * Returns {@code true} if the command is always destructive
+     * (e.g. {@code rm -rf /}, fork bombs, disk formatting, system shutdown).
+     *
+     * <p>These commands should always be blocked regardless of context.
+     */
+    public static boolean isDestructive(String command) {
+        return DESTRUCTIVE_PATTERN.matcher(command).find();
+    }
+
+    /**
+     * Returns {@code true} if the command is suspicious (risky but possibly legitimate).
+     *
+     * <p>Used by sandbox policy to apply closer inspection or stricter quotas.
+     */
+    public static boolean isSuspicious(String command) {
+        return SUSPICIOUS_PATTERN.matcher(command).find();
+    }
+
+    /**
+     * @deprecated Use {@link #isDestructive(String)} instead.
+     */
+    @Deprecated
     public static boolean isDangerousCommand(String command) {
-        return DANGEROUS_CMD_PATTERN.matcher(command).find();
+        return isDestructive(command);
     }
 
     // ── Path traversal prevention ──

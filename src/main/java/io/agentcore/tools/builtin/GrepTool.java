@@ -1,5 +1,7 @@
 package io.agentcore.tools.builtin;
 
+import io.agentcore.tools.ParamSchema;
+import io.agentcore.tools.ToolParams;
 import io.agentcore.tools.shell.FileOperations;
 
 import java.util.List;
@@ -16,6 +18,20 @@ public class GrepTool implements Tool {
 
     private static final int MAX_DISPLAY_RESULTS = 500;
 
+    private static final ToolDefinition DEF = new ToolDefinition(
+            "grep",
+            "Search for regex patterns in files. "
+                    + "Returns matching lines as file:lineNum:content. "
+                    + "Prefer grep over bash when searching files.",
+            ParamSchema.object()
+                    .prop("pattern", ParamSchema.string("Regex pattern to search for").required())
+                    .prop("path", ParamSchema.string("File or directory path (default: working directory)"))
+                    .prop("recursive", ParamSchema.bool("Search recursively (default: true)").defaultValue(true))
+                    .prop("include", ParamSchema.string("Glob filter for filenames (e.g. '*.java')"))
+                    .build(),
+            null, null, null
+    );
+
     private final FileOperations fileOps;
 
     public GrepTool(FileOperations fileOps) {
@@ -24,36 +40,23 @@ public class GrepTool implements Tool {
 
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition(
-                "grep",
-                "Search for regex patterns in files. "
-                        + "Returns matching lines as file:lineNum:content. "
-                        + "Prefer grep over bash when searching files.",
-                Map.of("type", "object", "properties", Map.of(
-                        "pattern", Map.of("type", "string",
-                                "description", "Regex pattern to search for"),
-                        "path", Map.of("type", "string",
-                                "description", "File or directory path (default: working directory)"),
-                        "recursive", Map.of("type", "boolean",
-                                "description", "Search recursively (default: true)"),
-                        "include", Map.of("type", "string",
-                                "description", "Glob filter for filenames (e.g. '*.java')")
-                ), "required", List.of("pattern")),
-                null, null, null
-        );
+        return DEF;
     }
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
-        String pattern = (String) params.get("pattern");
-        if (pattern == null || pattern.isBlank()) {
-            return new ToolResult("ERROR: 'pattern' parameter is required");
+        ToolParams p = new ToolParams(params);
+
+        String pattern;
+        try {
+            pattern = p.requireString("pattern");
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("missing_param", e.getMessage());
         }
 
-        String path = (String) params.getOrDefault("path", fileOps.cwd().toString());
-        boolean recursive = !params.containsKey("recursive")
-                || Boolean.TRUE.equals(params.get("recursive"));
-        String include = (String) params.get("include");
+        String path = p.getString("path", fileOps.cwd().toString());
+        boolean recursive = !p.has("recursive") || p.getBoolean("recursive", true);
+        String include = p.getString("include");
 
         try {
             List<String> results = fileOps.grep(pattern, path, recursive, include);
@@ -65,7 +68,7 @@ public class GrepTool implements Tool {
             }
             return new ToolResult(output);
         } catch (Exception e) {
-            return new ToolResult("Error searching: " + e.getMessage());
+            return ToolResult.error("grep_failed", e.getMessage());
         }
     }
 }

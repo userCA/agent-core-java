@@ -51,4 +51,24 @@ public record ToolResult(
                 .findFirst()
                 .orElse("");
     }
+
+    // ── Error factory methods ────────────────────────────────
+
+    /**
+     * Create a standardized error result with a code and message.
+     */
+    public static ToolResult error(String code, String message) {
+        return new ToolResult(
+                List.of(new TextContent("ERROR [" + code + "]: " + message)),
+                Map.of("error", code, "message", message), null);
+    }
+
+    /**
+     * Create a simple error result with only a message.
+     */
+    public static ToolResult error(String message) {
+        return new ToolResult(
+                List.of(new TextContent("ERROR: " + message)),
+                Map.of("error", "general", "message", message), null);
+    }
 }

@@ -8,32 +8,44 @@ import io.agentcore.model.ToolResult;
 /**
  * Context passed to a tool during execution.
  *
- * <p>Mirrors Python {@code agent_core/tools/base.py} ToolContext.
+ * <p>Changed from record to class because this context carries mutable
+ * state ({@link AtomicBoolean} signals) which conflicts with record's
+ * value-based immutability semantics.
  *
- * @param signal         abort signal (check to support cancellation)
- * @param onUpdate       callback for intermediate result updates (nullable)
- * @param metadata       extra metadata injected by hooks
- * @param terminateSignal  set to true by the tool to request agent loop termination
+ * <p>Mirrors Python {@code agent_core/tools/base.py} ToolContext.
  */
-public record ToolContext(
-        AtomicBoolean signal,
-        Consumer<ToolResult> onUpdate,
-        Map<String, Object> metadata,
-        AtomicBoolean terminateSignal
-) {
+public final class ToolContext {
 
-    public ToolContext {
-        if (signal == null) signal = new AtomicBoolean(false);
-        if (metadata == null) metadata = Map.of();
-        else metadata = Map.copyOf(metadata);
-        if (terminateSignal == null) terminateSignal = new AtomicBoolean(false);
+    private final AtomicBoolean signal;
+    private final Consumer<ToolResult> onUpdate;
+    private final Map<String, Object> metadata;
+    private final AtomicBoolean terminateSignal;
+
+    public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
+                       Map<String, Object> metadata, AtomicBoolean terminateSignal) {
+        this.signal = signal != null ? signal : new AtomicBoolean(false);
+        this.onUpdate = onUpdate;
+        this.metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
+        this.terminateSignal = terminateSignal != null ? terminateSignal : new AtomicBoolean(false);
     }
+
+    /** Abort signal (check to support cancellation). */
+    public AtomicBoolean signal() { return signal; }
+
+    /** Callback for intermediate result updates (nullable). */
+    public Consumer<ToolResult> onUpdate() { return onUpdate; }
+
+    /** Extra metadata injected by hooks. */
+    public Map<String, Object> metadata() { return metadata; }
+
+    /** Set to true by the tool to request agent loop termination. */
+    public AtomicBoolean terminateSignal() { return terminateSignal; }
 
     /**
      * Check if the tool should abort.
      */
     public boolean isAborted() {
-        return signal != null && signal.get();
+        return signal.get();
     }
 
     /**
