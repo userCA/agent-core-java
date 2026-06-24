@@ -417,14 +417,13 @@ class CoreModelTest {
             var ctx = new AgentContext();
             assertEquals("", ctx.systemPrompt());
             assertTrue(ctx.messages().isEmpty());
-            assertTrue(ctx.tools().isEmpty());
             assertFalse(ctx.isStreaming());
             assertNull(ctx.errorMessage());
         }
 
         @Test
         void mutableSystemPrompt() {
-            var ctx = new AgentContext("initial", List.of(), List.of());
+            var ctx = new AgentContext("initial", List.of());
             ctx.setSystemPrompt("updated");
             assertEquals("updated", ctx.systemPrompt());
         }
@@ -481,8 +480,65 @@ class CoreModelTest {
 
             assertEquals(model, config.model());
             assertEquals("high", config.thinkingLevel());
+            // Sub-config getters (preferred)
+            assertEquals(5, config.retryConfig().maxRetries());
+            assertEquals(60.0, config.toolConfig().timeout());
+            // Deprecated convenience getters still work
             assertEquals(5, config.maxRetries());
             assertEquals(60.0, config.toolTimeout());
+        }
+
+        @Test
+        void toBuilder_roundTrip_preservesAllFields() {
+            var model1 = new ModelInfo("test", "model-1", 1000, 100);
+            var model2 = new ModelInfo("test", "model-2", 2000, 200);
+
+            AgentLoopConfig.StreamFunction streamFn =
+                    (m, msgs, tools, sp, tl, temp, mt, sig, auth) -> List.<StreamEvent>of().iterator();
+            AgentLoopConfig.ConvertToLlm convertFn = msgs -> List.of();
+            AgentLoopConfig.AuthResolver authFn = name -> new ProviderAuth("key");
+
+            var original = AgentLoopConfig.builder()
+                    .model(model1)
+                    .streamFn(streamFn)
+                    .convertToLlm(convertFn)
+                    .authResolver(authFn)
+                    .thinkingLevel("medium")
+                    .temperature(0.7)
+                    .maxTokens(512)
+                    .maxTurns(10)
+                    .maxRetries(2)
+                    .retryBaseDelay(0.5)
+                    .retryMaxDelay(30.0)
+                    .toolTimeout(90.0)
+                    .toolResultMaxChars(8000)
+                    .toolExecution(AgentLoopConfig.ToolExecutionMode.SEQUENTIAL)
+                    .build();
+
+            // Round-trip through toBuilder
+            var rebuilt = original.toBuilder().build();
+
+            // Verify all scalar/config fields survive the round-trip
+            assertEquals(original.model(), rebuilt.model());
+            assertEquals(original.thinkingLevel(), rebuilt.thinkingLevel());
+            assertEquals(original.temperature(), rebuilt.temperature());
+            assertEquals(original.maxTokens(), rebuilt.maxTokens());
+            assertEquals(original.maxTurns(), rebuilt.maxTurns());
+            assertEquals(original.retryConfig(), rebuilt.retryConfig());
+            assertEquals(original.toolConfig(), rebuilt.toolConfig());
+
+            // Functional references preserved (same instance)
+            assertSame(original.streamFn(), rebuilt.streamFn());
+            assertSame(original.convertToLlm(), rebuilt.convertToLlm());
+            assertSame(original.authResolver(), rebuilt.authResolver());
+
+            // Verify mutation via toBuilder works
+            var mutated = original.toBuilder().model(model2).temperature(0.9).build();
+            assertEquals(model2, mutated.model());
+            assertEquals(0.9, mutated.temperature());
+            // Unchanged fields preserved
+            assertEquals(original.thinkingLevel(), mutated.thinkingLevel());
+            assertEquals(original.retryConfig(), mutated.retryConfig());
         }
     }
 }

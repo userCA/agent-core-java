@@ -34,7 +34,11 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
-    jvmArgs("-Dnet.bytebuddy.experimental=true")
+    jvmArgs("-Dnet.bytebuddy.experimental=true", "--enable-preview")
+}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("--enable-preview")
 }
 
 jacoco {

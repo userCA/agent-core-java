@@ -9,8 +9,8 @@ import java.util.*;
  */
 public class ToolRegistry {
 
-    private final Map<String, Tool> tools = new LinkedHashMap<>();
-    private final Map<String, Object> sources = new LinkedHashMap<>();
+    private final Map<String, Tool> tools = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, Object> sources = Collections.synchronizedMap(new LinkedHashMap<>());
 
     /**
      * Register a tool.

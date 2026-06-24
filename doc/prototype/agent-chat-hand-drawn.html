@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Chat - Hand Drawn</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Comic+Neue:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            hand: ['"Patrick Hand"', 'cursive'],
+            comic: ['"Comic Neue"', 'cursive'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            paper: '#FAFAF8',
+            'paper-warm': '#F5F3EF',
+            'paper-dark': '#EDE9E3',
+            pencil: '#4A4A4A',
+            'pencil-light': '#6B6B6B',
+            'pencil-muted': '#8A8580',
+            'pencil-faint': '#B5B0AA',
+            marker: '#1A1A1A',
+            kraft: '#C4A77D',
+            'kraft-light': '#D4BC9A',
+            'kraft-dark': '#A68B5B',
+            'kraft-faint': '#E8DCC8',
+            eraser: '#E8E4E0',
+            'eraser-dark': '#D8D4D0',
+            highlight: '#FEF3C7',
+            'ink-blue': '#4A6FA5',
+            'ink-red': '#C45B5B',
+            'ink-green': '#5B8A5B',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --paper: #FAFAF8;
+      --paper-warm: #F5F3EF;
+      --pencil: #4A4A4A;
+      --marker: #1A1A1A;
+      --kraft: #C4A77D;
+      --kraft-light: #D4BC9A;
+      --eraser: #E8E4E0;
+    }
+
+    body {
+      background-color: var(--paper);
+      color: var(--pencil);
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    /* Paper texture background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 50%, rgba(196, 167, 125, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(196, 167, 125, 0.02) 0%, transparent 40%),
+        radial-gradient(circle at 40% 80%, rgba(100, 100, 100, 0.015) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Sketchy scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--kraft-light);
+      border-radius: 5px;
+      border: 2px solid var(--paper);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--kraft);
+    }
+
+    /* Hand-drawn border effect using multiple box-shadows */
+    .sketch-border {
+      border: 2px solid var(--pencil);
+      border-radius: 2px 8px 4px 12px;
+      position: relative;
+    }
+    .sketch-border::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border: 1px solid var(--pencil);
+      border-radius: 3px 9px 5px 11px;
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .sketch-border-light {
+      border: 1.5px solid var(--pencil-faint);
+      border-radius: 3px 10px 6px 8px;
+    }
+
+    .sketch-border-kraft {
+      border: 2px solid var(--kraft);
+      border-radius: 4px 12px 8px 6px;
+    }
+
+    /* Dashed border variant */
+    .sketch-dashed {
+      border: 2px dashed var(--pencil-faint);
+      border-radius: 4px 8px 6px 10px;
+    }
+
+    /* Wavy border using SVG */
+    .wavy-border {
+      position: relative;
+      background: var(--paper-warm);
+    }
+    .wavy-border::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, var(--kraft) 50%, transparent 50%) 0 0 / 12px 2px repeat-x,
+                  linear-gradient(90deg, var(--kraft) 50%, transparent 50%) 0 100% / 12px 2px repeat-x,
+                  linear-gradient(0deg, var(--kraft) 50%, transparent 50%) 0 0 / 2px 12px repeat-y,
+                  linear-gradient(0deg, var(--kraft) 50%, transparent 50%) 100% 0 / 2px 12px repeat-y;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Tape / sticker button style */
+    .tape-btn {
+      background: var(--kraft-faint);
+      border: 2px solid var(--kraft);
+      border-radius: 3px 8px 4px 6px;
+      font-family: 'Patrick Hand', cursive;
+      font-size: 1.05rem;
+      color: var(--marker);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      box-shadow: 2px 2px 0 rgba(196, 167, 125, 0.3);
+    }
+    .tape-btn:hover {
+      box-shadow: 3px 3px 0 rgba(196, 167, 125, 0.4);
+    }
+    .tape-btn:active {
+      box-shadow: 1px 1px 0 rgba(196, 167, 125, 0.3);
+    }
+
+    .tape-btn-primary {
+      background: var(--kraft);
+      border-color: var(--kraft-dark);
+      color: white;
+      box-shadow: 2px 2px 0 rgba(166, 139, 91, 0.4);
+    }
+    .tape-btn-primary:hover {
+      box-shadow: 3px 3px 0 rgba(166, 139, 91, 0.5);
+    }
+
+    /* Message bubbles */
+    .message-ai {
+      background: white;
+      border: 2px solid var(--pencil-faint);
+      border-radius: 4px 16px 12px 8px;
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.06);
+    }
+    .message-user {
+      background: var(--paper-warm);
+      border: 2px solid var(--kraft-light);
+      border-radius: 16px 4px 8px 12px;
+      box-shadow: 3px 3px 0 rgba(196, 167, 125, 0.15);
+    }
+
+    /* Code block sketchy style */
+    .code-block {
+      background: var(--paper-dark);
+      border: 2px dashed var(--pencil-faint);
+      border-radius: 4px 8px 6px 10px;
+      font-family: 'Comic Neue', monospace;
+    }
+    .code-block code {
+      font-family: 'Comic Neue', monospace;
+      font-size: 0.9rem;
+    }
+
+    /* Inline code */
+    code.inline-code {
+      background: var(--paper-dark);
+      border: 1px solid var(--eraser-dark);
+      border-radius: 3px 6px 4px 5px;
+      padding: 1px 6px;
+      font-family: 'Comic Neue', monospace;
+      font-size: 0.85em;
+      color: var(--ink-blue);
+    }
+
+    /* Focus ring - hand drawn style */
+    .focus-ring:focus-visible {
+      outline: 3px solid var(--kraft);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    /* Sidebar item sketchy */
+    .sidebar-item {
+      border: 1.5px solid transparent;
+      border-radius: 4px 10px 6px 8px;
+      transition: transform 0.1s ease, border-color 0.1s ease;
+    }
+    .sidebar-item:hover {
+      border-color: var(--kraft-light);
+      }
+    .sidebar-item.active {
+      background: white;
+      border: 2px solid var(--kraft);
+      box-shadow: 2px 2px 0 rgba(196, 167, 125, 0.2);
+    }
+
+    /* Tool tag */
+    .tool-tag {
+      background: white;
+      border: 1.5px solid var(--pencil-faint);
+      border-radius: 12px 6px 10px 8px;
+      font-family: 'Comic Neue', cursive;
+      }
+    
+    /* Status dot with hand-drawn feel */
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--ink-green);
+      background: transparent;
+      position: relative;
+    }
+    .status-dot::after {
+      content: '';
+      position: absolute;
+      inset: 1px;
+      border-radius: 50%;
+      background: var(--ink-green);
+      opacity: 0.6;
+      animation: pulse-sketch 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-sketch {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 0.3; }
+    }
+
+    /* Input area */
+    .sketch-input {
+      background: white;
+      border: 2px solid var(--pencil-faint);
+      border-radius: 8px 16px 12px 10px;
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.05);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .sketch-input:focus-within {
+      border-color: var(--kraft);
+      box-shadow: 4px 4px 0 rgba(196, 167, 125, 0.2);
+    }
+
+    /* Section heading */
+    .section-heading {
+      font-family: 'Patrick Hand', cursive;
+      color: var(--pencil-muted);
+      letter-spacing: 0.5px;
+    }
+
+    /* Handwritten heading */
+    .hand-heading {
+      font-family: 'Patrick Hand', cursive;
+      color: var(--marker);
+    }
+
+    /* Divider - sketchy line */
+    .sketch-divider {
+      border: none;
+      height: 2px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--pencil-faint) 0px,
+        var(--pencil-faint) 8px,
+        transparent 8px,
+        transparent 12px
+      );
+      opacity: 0.5;
+    }
+
+    /* Cursor pointer for all interactive elements */
+    button, [role="button"], a, .cursor-pointer {
+      cursor: pointer;
+    }
+
+    /* Touch target minimum */
+    button, [role="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .status-dot::after {
+        animation: none;
+        opacity: 0.6;
+      }
+    }
+
+    /* Mobile sidebar drawer */
+    .sidebar-drawer {
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+    }
+    .sidebar-drawer.open {
+      transform: translateX(0);
+    }
+
+    /* Notebook line effect for textarea */
+    .notebook-lines {
+      background-image: repeating-linear-gradient(
+        transparent,
+        transparent 27px,
+        var(--eraser) 27px,
+        var(--eraser) 28px
+      );
+      background-attachment: local;
+      line-height: 28px;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden antialiased relative">
+  <div class="flex h-full w-full relative z-10">
+    <!-- Mobile Sidebar Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/20 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar-drawer fixed lg:static inset-y-0 left-0 z-50 w-[260px] bg-paper-warm border-r-2 border-pencil-faint/30 flex flex-col lg:transform-none">
+      <!-- Sidebar Header -->
+      <div class="h-14 flex items-center px-4 border-b-2 border-dashed border-pencil-faint/30">
+        <div class="flex items-center gap-2 text-marker">
+          <i data-lucide="hexagon" class="w-6 h-6 text-kraft"></i>
+          <span class="hand-heading text-xl tracking-wide">AgentScope</span>
+        </div>
+      </div>
+
+      <!-- New Chat Button -->
+      <div class="p-3">
+        <button class="tape-btn tape-btn-primary w-full flex items-center justify-center gap-2 h-11 focus-ring" aria-label="新建对话">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>新建对话</span>
+        </button>
+      </div>
+
+      <!-- Conversation List -->
+      <nav class="flex-1 overflow-y-auto px-3 space-y-1.5" aria-label="会话列表">
+        <div class="section-heading text-sm px-2 py-2">今天</div>
+        <button class="sidebar-item active w-full h-11 text-left px-3 text-sm font-medium flex items-center gap-2 text-marker" aria-current="true" aria-label="打开对话：重构 AgentLoop 核心循环">
+          <i data-lucide="message-square" class="w-4 h-4 text-pencil-muted shrink-0"></i>
+          <span class="truncate">重构 AgentLoop 核心循环</span>
+        </button>
+        <button class="sidebar-item w-full h-11 text-left px-3 text-sm flex items-center gap-2 text-pencil hover:text-marker focus-ring" aria-label="打开对话：v2 迁移审计报告">
+        </button>
+
+        <div class="section-heading text-sm px-2 py-2 mt-2">昨天</div>
+        <button class="sidebar-item w-full h-11 text-left px-3 text-sm flex items-center gap-2 text-pencil hover:text-marker focus-ring" aria-label="打开对话：设计系统整理">
+        </button>
+        <button class="sidebar-item w-full h-11 text-left px-3 text-sm flex items-center gap-2 text-pencil hover:text-marker focus-ring" aria-label="打开对话：Extension SPI 强类型 Hook">
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="p-3 border-t-2 border-dashed border-pencil-faint/30">
+        <button class="w-full h-11 flex items-center gap-3 px-3 sketch-border-light hover:border-kraft transition-colors focus-ring bg-white" aria-label="用户设置">
+          <div class="w-8 h-8 rounded-full border-2 border-kraft flex items-center justify-center shrink-0 bg-kraft-faint">
+            <i data-lucide="user" class="w-4 h-4 text-kraft-dark"></i>
+          </div>
+          <div class="flex-1 text-left min-w-0">
+            <div class="text-sm font-medium text-marker truncate">蒋德旺</div>
+            <div class="text-xs text-pencil-muted">Pro 计划</div>
+          </div>
+          <i data-lucide="settings" class="w-4 h-4 text-pencil-muted shrink-0"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-paper">
+      <!-- Top Navigation / Chat Header -->
+      <header class="h-14 flex items-center justify-between px-2 sm:px-4 border-b-2 border-dashed border-pencil-faint/30 shrink-0 bg-paper/80 backdrop-blur-sm">
+        <div class="flex items-center gap-1 sm:gap-3 min-w-0">
+          <button class="lg:hidden w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted focus-ring" onclick="toggleSidebar()" aria-label="打开侧边栏">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <h1 class="hand-heading text-lg hidden sm:block truncate max-w-[200px] md:max-w-md">重构 AgentLoop 核心循环</h1>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button class="hidden md:flex items-center gap-2 px-3 h-11 tape-btn focus-ring" aria-label="选择模型">
+            <i data-lucide="cpu" class="w-4 h-4"></i>
+            <span>Claude 4 Sonnet</span>
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </button>
+          <button class="w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted focus-ring" onclick="toggleRightPanel()" aria-label="切换右侧面板">
+            <i data-lucide="panel-right" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages Area -->
+      <div id="messages-container" class="flex-1 overflow-y-auto px-3 sm:px-4 py-6 scroll-smooth">
+        <div class="max-w-3xl mx-auto space-y-6">
+          <!-- AI Message -->
+          <article class="flex gap-3 sm:gap-4">
+            <div class="w-8 h-8 rounded-full border-2 border-kraft flex items-center justify-center shrink-0 bg-kraft-faint" aria-hidden="true">
+              <i data-lucide="bot" class="w-4 h-4 text-kraft-dark"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="hand-heading text-base">AgentScope</span>
+                <span class="text-xs text-pencil-muted font-comic">10:24</span>
+              </div>
+              <div class="message-ai p-4 text-[15px] leading-relaxed text-pencil">
+                <p class="mb-3">我已经分析了 <code class="inline-code">AgentLoop.java</code> 的现状，核心循环目前存在三个可维护性问题：</p>
+                <ol class="list-decimal list-inside space-y-2 text-pencil-light mb-3 font-comic">
+                  <li>状态机转换散落在多个 <code class="inline-code">if-else</code> 分支中</li>
+                  <li>HumanInputGate 的阻塞逻辑与工具执行耦合</li>
+                  <li>异常处理没有统一出口，导致部分事件丢失</li>
+                </ol>
+                <p>建议先抽离一个 <code class="inline-code">AgentStateMachine</code>，把事件驱动和生命周期钩子解耦。</p>
+              </div>
+              <div class="flex items-center gap-1 mt-2">
+                <button class="w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted hover:text-pencil focus-ring" aria-label="复制">
+                  <i data-lucide="copy" class="w-4 h-4"></i>
+                </button>
+                <button class="w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted hover:text-pencil focus-ring" aria-label="重新生成">
+                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+                <button class="w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted hover:text-pencil focus-ring" aria-label="点赞">
+                  <i data-lucide="thumbs-up" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <!-- User Message -->
+          <article class="flex gap-3 sm:gap-4 flex-row-reverse">
+            <div class="w-8 h-8 rounded-full border-2 border-pencil-faint flex items-center justify-center shrink-0 bg-eraser" aria-hidden="true">
+              <i data-lucide="user" class="w-4 h-4 text-pencil-muted"></i>
+            </div>
+            <div class="flex-1 min-w-0 flex flex-col items-end">
+              <div class="flex items-center gap-2 mb-1 flex-row-reverse">
+                <span class="hand-heading text-base">你</span>
+                <span class="text-xs text-pencil-muted font-comic">10:26</span>
+              </div>
+              <div class="message-user p-4 text-[15px] leading-relaxed text-pencil max-w-[90%] sm:max-w-[85%]">
+                先帮我生成一个重构后的状态机草图，重点是让 HumanInputGate 变成可插拔的扩展点。
+              </div>
+            </div>
+          </article>
+
+          <!-- AI Message with tool call -->
+          <article class="flex gap-3 sm:gap-4">
+            <div class="w-8 h-8 rounded-full border-2 border-kraft flex items-center justify-center shrink-0 bg-kraft-faint" aria-hidden="true">
+              <i data-lucide="bot" class="w-4 h-4 text-kraft-dark"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="hand-heading text-base">AgentScope</span>
+                <span class="text-xs text-pencil-muted font-comic">10:27</span>
+              </div>
+              <div class="message-ai p-4 text-[15px] leading-relaxed text-pencil">
+                <p class="mb-3">正在调用代码分析工具生成状态机草图…</p>
+
+                <!-- Tool result card -->
+                <div class="code-block p-4 mb-3 text-sm overflow-x-auto">
+                  <div class="flex items-center gap-2 text-pencil-muted mb-2 pb-2 border-b-2 border-dashed border-pencil-faint/30">
+                    <i data-lucide="terminal" class="w-4 h-4"></i>
+                    <span class="font-comic">Generated AgentStateMachine.java</span>
+                  </div>
+                  <pre class="text-pencil-light leading-relaxed"><code>public enum AgentState {
+  IDLE, THINKING, TOOL_CALL,
+  AWAITING_HUMAN, RESPONDING, ERROR
+}
+
+public interface StateTransitionHook {
+  AgentState onEvent(AgentEvent event);
+}</code></pre>
+                </div>
+
+                <p>HumanInputGate 现在通过 <code class="inline-code">HumanInputExtension</code> 实现 <code class="inline-code">LoopExtension</code>，可以被其他输入源（语音、表单、API）替换而不改动核心循环。</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="shrink-0 px-3 sm:px-4 pb-6 pt-2 bg-paper">
+        <div class="max-w-3xl mx-auto">
+          <div class="sketch-input relative">
+            <textarea
+              id="message-input"
+              rows="1"
+              class="w-full bg-transparent text-pencil placeholder-pencil-faint px-4 py-3 pr-28 resize-none outline-none text-[15px] leading-relaxed notebook-lines"
+              placeholder="输入消息，使用 @ 引用文件，/ 触发命令…"
+              aria-label="消息输入框"
+            ></textarea>
+            <div class="absolute right-2 bottom-2 flex items-center gap-1">
+              <button class="w-11 h-11 flex items-center justify-center sketch-border-light hover:border-kraft text-pencil-muted hover:text-pencil focus-ring" aria-label="附件">
+                <i data-lucide="paperclip" class="w-5 h-5"></i>
+              </button>
+              <button id="send-button" class="w-11 h-11 flex items-center justify-center tape-btn tape-btn-primary focus-ring" aria-label="发送">
+                <i data-lucide="arrow-up" class="w-5 h-5"></i>
+              </button>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <span class="text-xs text-pencil-faint font-comic">AgentScope 可能会生成不准确的信息，请验证重要信息。</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Panel -->
+    <aside id="right-panel" class="hidden xl:flex w-[280px] bg-paper-warm border-l-2 border-dashed border-pencil-faint/30 flex-col">
+      <div class="h-14 flex items-center px-4 border-b-2 border-dashed border-pencil-faint/30">
+        <h2 class="hand-heading text-lg">上下文</h2>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Agent Status -->
+        <div class="bg-white border-2 border-pencil-faint/40 p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="status-dot"></div>
+            <span class="hand-heading text-base">Agent 在线</span>
+          </div>
+          <div class="text-xs text-pencil-muted space-y-2 font-comic">
+            <div class="flex justify-between">
+              <span>模型</span>
+              <span class="text-pencil">Claude 4 Sonnet</span>
+            </div>
+            <div class="flex justify-between">
+              <span>上下文窗口</span>
+              <span class="text-pencil">128K</span>
+            </div>
+            <div class="flex justify-between">
+              <span>已用 token</span>
+              <span class="text-pencil">4,218</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knowledge Sources -->
+        <div class="sketch-card-2">
+          <h3 class="section-heading text-sm mb-2">知识源</h3>
+          <div class="space-y-2">
+            <button class="w-full flex items-center gap-3 px-3 py-2 bg-white border-2 border-pencil-faint/30 hover:border-kraft focus-ring text-left min-h-[44px] sketch-border-light" aria-label="打开知识源：AgentLoop.java">
+                <div class="text-xs text-pencil-muted font-comic">23 min 前更新</div>
+              </div>
+            </button>
+            <button class="w-full flex items-center gap-3 px-3 py-2 bg-white border-2 border-pencil-faint/30 hover:border-kraft focus-ring text-left min-h-[44px] sketch-border-light" aria-label="打开知识源：HookTypes.java">
+                <div class="text-xs text-pencil-muted font-comic">2 hr 前更新</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tools -->
+        <div class="sketch-card-3">
+          <h3 class="section-heading text-sm mb-2">可用工具</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="tool-tag px-2.5 py-1.5 text-xs text-pencil">code_search</span>
+            <span class="tool-tag px-2.5 py-1.5 text-xs text-pencil">git_diff</span>
+            <span class="tool-tag px-2.5 py-1.5 text-xs text-pencil">test_runner</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Sidebar toggle
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      const isOpen = sidebar.classList.contains('open');
+
+      if (isOpen) {
+        sidebar.classList.remove('open');
+        overlay.classList.add('hidden');
+      } else {
+        sidebar.classList.add('open');
+        overlay.classList.remove('hidden');
+      }
+    }
+
+    // Right panel toggle (desktop only)
+    function toggleRightPanel() {
+      const panel = document.getElementById('right-panel');
+      if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        panel.classList.add('xl:flex');
+      } else {
+        panel.classList.add('hidden');
+        panel.classList.remove('xl:flex');
+      }
+    }
+
+    // Auto-resize textarea
+    const textarea = document.getElementById('message-input');
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+    });
+
+    // Send on Enter (Shift+Enter for new line)
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    document.getElementById('send-button').addEventListener('click', sendMessage);
+
+    function sendMessage() {
+      const value = textarea.value.trim();
+      if (!value) return;
+      console.log('Send message:', value);
+      textarea.value = '';
+      textarea.style.height = 'auto';
+      textarea.focus();
+    }
+  </script>
+</body>
+</html>

@@ -126,13 +126,13 @@ class Phase3Test {
                 }
             });
 
-            var runner = new ToolRunner(registry);
+            var runner = new ToolRunner(registry, null, null, null, null);
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "echo", Map.of("text", "hello")))
                     .build();
 
             List<AgentEvent> events = new ArrayList<>();
-            var results = runner.executeSequential(assistant, null, events::add);
+            var results = runner.executeSequential(assistant, null, events::add).messages();
 
             assertEquals(1, results.size());
             assertEquals("tc1", results.get(0).toolCallId());
@@ -147,13 +147,13 @@ class Phase3Test {
         @Test
         void toolNotFound() {
             var registry = new ToolRegistry();
-            var runner = new ToolRunner(registry);
+            var runner = new ToolRunner(registry, null, null, null, null);
 
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "nonexistent", Map.of()))
                     .build();
 
-            var results = runner.executeSequential(assistant, null, null);
+            var results = runner.executeSequential(assistant, null, null).messages();
             assertEquals(1, results.size());
             assertTrue(results.get(0).isError());
         }
@@ -171,14 +171,14 @@ class Phase3Test {
                 });
             }
 
-            var runner = new ToolRunner(registry);
+            var runner = new ToolRunner(registry, null, null, null, null);
             var assistant = AssistantMessage.builder()
                     .addContent(new ToolCallContent("tc1", "tool_a", Map.of()))
                     .addContent(new ToolCallContent("tc2", "tool_b", Map.of()))
                     .addContent(new ToolCallContent("tc3", "tool_c", Map.of()))
                     .build();
 
-            var results = runner.executeParallel(assistant, null, null);
+            var results = runner.executeParallel(assistant, null, null).messages();
             assertEquals(3, results.size());
             results.forEach(r -> assertFalse(r.isError()));
         }

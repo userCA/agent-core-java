@@ -60,17 +60,15 @@ public final class HumanInputGate {
 
     /**
      * Cancel every outstanding future (e.g. on abort).
-     * Thread-safe: sets a cancelled flag first, then cancels all futures.
+     * Thread-safe: iterates and removes atomically per entry.
      */
     public void cancelAll() {
-        // Snapshot to avoid concurrent modification
-        var snapshot = new ConcurrentHashMap<>(futures);
-        futures.keySet().removeAll(snapshot.keySet());
-        for (var future : snapshot.values()) {
+        futures.forEach((id, future) -> {
+            futures.remove(id);
             if (!future.isDone()) {
                 future.cancel(true);
             }
-        }
+        });
     }
 
     /**

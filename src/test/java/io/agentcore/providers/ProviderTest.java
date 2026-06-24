@@ -85,15 +85,15 @@ class ProviderTest {
         }
 
         @Test
-        void convertToolResultTruncation() {
+        void convertToolResultNoTruncation() {
+            // MessageConverter no longer truncates — ToolRunner.truncateContent() handles it
             String longText = "x".repeat(5000);
             var msg = new ToolResultMessage("tc1", "search",
                     List.of(new TextContent(longText)), false,
                     System.currentTimeMillis() / 1000.0);
             var result = converter.convert(List.of(msg));
             String content = (String) result.get(0).get("content");
-            assertTrue(content.contains("truncated"));
-            assertTrue(content.length() < longText.length());
+            assertEquals(longText, content); // no truncation in converter
         }
 
         @Test
@@ -169,10 +169,10 @@ class ProviderTest {
 
         @Test
         void contextOverflowDetection() {
-            assertTrue(ProviderUtils.isContextOverflow(400, "context_length_exceeded"));
-            assertTrue(ProviderUtils.isContextOverflow(400, "maximum context length"));
-            assertTrue(ProviderUtils.isContextOverflow(400, "prompt is too long"));
-            assertFalse(ProviderUtils.isContextOverflow(400, "invalid api key"));
+            assertTrue(ProviderUtils.isContextOverflow("context_length_exceeded"));
+            assertTrue(ProviderUtils.isContextOverflow("maximum context length"));
+            assertTrue(ProviderUtils.isContextOverflow("prompt is too long"));
+            assertFalse(ProviderUtils.isContextOverflow("invalid api key"));
         }
 
         @Test
@@ -184,16 +184,14 @@ class ProviderTest {
         }
 
         @Test
-        void toolsToProviderFormat() {
-            Map<String, Object> tool = new LinkedHashMap<>();
-            tool.put("name", "search");
-            tool.put("description", "Search the web");
-            tool.put("parameters", Map.of("type", "object", "properties", Map.of()));
-            var result = OpenAIProvider.toolsToProviderFormat(List.of(tool));
-            assertEquals(1, result.size());
-            assertEquals("function", result.get(0).get("type"));
+        void toolDefinitionToProviderFormat() {
+            var toolDef = new io.agentcore.tools.ToolDefinition(
+                    "search", "Search the web",
+                    Map.of("type", "object", "properties", Map.of()));
+            var result = toolDef.toProviderFormat();
+            assertEquals("function", result.get("type"));
             @SuppressWarnings("unchecked")
-            Map<String, Object> fn = (Map<String, Object>) result.get(0).get("function");
+            Map<String, Object> fn = (Map<String, Object>) result.get("function");
             assertEquals("search", fn.get("name"));
         }
     }

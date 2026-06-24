@@ -221,14 +221,14 @@ public class MCPConnection {
         }
         httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
         sseUrl = config.url();
-
-        // For SSE, we need to connect to the SSE endpoint and find the messages endpoint
-        // The SSE server sends an "endpoint" event with the messages URL
-        // For now, assume the messages URL is the same as the SSE URL (common pattern)
         messagesUrl = sseUrl.replace("/sse", "/messages");
         if (messagesUrl.equals(sseUrl)) {
-            messagesUrl = sseUrl; // fallback: same URL
+            messagesUrl = sseUrl;
         }
+        // NOTE: SSE transport requires an active SSE stream to receive responses.
+        // Currently only POST-based request/response works via sendHttpRequest().
+        // Full bidirectional SSE support is planned for a future release.
+        log.info("MCP SSE transport initialized (POST-only mode) for url={}", config.url());
     }
 
     private void connectStreamableHttp() throws Exception {

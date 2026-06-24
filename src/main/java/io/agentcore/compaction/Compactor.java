@@ -1,5 +1,6 @@
 package io.agentcore.compaction;
 
+import io.agentcore.core.Content;
 import io.agentcore.core.Message;
 
 import java.util.List;
@@ -34,7 +35,16 @@ public interface Compactor {
             AtomicBoolean signal
     );
 
-    // ── Token estimation utilities ───────────────────────────
+    // ── Token estimation utilities ───────────────────────
+
+    /** Approximate characters per token for token estimation. */
+    int CHARS_PER_TOKEN = 4;
+    /** Fixed overhead added per message as baseline. */
+    int MESSAGE_BASE_OVERHEAD = 20;
+    /** Fixed token overhead for image content. */
+    int IMAGE_TOKEN_OVERHEAD = 200;
+    /** Fixed token overhead for tool call content. */
+    int TOOL_CALL_TOKEN_OVERHEAD = 10;
 
     /**
      * Rough token estimation: ~4 chars per token + fixed overhead per message.
@@ -45,33 +55,33 @@ public interface Compactor {
         switch (message) {
             case Message.UserMessage um -> {
                 for (var c : um.content()) {
-                    if (c instanceof io.agentcore.core.Content.TextContent tc) {
+                    if (c instanceof Content.TextContent tc) {
                         textParts.append(tc.text());
-                    } else if (c instanceof io.agentcore.core.Content.ImageContent) {
-                        fixedOverhead += 200; // fixed estimate for images
+                    } else if (c instanceof Content.ImageContent) {
+                        fixedOverhead += IMAGE_TOKEN_OVERHEAD;
                     }
                 }
             }
             case Message.AssistantMessage am -> {
                 for (var c : am.content()) {
-                    if (c instanceof io.agentcore.core.Content.TextContent tc) {
+                    if (c instanceof Content.TextContent tc) {
                         textParts.append(tc.text());
-                    } else if (c instanceof io.agentcore.core.Content.ToolCallContent tcc) {
+                    } else if (c instanceof Content.ToolCallContent tcc) {
                         // Estimate tokens for tool call: name + serialized arguments
                         textParts.append(tcc.name());
                         if (tcc.arguments() != null) {
                             textParts.append(tcc.arguments().toString());
                         }
-                        fixedOverhead += 10; // tool call overhead
+                        fixedOverhead += TOOL_CALL_TOKEN_OVERHEAD;
                     }
                 }
             }
             case Message.ToolResultMessage trm -> {
                 for (var c : trm.content()) {
-                    if (c instanceof io.agentcore.core.Content.TextContent tc) {
+                    if (c instanceof Content.TextContent tc) {
                         textParts.append(tc.text());
-                    } else if (c instanceof io.agentcore.core.Content.ImageContent) {
-                        fixedOverhead += 200;
+                    } else if (c instanceof Content.ImageContent) {
+                        fixedOverhead += IMAGE_TOKEN_OVERHEAD;
                     }
                 }
             }
@@ -79,7 +89,7 @@ public interface Compactor {
                 textParts.append(cm.content() != null ? cm.content().asText() : "");
             }
         }
-        return Math.max(1, textParts.length() / 4 + 20 + fixedOverhead);
+        return Math.max(1, textParts.length() / CHARS_PER_TOKEN + MESSAGE_BASE_OVERHEAD + fixedOverhead);
     }
 
     /**

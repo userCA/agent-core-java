@@ -41,6 +41,9 @@ public final class SystemPromptBuilder {
     @FunctionalInterface
     public interface GuidelineRule extends Function<Set<String>, Optional<String>> {}
 
+    private static final int MAX_SNIPPET_LENGTH = 80;
+    private static final int TRUNCATION_SUFFIX_LENGTH = 77; // MAX_SNIPPET_LENGTH - 3 for "..."
+
     private static final List<GuidelineRule> DEFAULT_RULES = List.of(
             tools -> tools.containsAll(Set.of("grep", "find", "ls"))
                     ? Optional.of("Prefer grep/find/ls over bash when searching files.")
@@ -115,9 +118,9 @@ public final class SystemPromptBuilder {
 
         // 4. Tool guidelines
         List<String> toolGuidelines = new ArrayList<>();
-        toolGuidelines.add("判断工具结果是中间过程还是最终产物：");
-        toolGuidelines.add("- 最终产物（图片、生成的文件、用户直接需要的内容）→ 必须在回复中原样包含，不要只描述");
-        toolGuidelines.add("- 中间步骤（读文件用于推理、查状态、执行命令）→ 基于结果继续回答，不需要展示原始输出");
+        toolGuidelines.add("Distinguish intermediate results from final outputs:");
+        toolGuidelines.add("- Final outputs (images, files, content user needs) -> include verbatim in response");
+        toolGuidelines.add("- Intermediate steps (file reads, status checks, commands) -> use results to continue answering");
         for (ToolDefinition tool : tools) {
             if (tool.promptGuidelines() != null) {
                 for (String g : tool.promptGuidelines()) {
@@ -193,8 +196,8 @@ public final class SystemPromptBuilder {
         }
         if (def.description() != null && !def.description().isBlank()) {
             String sentence = def.description().split("\\.")[0].trim();
-            if (sentence.length() > 80) {
-                sentence = sentence.substring(0, 77) + "...";
+            if (sentence.length() > MAX_SNIPPET_LENGTH) {
+                sentence = sentence.substring(0, TRUNCATION_SUFFIX_LENGTH) + "...";
             }
             return sentence;
         }

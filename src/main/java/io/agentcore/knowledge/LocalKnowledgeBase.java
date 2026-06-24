@@ -4,7 +4,7 @@ import io.agentcore.retrieval.Query;
 import io.agentcore.retrieval.RetrievedChunk;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import io.agentcore.providers.ProviderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 public class LocalKnowledgeBase {
 
     private static final Logger log = LoggerFactory.getLogger(LocalKnowledgeBase.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = ProviderUtils.mapper();
 
     private static final Pattern SENT_SPLIT = Pattern.compile("(?<=[。！？.!?\\n])\\s*");
     public static final int CHUNK_SIZE = 500;

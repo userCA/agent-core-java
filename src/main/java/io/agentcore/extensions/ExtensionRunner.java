@@ -1,5 +1,6 @@
 package io.agentcore.extensions;
 
+import io.agentcore.core.Content;
 import io.agentcore.extensions.HookTypes.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +87,7 @@ public final class ExtensionRunner {
             }
         }
 
+        // Merge: Proceed takes priority, but InjectMetadata is preserved if no Proceed
         if (mergedArgs != null) {
             return new ToolCallHookResult.Proceed(mergedArgs);
         }
@@ -96,23 +98,38 @@ public final class ExtensionRunner {
     }
 
     /**
-     * After tool call: iterate extensions and merge typed results.
+     * After tool call: iterate extensions and accumulate typed results.
+     * Multiple ModifyResult responses are merged — each extension's non-null
+     * fields override the previous accumulation (not the original).
      */
     public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
         if (extensions.isEmpty()) return null;
 
-        AfterToolCallHookResult lastModified = null;
+        // Accumulated modifications (null fields = "no extension modified this yet")
+        List<Content> accContent = null;
+        Object accDetails = null;
+        Boolean accIsError = null;
+        Boolean accTerminate = null;
+        boolean hasModification = false;
+
         for (Extension ext : extensions) {
             try {
                 AfterToolCallHookResult result = ext.afterToolCall(context);
-                if (result instanceof AfterToolCallHookResult.ModifyResult) {
-                    lastModified = result;
+                if (result instanceof AfterToolCallHookResult.ModifyResult mr) {
+                    hasModification = true;
+                    // Merge: later non-null fields override earlier ones
+                    if (mr.content() != null) accContent = mr.content();
+                    if (mr.details() != null) accDetails = mr.details();
+                    if (mr.isError() != null) accIsError = mr.isError();
+                    if (mr.terminate() != null) accTerminate = mr.terminate();
                 }
             } catch (Exception e) {
                 log.warn("Extension {} afterToolCall failed: {}", ext.name(), e.getMessage());
             }
         }
-        return lastModified;
+
+        if (!hasModification) return null;
+        return new AfterToolCallHookResult.ModifyResult(accContent, accDetails, accIsError, accTerminate);
     }
 
     /**
@@ -125,7 +142,8 @@ public final class ExtensionRunner {
         List<Map<String, Object>> result = messages;
         for (Extension ext : extensions) {
             try {
-                result = ext.transformContext(result, signal);
+                List<Map<String, Object>> transformed = ext.transformContext(result, signal);
+                if (transformed != null) result = transformed;
             } catch (Exception e) {
                 log.warn("Extension {} transformContext failed: {}", ext.name(), e.getMessage());
             }

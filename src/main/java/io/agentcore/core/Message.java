@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -22,6 +21,13 @@ import java.util.List;
     @JsonSubTypes.Type(value = Message.CustomMessage.class, name = "custom"),
 })
 public sealed interface Message {
+
+    /**
+     * Returns the current epoch time in seconds.
+     */
+    static double nowEpochSeconds() {
+        return System.currentTimeMillis() / 1000.0;
+    }
 
     /**
      * Timestamp (epoch seconds) when this message was created.
@@ -146,6 +152,15 @@ public sealed interface Message {
             return sb.toString();
         }
 
+        /**
+         * Lightweight snapshot for streaming events.
+         * Carries only provider, model, and current text — avoids allocating
+         * a full {@link AssistantMessage} (content list, Usage, etc.) on every delta.
+         */
+        public record StreamingSnapshot(
+                String provider, String model, String text
+        ) {}
+
         public static Builder builder() {
             return new Builder();
         }
@@ -154,6 +169,9 @@ public sealed interface Message {
          * Mutable builder for streaming construction.
          */
         public static final class Builder {
+            private static final List<Content> EMPTY_CONTENT = List.of();
+            private static final Usage DEFAULT_USAGE = new Usage();
+
             private final List<Content> content = new ArrayList<>();
             private Usage usage = new Usage();
             private StopReason stopReason = StopReason.STOP;
@@ -162,7 +180,7 @@ public sealed interface Message {
             private boolean overflowError;
             private String provider;
             private String model;
-            private double timestamp = System.currentTimeMillis() / 1000.0;
+            private double timestamp = Message.nowEpochSeconds();
 
             public Builder addContent(Content c) { content.add(c); return this; }
             public Builder usage(Usage u) { this.usage = u; return this; }
@@ -176,11 +194,38 @@ public sealed interface Message {
 
             public AssistantMessage build() {
                 return new AssistantMessage(
-                    Collections.unmodifiableList(new ArrayList<>(content)),
+                    List.copyOf(content),
                     usage, stopReason, errorMessage,
                     retryableError, overflowError,
                     provider, model, timestamp
                 );
+            }
+
+            /**
+             * Build a lightweight snapshot for streaming events.
+             * Only includes text content so far, skipping tool calls and usage
+             * to avoid expensive list copies on every delta.
+             *
+             * <p>Uses cached empty-content and default-usage singletons to
+             * minimize per-call allocation during high-frequency streaming.
+             */
+            public AssistantMessage buildStreamingSnapshot(String textSoFar) {
+                List<Content> snapshot = textSoFar.isEmpty()
+                        ? EMPTY_CONTENT
+                        : List.of(new Content.TextContent(textSoFar));
+                return new AssistantMessage(
+                        snapshot, DEFAULT_USAGE, StopReason.STOP, null,
+                        false, false, provider, model, timestamp
+                );
+            }
+
+            /**
+             * Build an ultra-lightweight streaming snapshot.
+             * Use this instead of {@link #buildStreamingSnapshot(String)} when
+             * downstream consumers only need provider/model/text.
+             */
+            public StreamingSnapshot buildLightweightSnapshot(String textSoFar) {
+                return new StreamingSnapshot(provider, model, textSoFar);
             }
         }
     }
@@ -219,7 +264,7 @@ public sealed interface Message {
         public static CustomMessage compactionSummary(String summary) {
             return new CustomMessage("compaction_summary",
                     new TextNode(summary != null ? summary : ""), null, null,
-                    System.currentTimeMillis() / 1000.0);
+                    Message.nowEpochSeconds());
         }
     }
 }

@@ -192,7 +192,10 @@ class AgentLoopIntegrationTest {
             AgentEnd end = (AgentEnd) events.get(events.size() - 1);
             assertFalse(end.messages().isEmpty());
 
-            AssistantMessage assistant = (AssistantMessage) end.messages().get(0);
+            AssistantMessage assistant = end.messages().stream()
+                    .filter(m -> m instanceof AssistantMessage)
+                    .map(m -> (AssistantMessage) m)
+                    .findFirst().orElseThrow();
             assertEquals("Hello, World!", assistant.text());
         }
 
@@ -206,7 +209,10 @@ class AgentLoopIntegrationTest {
                     new UserMessage(List.of(new TextContent("Hi")), 1000.0)));
 
             AgentEnd end = (AgentEnd) events.get(events.size() - 1);
-            AssistantMessage assistant = (AssistantMessage) end.messages().get(0);
+            AssistantMessage assistant = end.messages().stream()
+                    .filter(m -> m instanceof AssistantMessage)
+                    .map(m -> (AssistantMessage) m)
+                    .findFirst().orElseThrow();
             assertEquals(10, assistant.usage().inputTokens());
             assertEquals(20, assistant.usage().outputTokens());
         }

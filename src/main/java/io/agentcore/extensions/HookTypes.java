@@ -100,17 +100,32 @@ public final class HookTypes {
      *
      * <p>Sealed interface with two variants:
      * <ul>
-     *   <li>{@link ModifyResult} — replace the tool result content</li>
+     *   <li>{@link ModifyResult} — replace the tool result, optionally overriding isError/terminate</li>
      *   <li>{@link NoOp} — no modification</li>
      * </ul>
      */
     public sealed interface AfterToolCallHookResult {
 
-        /** Replace the tool result with modified content. */
-        record ModifyResult(List<io.agentcore.core.Content> content) implements AfterToolCallHookResult {
+        /**
+         * Replace the tool result with modified fields.
+         * @param content   replacement content (null = keep original)
+         * @param details   replacement details (null = keep original)
+         * @param isError   override isError flag (null = keep original)
+         * @param terminate override terminate flag (null = keep original)
+         */
+        record ModifyResult(
+                List<io.agentcore.core.Content> content,
+                Object details,
+                Boolean isError,
+                Boolean terminate
+        ) implements AfterToolCallHookResult {
             public ModifyResult {
-                if (content == null) content = List.of();
-                else content = List.copyOf(content);
+                if (content != null) content = List.copyOf(content);
+            }
+
+            /** Convenience: modify only content. */
+            public ModifyResult(List<io.agentcore.core.Content> content) {
+                this(content, null, null, null);
             }
         }
 

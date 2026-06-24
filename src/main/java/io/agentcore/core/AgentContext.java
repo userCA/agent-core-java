@@ -1,14 +1,14 @@
 package io.agentcore.core;
 
-import io.agentcore.tools.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Mutable runtime context for an Agent — holds working state for the agent loop.
@@ -21,42 +21,102 @@ public final class AgentContext {
 
     private static final Logger log = LoggerFactory.getLogger(AgentContext.class);
 
-    /** Thinking levels for model reasoning. */
-    public static final String THINKING_OFF = "off";
-    public static final String THINKING_MINIMAL = "minimal";
-    public static final String THINKING_LOW = "low";
-    public static final String THINKING_MEDIUM = "medium";
-    public static final String THINKING_HIGH = "high";
-    public static final String THINKING_XHIGH = "xhigh";
+    /**
+     * Thinking levels for model reasoning.
+     */
+    public enum ThinkingLevel {
+        OFF("off"),
+        MINIMAL("minimal"),
+        LOW("low"),
+        MEDIUM("medium"),
+        HIGH("high"),
+        XHIGH("xhigh");
+
+        private static final Map<String, ThinkingLevel> LOOKUP;
+        static {
+            Map<String, ThinkingLevel> m = new HashMap<>();
+            for (ThinkingLevel level : values()) {
+                m.put(level.value.toLowerCase(), level);
+            }
+            LOOKUP = Map.copyOf(m);
+        }
+
+        private final String value;
+
+        ThinkingLevel(String value) {
+            this.value = value;
+        }
+
+        /** Returns the string value used by providers. */
+        public String value() {
+            return value;
+        }
+
+        /**
+         * Parse a string to ThinkingLevel (case-insensitive).
+         * @return the matching level, or {@link #OFF} if not recognized
+         */
+        public static ThinkingLevel fromValue(String s) {
+            if (s == null) return OFF;
+            ThinkingLevel level = LOOKUP.get(s.toLowerCase());
+            return level != null ? level : OFF;
+        }
+
+        @Override
+        public String toString() {
+            return value;
+        }
+    }
+
+    /** @deprecated Use {@link ThinkingLevel#OFF} instead */
+    @Deprecated public static final String THINKING_OFF = "off";
+    /** @deprecated Use {@link ThinkingLevel#MINIMAL} instead */
+    @Deprecated public static final String THINKING_MINIMAL = "minimal";
+    /** @deprecated Use {@link ThinkingLevel#LOW} instead */
+    @Deprecated public static final String THINKING_LOW = "low";
+    /** @deprecated Use {@link ThinkingLevel#MEDIUM} instead */
+    @Deprecated public static final String THINKING_MEDIUM = "medium";
+    /** @deprecated Use {@link ThinkingLevel#HIGH} instead */
+    @Deprecated public static final String THINKING_HIGH = "high";
+    /** @deprecated Use {@link ThinkingLevel#XHIGH} instead */
+    @Deprecated public static final String THINKING_XHIGH = "xhigh";
 
     private volatile String systemPrompt;
     private final List<Message> messages;
-    private final List<Tool> tools;
 
     // Streaming state
     private final AtomicBoolean streaming = new AtomicBoolean(false);
-    private final AtomicReference<Message> streamingMessage = new AtomicReference<>();
     private volatile String errorMessage;
 
     public AgentContext() {
-        this("", new ArrayList<>(), new ArrayList<>());
+        this("", new ArrayList<>());
     }
 
-    public AgentContext(String systemPrompt, List<Message> messages, List<Tool> tools) {
+    public AgentContext(String systemPrompt, List<Message> messages) {
         this.systemPrompt = systemPrompt != null ? systemPrompt : "";
-        this.messages = Collections.synchronizedList(
-                new ArrayList<>(messages != null ? messages : List.of()));
-        this.tools = Collections.synchronizedList(
-                new ArrayList<>(tools != null ? tools : List.of()));
+        this.messages = Collections.synchronizedList(new ArrayList<>(
+                messages != null ? messages : List.of()));
     }
 
     // ── Getters ────────────────────────────────────────────────
 
     public String systemPrompt() { return systemPrompt; }
+    /**
+     * Returns the internal message list (synchronized wrapper).
+     *
+     * <p>The returned list is backed by {@link Collections#synchronizedList},
+     * so individual operations ({@code get}, {@code size}, {@code add}) are
+     * thread-safe. <b>Iteration</b> still requires external synchronization:
+     * <pre>{@code
+     *   synchronized (ctx.messages()) {
+     *       for (Message m : ctx.messages()) { ... }
+     *   }
+     * }</pre>
+     *
+     * @return the internal synchronized list (not a copy)
+     */
     public List<Message> messages() { return messages; }
-    public List<Tool> tools() { return tools; }
     public boolean isStreaming() { return streaming.get(); }
-    public Message streamingMessage() { return streamingMessage.get(); }
     public String errorMessage() { return errorMessage; }
 
     // ── Setters ────────────────────────────────────────────────
@@ -79,21 +139,25 @@ public final class AgentContext {
      */
     public void stopStreaming() {
         streaming.set(false);
-        streamingMessage.set(null);
-    }
-
-    /**
-     * Set the current streaming message.
-     */
-    public void setStreamingMessage(Message msg) {
-        streamingMessage.set(msg);
     }
 
     /**
      * Add a message to the context's message list (thread-safe via synchronized list).
      */
     public void addMessage(Message msg) {
-        messages.add(msg);
+        synchronized (messages) {
+            messages.add(msg);
+        }
+    }
+
+    /**
+     * Add multiple messages atomically (thread-safe).
+     * Uses the same lock as {@link #replaceMessages(List)} to prevent races.
+     */
+    public void addMessages(List<? extends Message> msgs) {
+        synchronized (messages) {
+            messages.addAll(msgs);
+        }
     }
 
     /**
@@ -109,10 +173,11 @@ public final class AgentContext {
     /**
      * Reset context for a new conversation, preserving systemPrompt and tools.
      */
-    public synchronized void resetState() {
-        messages.clear();
+    public void resetState() {
+        synchronized (messages) {
+            messages.clear();
+        }
         streaming.set(false);
-        streamingMessage.set(null);
         errorMessage = null;
     }
 }

@@ -73,7 +73,7 @@ public class LLMSummaryCompactor implements Compactor {
             firstKeptId = "msg-" + UUID.randomUUID();
         }
 
-        int tokensAfter = Compactor.totalTokens(toKeep) + summary.length() / 4;
+        int tokensAfter = Compactor.totalTokens(toKeep) + summary.length() / Compactor.CHARS_PER_TOKEN;
 
         return new CompactionResult(
                 summary,

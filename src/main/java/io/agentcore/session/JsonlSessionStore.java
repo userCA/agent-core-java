@@ -3,6 +3,7 @@ package io.agentcore.session;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import io.agentcore.providers.ProviderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,9 @@ import java.util.stream.Stream;
 public class JsonlSessionStore implements SessionStore {
 
     private static final Logger log = LoggerFactory.getLogger(JsonlSessionStore.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper()
+    private static final int TITLE_MAX_LENGTH = 30;
+    private static final ObjectMapper MAPPER =
+            ProviderUtils.mapper().copy()
             .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
 
     private final Path directory;
@@ -171,7 +174,7 @@ public class JsonlSessionStore implements SessionStore {
                         Object content = msg.get("content");
                         String text = extractText(content);
                         if (!text.isEmpty()) {
-                            return text.length() > 30 ? text.substring(0, 30) + "..." : text;
+                            return text.length() > TITLE_MAX_LENGTH ? text.substring(0, TITLE_MAX_LENGTH) + "..." : text;
                         }
                     }
                 }

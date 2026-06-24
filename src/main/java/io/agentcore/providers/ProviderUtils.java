@@ -44,7 +44,8 @@ public final class ProviderUtils {
     /**
      * Detect context window overflow from HTTP error responses.
      */
-    public static boolean isContextOverflow(int statusCode, String body) {
+    public static boolean isContextOverflow(String body) {
+        if (body == null) return false;
         String lower = body.toLowerCase();
         return lower.contains("context_length_exceeded")
                 || lower.contains("maximum context length")
@@ -81,21 +82,24 @@ public final class ProviderUtils {
         private final AtomicBoolean done;
         private T next;
         private boolean hasNext;
+        private boolean consumed = true;
 
         public QueueBackedIterator(LinkedBlockingQueue<T> queue, AtomicBoolean done) {
             this.queue = queue;
             this.done = done;
-            this.hasNext = true;
         }
 
         @Override
         public boolean hasNext() {
-            if (!hasNext) return false;
+            if (!consumed) return true;
+            if (hasNext) return true;
             try {
                 while (true) {
                     T item = queue.poll(100, TimeUnit.MILLISECONDS);
                     if (item != null) {
                         next = item;
+                        hasNext = true;
+                        consumed = false;
                         return true;
                     }
                     if (done.get() && queue.isEmpty()) {
@@ -113,8 +117,11 @@ public final class ProviderUtils {
         @Override
         public T next() {
             if (!hasNext()) throw new NoSuchElementException();
-            hasNext = true;
-            return next;
+            T item = next;
+            next = null;
+            hasNext = false;
+            consumed = true;
+            return item;
         }
     }
 }

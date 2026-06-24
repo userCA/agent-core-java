@@ -18,15 +18,7 @@ import java.util.stream.Collectors;
  */
 public final class MessageConverter implements Function<List<Message>, List<Map<String, Object>>> {
 
-    private final int toolResultMaxChars;
-
-    public MessageConverter(int toolResultMaxChars) {
-        this.toolResultMaxChars = toolResultMaxChars;
-    }
-
-    public MessageConverter() {
-        this(4000);
-    }
+    public MessageConverter() {}
 
     @Override
     public List<Map<String, Object>> apply(List<Message> messages) {
@@ -76,10 +68,7 @@ public final class MessageConverter implements Function<List<Message>, List<Map<
                             .filter(c -> c instanceof Content.TextContent)
                             .map(c -> ((Content.TextContent) c).text())
                             .collect(Collectors.joining());
-                    if (text.length() > toolResultMaxChars) {
-                        text = text.substring(0, toolResultMaxChars)
-                                + "\n...[truncated, " + (text.length()) + " chars total]";
-                    }
+                    // No truncation here — ToolRunner.truncateContent() handles it at storage time
                     Map<String, Object> msg = new LinkedHashMap<>();
                     msg.put("role", "tool");
                     msg.put("tool_call_id", trm.toolCallId());
@@ -134,12 +123,9 @@ public final class MessageConverter implements Function<List<Message>, List<Map<
      */
     private static String toJsonString(Map<String, Object> map) {
         try {
-            return OBJECT_MAPPER.writeValueAsString(map);
+            return ProviderUtils.mapper().writeValueAsString(map);
         } catch (Exception e) {
             return "{}";
         }
     }
-
-    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
-            new com.fasterxml.jackson.databind.ObjectMapper();
 }

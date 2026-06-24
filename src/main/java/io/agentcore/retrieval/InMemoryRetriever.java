@@ -1,10 +1,10 @@
 package io.agentcore.retrieval;
 
+import io.agentcore.util.TextTokenizer;
+
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * In-memory keyword-overlap {@link Retriever} for tests and small-scale demos.
@@ -26,8 +26,6 @@ import java.util.stream.Collectors;
  */
 public class InMemoryRetriever implements Retriever {
 
-    private static final Pattern TOKEN_RE = Pattern.compile("\\w+");
-
     private final List<Doc> docs = new CopyOnWriteArrayList<>();
 
     /** Add a document to the index. */
@@ -43,7 +41,7 @@ public class InMemoryRetriever implements Retriever {
     /** Add a document with source and metadata. */
     public void add(String text, String source, Map<String, Object> metadata) {
         docs.add(new Doc(text, source, metadata != null ? Map.copyOf(metadata) : Map.of(),
-                tokenize(text)));
+                TextTokenizer.tokenize(text)));
     }
 
     /** Returns the number of indexed documents. */
@@ -54,15 +52,15 @@ public class InMemoryRetriever implements Retriever {
     @Override
     public CompletableFuture<List<RetrievedChunk>> retrieve(Query query) {
         return CompletableFuture.supplyAsync(() -> {
-            Set<String> qTokens = tokenize(query.text());
-            if (qTokens.isEmpty()) return List.of();
+            Set<String> qTokens = TextTokenizer.tokenize(query.text());
+            if (qTokens.isEmpty()) return List.<RetrievedChunk>of();
 
             List<ScoredDoc> scored = new ArrayList<>();
             for (Doc doc : docs) {
                 // Apply metadata filters
                 if (!matchesFilters(doc, query.filters())) continue;
 
-                int overlap = intersectionSize(qTokens, doc.tokens());
+                int overlap = TextTokenizer.intersectionSize(qTokens, doc.tokens());
                 if (overlap == 0) continue;
 
                 // Score = overlap / queryTokens → fraction of query covered
@@ -75,11 +73,9 @@ public class InMemoryRetriever implements Retriever {
                     .limit(query.topK())
                     .map(s -> new RetrievedChunk(s.doc().text(), s.score(),
                             s.doc().source(), s.doc().metadata()))
-                    .collect(Collectors.toList());
+                    .toList();
         });
     }
-
-    // ── Internals ──
 
     private static boolean matchesFilters(Doc doc, Map<String, Object> filters) {
         if (filters == null || filters.isEmpty()) return true;
@@ -88,24 +84,6 @@ public class InMemoryRetriever implements Retriever {
             if (!Objects.equals(docVal, entry.getValue())) return false;
         }
         return true;
-    }
-
-    private static Set<String> tokenize(String text) {
-        if (text == null || text.isBlank()) return Set.of();
-        return TOKEN_RE.matcher(text.toLowerCase())
-                .results()
-                .map(mr -> mr.group())
-                .collect(Collectors.toSet());
-    }
-
-    private static int intersectionSize(Set<String> a, Set<String> b) {
-        Set<String> smaller = a.size() <= b.size() ? a : b;
-        Set<String> larger = a.size() <= b.size() ? b : a;
-        int count = 0;
-        for (String token : smaller) {
-            if (larger.contains(token)) count++;
-        }
-        return count;
     }
 
     private record Doc(String text, String source, Map<String, Object> metadata, Set<String> tokens) {}

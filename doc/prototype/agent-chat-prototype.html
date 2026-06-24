@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Chat - Linear Dark</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            canvas: '#010102',
+            surface1: '#0f1011',
+            surface2: '#141516',
+            surface3: '#18191a',
+            surface4: '#191a1b',
+            hairline: '#23252a',
+            'hairline-strong': '#34343a',
+            'hairline-tertiary': '#3e3e44',
+            ink: '#f7f8f8',
+            'ink-muted': '#d0d6e0',
+            'ink-subtle': '#8a8f98',
+            'ink-tertiary': '#62666d',
+            primary: '#5e6ad2',
+            'primary-hover': '#828fff',
+            'primary-focus': '#5e69d1',
+            success: '#27a644',
+          },
+          borderRadius: {
+            xs: '4px',
+            sm: '6px',
+            md: '8px',
+            lg: '12px',
+            xl: '16px',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --color-canvas: #010102;
+      --color-surface-1: #0f1011;
+      --color-surface-2: #141516;
+      --color-surface-3: #18191a;
+      --color-hairline: #23252a;
+      --color-ink: #f7f8f8;
+      --color-ink-muted: #d0d6e0;
+      --color-ink-subtle: #8a8f98;
+      --color-primary: #5e6ad2;
+      --color-primary-hover: #828fff;
+    }
+
+    body {
+      background-color: var(--color-canvas);
+      color: var(--color-ink);
+      font-family: 'Inter', system-ui, sans-serif;
+      letter-spacing: -0.02px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #34343a;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3e3e44;
+    }
+
+    .message-user {
+      background-color: var(--color-surface-2);
+    }
+    .message-ai {
+      background-color: var(--color-surface-3);
+      border-left: 2px solid var(--color-primary);
+    }
+
+    .focus-ring:focus-visible {
+      outline: 2px solid rgba(94, 105, 209, 0.5);
+      outline-offset: 2px;
+    }
+
+    button,
+    [role="button"] {
+      cursor: pointer;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden antialiased">
+  <div class="flex h-full w-full">
+    <!-- Mobile Sidebar Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-50 w-[260px] bg-surface1 border-r border-hairline flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-200">
+      <!-- Sidebar Header -->
+      <div class="h-14 flex items-center px-4 border-b border-hairline">
+        <div class="flex items-center gap-2 text-ink">
+          <i data-lucide="hexagon" class="w-6 h-6 text-primary"></i>
+          <span class="font-semibold text-[15px] tracking-tight">AgentScope</span>
+        </div>
+      </div>
+
+      <!-- New Chat Button -->
+      <div class="p-3">
+        <button class="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md h-11 transition-colors focus-ring" aria-label="新建对话">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>新建对话</span>
+        </button>
+      </div>
+
+      <!-- Conversation List -->
+      <nav class="flex-1 overflow-y-auto px-3 space-y-1" aria-label="会话列表">
+        <div class="text-xs font-medium text-ink-subtle px-2 py-2">今天</div>
+        <button class="w-full h-11 text-left px-3 rounded-md bg-surface2 border border-hairline text-ink text-sm font-medium transition-colors focus-ring flex items-center gap-2" aria-current="true">
+          <i data-lucide="message-square" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+          <span class="truncate">重构 AgentLoop 核心循环</span>
+        </button>
+        <button class="w-full h-11 text-left px-3 rounded-md text-ink-muted text-sm hover:bg-surface2 hover:text-ink transition-colors focus-ring flex items-center gap-2">
+          <i data-lucide="message-square" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+          <span class="truncate">v2 迁移审计报告</span>
+        </button>
+
+        <div class="text-xs font-medium text-ink-subtle px-2 py-2 mt-2">昨天</div>
+        <button class="w-full h-11 text-left px-3 rounded-md text-ink-muted text-sm hover:bg-surface2 hover:text-ink transition-colors focus-ring flex items-center gap-2">
+          <i data-lucide="message-square" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+          <span class="truncate">设计系统整理</span>
+        </button>
+        <button class="w-full h-11 text-left px-3 rounded-md text-ink-muted text-sm hover:bg-surface2 hover:text-ink transition-colors focus-ring flex items-center gap-2">
+          <i data-lucide="message-square" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+          <span class="truncate">Extension SPI 强类型 Hook</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="p-3 border-t border-hairline">
+        <button class="w-full h-11 flex items-center gap-3 px-3 rounded-md hover:bg-surface2 transition-colors focus-ring">
+          <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <i data-lucide="user" class="w-4 h-4 text-primary"></i>
+          </div>
+          <div class="flex-1 text-left min-w-0">
+            <div class="text-sm font-medium text-ink truncate">蒋德旺</div>
+            <div class="text-xs text-ink-subtle">Pro 计划</div>
+          </div>
+          <i data-lucide="settings" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-canvas">
+      <!-- Top Navigation / Chat Header -->
+      <header class="h-14 flex items-center justify-between px-2 sm:px-4 border-b border-hairline shrink-0">
+        <div class="flex items-center gap-1 sm:gap-3 min-w-0">
+          <button class="lg:hidden w-11 h-11 flex items-center justify-center rounded-md hover:bg-surface1 text-ink-subtle focus-ring" onclick="toggleSidebar()" aria-label="打开侧边栏">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <h1 class="text-sm font-medium text-ink hidden sm:block truncate max-w-[200px] md:max-w-md">重构 AgentLoop 核心循环</h1>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button class="hidden md:flex items-center gap-2 px-3 h-11 rounded-md bg-surface1 border border-hairline text-sm text-ink-muted hover:text-ink hover:border-hairline-strong transition-colors focus-ring" aria-label="选择模型">
+            <i data-lucide="cpu" class="w-4 h-4"></i>
+            <span>Claude 4 Sonnet</span>
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </button>
+          <button class="w-11 h-11 flex items-center justify-center rounded-md hover:bg-surface1 text-ink-subtle focus-ring" onclick="toggleRightPanel()" aria-label="切换右侧面板">
+            <i data-lucide="panel-right" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages Area -->
+      <div id="messages-container" class="flex-1 overflow-y-auto px-3 sm:px-4 py-6 scroll-smooth">
+        <div class="max-w-3xl mx-auto space-y-6">
+          <!-- AI Message -->
+          <article class="flex gap-3 sm:gap-4">
+            <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0" aria-hidden="true">
+              <i data-lucide="bot" class="w-4 h-4 text-primary"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-medium text-ink">AgentScope</span>
+                <span class="text-xs text-ink-subtle">10:24</span>
+              </div>
+              <div class="message-ai rounded-lg p-4 text-[15px] leading-relaxed text-ink">
+                <p class="mb-3">我已经分析了 <code class="font-mono text-sm bg-surface2 px-1.5 py-0.5 rounded text-ink-muted">AgentLoop.java</code> 的现状，核心循环目前存在三个可维护性问题：</p>
+                <ol class="list-decimal list-inside space-y-2 text-ink-muted mb-3">
+                  <li>状态机转换散落在多个 <code class="font-mono text-sm bg-surface2 px-1.5 py-0.5 rounded">if-else</code> 分支中</li>
+                  <li>HumanInputGate 的阻塞逻辑与工具执行耦合</li>
+                  <li>异常处理没有统一出口，导致部分事件丢失</li>
+                </ol>
+                <p>建议先抽离一个 <code class="font-mono text-sm bg-surface2 px-1.5 py-0.5 rounded text-ink-muted">AgentStateMachine</code>，把事件驱动和生命周期钩子解耦。</p>
+              </div>
+              <div class="flex items-center gap-1 mt-2">
+                <button class="w-11 h-11 flex items-center justify-center rounded-md text-ink-subtle hover:text-ink hover:bg-surface2 transition-colors focus-ring" aria-label="复制">
+                  <i data-lucide="copy" class="w-4 h-4"></i>
+                </button>
+                <button class="w-11 h-11 flex items-center justify-center rounded-md text-ink-subtle hover:text-ink hover:bg-surface2 transition-colors focus-ring" aria-label="重新生成">
+                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+                <button class="w-11 h-11 flex items-center justify-center rounded-md text-ink-subtle hover:text-ink hover:bg-surface2 transition-colors focus-ring" aria-label="点赞">
+                  <i data-lucide="thumbs-up" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <!-- User Message -->
+          <article class="flex gap-3 sm:gap-4 flex-row-reverse">
+            <div class="w-8 h-8 rounded-full bg-surface3 flex items-center justify-center shrink-0" aria-hidden="true">
+              <i data-lucide="user" class="w-4 h-4 text-ink-muted"></i>
+            </div>
+            <div class="flex-1 min-w-0 flex flex-col items-end">
+              <div class="flex items-center gap-2 mb-1 flex-row-reverse">
+                <span class="text-sm font-medium text-ink">你</span>
+                <span class="text-xs text-ink-subtle">10:26</span>
+              </div>
+              <div class="message-user rounded-lg p-4 text-[15px] leading-relaxed text-ink max-w-[90%] sm:max-w-[85%]">
+                先帮我生成一个重构后的状态机草图，重点是让 HumanInputGate 变成可插拔的扩展点。
+              </div>
+            </div>
+          </article>
+
+          <!-- AI Message with tool call -->
+          <article class="flex gap-3 sm:gap-4">
+            <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0" aria-hidden="true">
+              <i data-lucide="bot" class="w-4 h-4 text-primary"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-medium text-ink">AgentScope</span>
+                <span class="text-xs text-ink-subtle">10:27</span>
+              </div>
+              <div class="message-ai rounded-lg p-4 text-[15px] leading-relaxed text-ink">
+                <p class="mb-3">正在调用代码分析工具生成状态机草图…</p>
+
+                <!-- Tool result card -->
+                <div class="bg-surface2 border border-hairline rounded-md p-4 mb-3 font-mono text-sm overflow-x-auto">
+                  <div class="flex items-center gap-2 text-ink-muted mb-2 pb-2 border-b border-hairline">
+                    <i data-lucide="terminal" class="w-4 h-4"></i>
+                    <span>Generated AgentStateMachine.java</span>
+                  </div>
+                  <pre class="text-ink-muted leading-relaxed"><code>public enum AgentState {
+  IDLE, THINKING, TOOL_CALL,
+  AWAITING_HUMAN, RESPONDING, ERROR
+}
+
+public interface StateTransitionHook {
+  AgentState onEvent(AgentEvent event);
+}</code></pre>
+                </div>
+
+                <p>HumanInputGate 现在通过 <code class="font-mono text-sm bg-surface2 px-1.5 py-0.5 rounded text-ink-muted">HumanInputExtension</code> 实现 <code class="font-mono text-sm bg-surface2 px-1.5 py-0.5 rounded text-ink-muted">LoopExtension</code>，可以被其他输入源（语音、表单、API）替换而不改动核心循环。</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="shrink-0 px-3 sm:px-4 pb-6 pt-2 bg-canvas">
+        <div class="max-w-3xl mx-auto">
+          <div class="relative bg-surface1 border border-hairline rounded-lg focus-within:border-hairline-strong focus-within:ring-2 focus-within:ring-primary-focus/50 transition-all">
+            <textarea
+              id="message-input"
+              rows="1"
+              class="w-full bg-transparent text-ink placeholder-ink-tertiary px-4 py-3 pr-28 resize-none outline-none text-[15px] leading-relaxed"
+              placeholder="输入消息，使用 @ 引用文件，/ 触发命令…"
+              aria-label="消息输入框"
+            ></textarea>
+            <div class="absolute right-2 bottom-2 flex items-center gap-1">
+              <button class="w-11 h-11 flex items-center justify-center rounded-md text-ink-subtle hover:text-ink hover:bg-surface2 transition-colors focus-ring" aria-label="附件">
+                <i data-lucide="paperclip" class="w-5 h-5"></i>
+              </button>
+              <button id="send-button" class="w-11 h-11 flex items-center justify-center rounded-md bg-primary hover:bg-primary-hover text-white transition-colors focus-ring" aria-label="发送">
+                <i data-lucide="arrow-up" class="w-5 h-5"></i>
+              </button>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <span class="text-xs text-ink-tertiary">AgentScope 可能会生成不准确的信息，请验证重要信息。</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Panel -->
+    <aside id="right-panel" class="hidden xl:flex w-[280px] bg-surface1 border-l border-hairline flex-col">
+      <div class="h-14 flex items-center px-4 border-b border-hairline">
+        <h2 class="text-sm font-medium text-ink">上下文</h2>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Agent Status -->
+        <div class="bg-surface2 border border-hairline rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-2 h-2 rounded-full bg-success animate-pulse"></div>
+            <span class="text-sm font-medium text-ink">Agent 在线</span>
+          </div>
+          <div class="text-xs text-ink-subtle space-y-2">
+            <div class="flex justify-between">
+              <span>模型</span>
+              <span class="text-ink-muted">Claude 4 Sonnet</span>
+            </div>
+            <div class="flex justify-between">
+              <span>上下文窗口</span>
+              <span class="text-ink-muted">128K</span>
+            </div>
+            <div class="flex justify-between">
+              <span>已用 token</span>
+              <span class="text-ink-muted">4,218</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knowledge Sources -->
+        <div>
+          <h3 class="text-xs font-medium text-ink-subtle uppercase tracking-wider mb-2">知识源</h3>
+          <div class="space-y-2">
+            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md bg-surface2 border border-hairline hover:border-hairline-strong transition-colors focus-ring text-left min-h-[44px]">
+              <i data-lucide="file-text" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-ink truncate">AgentLoop.java</div>
+                <div class="text-xs text-ink-subtle">23 min 前更新</div>
+              </div>
+            </button>
+            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md bg-surface2 border border-hairline hover:border-hairline-strong transition-colors focus-ring text-left min-h-[44px]">
+              <i data-lucide="file-text" class="w-4 h-4 text-ink-subtle shrink-0"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-ink truncate">HookTypes.java</div>
+                <div class="text-xs text-ink-subtle">2 hr 前更新</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tools -->
+        <div>
+          <h3 class="text-xs font-medium text-ink-subtle uppercase tracking-wider mb-2">可用工具</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="px-2.5 py-1.5 rounded-full bg-surface2 border border-hairline text-xs text-ink-muted">code_search</span>
+            <span class="px-2.5 py-1.5 rounded-full bg-surface2 border border-hairline text-xs text-ink-muted">git_diff</span>
+            <span class="px-2.5 py-1.5 rounded-full bg-surface2 border border-hairline text-xs text-ink-muted">test_runner</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Sidebar toggle
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      const isOpen = !sidebar.classList.contains('-translate-x-full');
+
+      if (isOpen) {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+      } else {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+      }
+    }
+
+    // Right panel toggle (desktop only)
+    function toggleRightPanel() {
+      const panel = document.getElementById('right-panel');
+      if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        panel.classList.add('xl:flex');
+      } else {
+        panel.classList.add('hidden');
+        panel.classList.remove('xl:flex');
+      }
+    }
+
+    // Auto-resize textarea
+    const textarea = document.getElementById('message-input');
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+    });
+
+    // Send on Enter (Shift+Enter for new line)
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    document.getElementById('send-button').addEventListener('click', sendMessage);
+
+    function sendMessage() {
+      const value = textarea.value.trim();
+      if (!value) return;
+      console.log('Send message:', value);
+      textarea.value = '';
+      textarea.style.height = 'auto';
+      textarea.focus();
+    }
+  </script>
+</body>
+</html>

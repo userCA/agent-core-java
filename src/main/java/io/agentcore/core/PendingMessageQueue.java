@@ -1,6 +1,8 @@
 package io.agentcore.core;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 /**
@@ -38,7 +40,7 @@ public final class PendingMessageQueue {
     }
 
     private volatile DrainMode mode;
-    private final List<Message> items = new ArrayList<>();
+    private final Deque<Message> items = new ArrayDeque<>();
 
     public PendingMessageQueue() {
         this(DrainMode.ONE_AT_A_TIME);
@@ -88,7 +90,7 @@ public final class PendingMessageQueue {
             items.clear();
             return drained;
         }
-        // ONE_AT_A_TIME
+        // ONE_AT_A_TIME — O(1) removal from ArrayDeque
         return List.of(items.removeFirst());
     }
 

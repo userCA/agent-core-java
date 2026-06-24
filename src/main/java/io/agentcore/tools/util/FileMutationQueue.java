@@ -12,8 +12,8 @@ import java.util.concurrent.Semaphore;
  * {@link Semaphore}, which has no thread affinity — {@code release()} can
  * be called from any thread, unlike {@code ReentrantLock}.
  *
- * <p>Entries are cleaned up after release when no other thread is waiting,
- * preventing unbounded map growth for long-running agents.
+ * <p>Entries persist for the lifetime of the queue. This avoids TOCTOU races
+ * between release and cleanup that could break mutual exclusion.
  */
 public final class FileMutationQueue {
 
@@ -21,13 +21,6 @@ public final class FileMutationQueue {
 
     private Semaphore lockFor(String path) {
         return locks.computeIfAbsent(path, k -> new Semaphore(1));
-    }
-
-    private void releaseAndCleanup(String path, Semaphore sem) {
-        sem.release();
-        if (!sem.hasQueuedThreads()) {
-            locks.remove(path, sem);
-        }
     }
 
     /**
@@ -42,12 +35,11 @@ public final class FileMutationQueue {
             return CompletableFuture.failedFuture(e);
         }
         try {
-            String result = ops.read(path, 0, null);
-            releaseAndCleanup(path, sem);
-            return CompletableFuture.completedFuture(result);
+            return CompletableFuture.completedFuture(ops.read(path, 0, null));
         } catch (Exception e) {
-            releaseAndCleanup(path, sem);
             return CompletableFuture.failedFuture(e);
+        } finally {
+            sem.release();
         }
     }
 
@@ -64,11 +56,11 @@ public final class FileMutationQueue {
         }
         try {
             ops.write(path, content);
-            releaseAndCleanup(path, sem);
             return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
-            releaseAndCleanup(path, sem);
             return CompletableFuture.failedFuture(e);
+        } finally {
+            sem.release();
         }
     }
 
@@ -85,12 +77,11 @@ public final class FileMutationQueue {
             return CompletableFuture.failedFuture(e);
         }
         try {
-            boolean result = ops.edit(path, oldText, newText);
-            releaseAndCleanup(path, sem);
-            return CompletableFuture.completedFuture(result);
+            return CompletableFuture.completedFuture(ops.edit(path, oldText, newText));
         } catch (Exception e) {
-            releaseAndCleanup(path, sem);
             return CompletableFuture.failedFuture(e);
+        } finally {
+            sem.release();
         }
     }
 }

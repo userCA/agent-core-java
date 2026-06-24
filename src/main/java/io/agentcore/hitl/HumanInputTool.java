@@ -1,5 +1,6 @@
 package io.agentcore.hitl;
 
+import io.agentcore.core.HumanInputGate;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
@@ -7,7 +8,6 @@ import io.agentcore.tools.ToolResult;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * General-purpose Human-in-the-Loop tool.
@@ -21,9 +21,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public class HumanInputTool implements Tool {
 
-    private final io.agentcore.core.HumanInputGate gate;
+    private final HumanInputGate gate;
 
-    public HumanInputTool(io.agentcore.core.HumanInputGate gate) {
+    public HumanInputTool(HumanInputGate gate) {
         this.gate = gate;
     }
 
@@ -52,20 +52,19 @@ public class HumanInputTool implements Tool {
             return new ToolResult("ERROR: 'prompt' parameter is required");
         }
 
+        // Check if user input was already provided (HITL re-execution path)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> userInput = (Map<String, Object>) params.get("_user_input");
+        if (userInput != null) {
+            return new ToolResult(formatValues(userInput));
+        }
+
         @SuppressWarnings("unchecked")
         Map<String, Object> inputSchema = (Map<String, Object>) params.get("input_schema");
 
-        // Register a pending input request — blocks until external caller provides input
-        CompletableFuture<Map<String, Object>> future = gate.requireInput(toolCallId);
-
-        // In the new architecture, the AgentLoop catches RequiresHumanInput exceptions
-        // and emits a HumanInputRequired event. For now, just block until input arrives.
-        try {
-            Map<String, Object> values = future.get();
-            return new ToolResult(formatValues(values));
-        } catch (java.util.concurrent.CancellationException e) {
-            return new ToolResult("Input request was cancelled.");
-        }
+        // Throw RequiresHumanInput — caught by ToolRunner which emits
+        // HumanInputRequired event, blocks on gate, and re-executes with input.
+        throw new HumanInputGate.RequiresHumanInput(prompt, inputSchema);
     }
 
     private static String formatValues(Map<String, Object> values) {
@@ -87,7 +86,7 @@ public class HumanInputTool implements Tool {
     }
 
     /** The gate associated with this tool. */
-    public io.agentcore.core.HumanInputGate gate() {
+    public HumanInputGate gate() {
         return gate;
     }
 }

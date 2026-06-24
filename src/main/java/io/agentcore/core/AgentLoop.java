@@ -1,14 +1,8 @@
 package io.agentcore.core;
 
-import io.agentcore.core.Content.TextContent;
-import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.core.Message.*;
 import io.agentcore.core.AgentEvent.*;
-import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.providers.ProviderAuth;
-import io.agentcore.providers.StreamEvent;
-import io.agentcore.providers.StreamEvent.*;
-import io.agentcore.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +14,12 @@ import java.util.function.Consumer;
 /**
  * Core agent loop — drives the LLM streaming → tool execution → repeat cycle.
  *
- * <p>Mirrors Python {@code agent_core/core/loop.py} agent_loop.
+ * <p>Uses a dual-layer loop structure:
+ * <ul>
+ *   <li>Outer loop: handles follow-up messages after agent would stop</li>
+ *   <li>Inner loop: processes tool calls and steering messages</li>
+ * </ul>
+ *
  * Designed to run on virtual threads (blocking I/O is expected).
  */
 public class AgentLoop {
@@ -29,10 +28,37 @@ public class AgentLoop {
 
     private final AgentLoopConfig config;
     private final AgentContext context;
+    private final StreamAccumulator streamAccumulator;
+    private final ToolRunner toolRunner;
 
-    public AgentLoop(AgentLoopConfig config, AgentContext context) {
+    public AgentLoop(AgentLoopConfig config, AgentContext context, ToolRunner toolRunner) {
+        this(config, context, toolRunner,
+                new StreamAccumulator(
+                        config.streamFn(), config.model(),
+                        config.thinkingLevel(), config.temperature(), config.maxTokens()));
+    }
+
+    /**
+     * Full constructor with shared StreamAccumulator for reuse across runs.
+     */
+    public AgentLoop(AgentLoopConfig config, AgentContext context,
+                     ToolRunner toolRunner, StreamAccumulator streamAccumulator) {
         this.config = config;
         this.context = context;
+        this.streamAccumulator = streamAccumulator;
+        this.toolRunner = toolRunner;
+    }
+
+    /**
+     * Convenience constructor that creates a ToolRunner from config (for tests).
+     * Production code should use the 3-arg constructor with a shared ToolRunner.
+     */
+    public AgentLoop(AgentLoopConfig config, AgentContext context) {
+        this(config, context, config.toolRegistry() != null
+                ? new ToolRunner(config.toolRegistry(), config.toolConfig(),
+                        config.mutationQueue(),
+                        config.beforeToolCall(), config.afterToolCall())
+                : null);
     }
 
     /**
@@ -49,51 +75,51 @@ public class AgentLoop {
         // Add new messages to context and emit them
         addMessagesToContext(newMessages, onEvent);
 
-        List<Message> newAssistantMessages = new ArrayList<>();
+        // Track ALL new messages produced in this run (user + assistant + tool results)
+        List<Message> newMessagesProduced = new ArrayList<>();
+        if (newMessages != null) newMessagesProduced.addAll(newMessages);
+
         int turnCount = 0;
+        List<Message> pendingMessages = drainMessages(config.getSteeringMessages());
 
+        // Outer loop: continues when follow-up messages arrive after agent would stop
         while (true) {
-            if (isAborted(signal)) {
-                log.debug("Agent loop aborted by signal");
-                break;
-            }
-            if (config.maxTurns() != null && turnCount >= config.maxTurns()) {
-                log.debug("Max turns ({}) reached", config.maxTurns());
-                break;
-            }
+            boolean hasMoreToolCalls = true;
 
-            onEvent.accept(new TurnStart());
-            turnCount++;
-            log.debug("Turn {} starting", turnCount);
+            // Inner loop: process tool calls and steering messages
+            while (hasMoreToolCalls || !pendingMessages.isEmpty()) {
+                if (isAborted(signal)) {
+                    log.debug("Agent loop aborted by signal");
+                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    return;
+                }
+                if (config.maxTurns() != null && turnCount >= config.maxTurns()) {
+                    log.debug("Max turns ({}) reached", config.maxTurns());
+                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    return;
+                }
 
-            // Prepare LLM call context
-            List<Map<String, Object>> llmMessages = prepareLlmMessages(signal);
-            var auth = config.authResolver().resolve(config.model().provider());
-            List<Map<String, Object>> toolDefs = getToolDefs();
+                // Execute one turn — returns outcome with continue/moreToolCalls flags
+                TurnOutcome outcome = executeTurn(
+                        signal, onEvent, newMessagesProduced, pendingMessages, turnCount);
+                turnCount++;
 
-            // Execute LLM call with retry logic
-            AssistantMessage assistant = executeLlmWithRetry(llmMessages, toolDefs, auth, signal, onEvent);
-            
-            onEvent.accept(new MessageEnd(assistant));
-            context.messages().add(assistant);
-            newAssistantMessages.add(assistant);
+                if (!outcome.shouldContinue()) {
+                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    return;
+                }
 
-            // Execute tools if present
-            List<ToolResultMessage> toolResultMessages = executeTools(assistant, signal, onEvent);
-            onEvent.accept(new TurnEnd(assistant, new ArrayList<>(toolResultMessages)));
+                hasMoreToolCalls = outcome.hasMoreToolCalls();
 
-            // Check termination conditions
-            if (shouldTerminateLoop(assistant, toolResultMessages)) {
-                break;
+                // Check for steering messages for next turn
+                pendingMessages = drainMessages(config.getSteeringMessages());
             }
 
-            // Check for steering/follow-up messages
-            if (drainAndEmitMessages(config.getSteeringMessages(), onEvent)) {
-                log.debug("Steering messages injected, continuing loop");
-                continue;
-            }
-            if (drainAndEmitMessages(config.getFollowUpMessages(), onEvent)) {
-                log.debug("Follow-up messages injected, continuing loop");
+            // Outer loop: check for follow-up messages after agent would stop
+            List<Message> followUps = drainMessages(config.getFollowUpMessages());
+            if (!followUps.isEmpty()) {
+                log.debug("Follow-up messages injected, continuing outer loop");
+                pendingMessages = followUps;
                 continue;
             }
 
@@ -101,44 +127,136 @@ public class AgentLoop {
         }
 
         log.debug("Agent loop completed after {} turns", turnCount);
-        onEvent.accept(new AgentEnd(newAssistantMessages));
+        onEvent.accept(new AgentEnd(newMessagesProduced));
     }
 
-    // ── Helper Methods ──────────────────────────────────────────────
+    // ── Turn execution ─────────────────────────────────────────
 
     /**
-     * Add messages to context and emit events.
+     * Outcome of a single turn, returned by executeTurn().
+     * Eliminates side-channel state via instance fields.
      */
+    private record TurnOutcome(boolean shouldContinue, boolean hasMoreToolCalls) {}
+
+    /**
+     * Execute a single turn: LLM call → tool execution → termination checks.
+     *
+     * @return TurnOutcome indicating whether to continue and if more tool calls exist
+     */
+    private TurnOutcome executeTurn(
+            AtomicBoolean signal,
+            Consumer<AgentEvent> onEvent,
+            List<Message> newMessagesProduced,
+            List<Message> pendingMessages,
+            int turnCount) {
+
+        onEvent.accept(new TurnStart());
+        log.debug("Turn {} starting", turnCount + 1);
+
+        // Inject pending steering messages before assistant response
+        if (!pendingMessages.isEmpty()) {
+            addMessagesToContext(pendingMessages, onEvent);
+            newMessagesProduced.addAll(pendingMessages);
+            pendingMessages.clear();
+        }
+
+        // Prepare LLM call context
+        List<Map<String, Object>> llmMessages = prepareLlmMessages(signal);
+        var auth = config.authResolver().resolve(config.model().provider());
+        List<Map<String, Object>> toolDefs = getToolDefs();
+
+        // Execute LLM call with retry logic — streaming events emitted in real-time
+        AssistantMessage assistant = executeLlmWithRetry(llmMessages, toolDefs, auth, signal, onEvent);
+
+        // Note: MessageStart is emitted by StreamAccumulator BEFORE streaming begins.
+        // MessageEnd is emitted here AFTER the full response is accumulated.
+        onEvent.accept(new MessageEnd(assistant));
+        context.addMessage(assistant);
+        newMessagesProduced.add(assistant);
+
+        // Execute tools if present
+        var toolBatch = executeTools(assistant, signal, onEvent);
+        List<ToolResultMessage> toolResults = toolBatch.messages();
+        for (ToolResultMessage tr : toolResults) {
+            newMessagesProduced.add(tr);
+        }
+
+        @SuppressWarnings("unchecked") // ToolResultMessage implements Message; list is local & unmodified
+        List<Message> toolResultsAsMessages = (List<Message>) (List<? extends Message>) toolResults;
+        onEvent.accept(new TurnEnd(assistant, toolResultsAsMessages));
+
+        // Check termination: error or abort
+        if (assistant.stopReason() == StopReason.ERROR
+                || assistant.stopReason() == StopReason.ABORTED) {
+            log.debug("Loop terminating due to stop reason: {}", assistant.stopReason());
+            return new TurnOutcome(false, false);
+        }
+
+        // Build shared TurnContext for both callbacks (snapshot for safe iteration)
+        List<Message> allMessagesSnapshot;
+        synchronized (context.messages()) {
+            allMessagesSnapshot = List.copyOf(context.messages());
+        }
+        AgentLoopConfig.TurnContext turnContext = new AgentLoopConfig.TurnContext(
+                assistant, toolResults, allMessagesSnapshot, newMessagesProduced);
+
+        // prepareNextTurn: dynamic config adjustment
+        if (config.prepareNextTurn() != null) {
+            var snapshot = config.prepareNextTurn().apply(turnContext);
+            if (snapshot != null) {
+                applySnapshot(snapshot);
+            }
+        }
+
+        // shouldStopAfterTurn: business-level termination
+        if (config.shouldStopAfterTurn() != null
+                && config.shouldStopAfterTurn().apply(turnContext)) {
+            log.debug("Loop stopped by shouldStopAfterTurn callback");
+            return new TurnOutcome(false, false);
+        }
+
+        boolean hasMoreToolCalls = !toolResults.isEmpty();
+
+        // Tool batch termination: if all tools request terminate, stop
+        if (toolBatch.terminate()) {
+            log.debug("Loop terminating due to tool batch terminate flag");
+            return new TurnOutcome(false, false);
+        }
+
+        return new TurnOutcome(true, hasMoreToolCalls);
+    }
+
+    // ── Helper Methods ─────────────────────────────────────────
+
     private void addMessagesToContext(List<Message> messages, Consumer<AgentEvent> onEvent) {
         if (messages == null) return;
         for (Message msg : messages) {
-            context.messages().add(msg);
+            context.addMessage(msg);
             onEvent.accept(new MessageStart(msg));
             onEvent.accept(new MessageEnd(msg));
         }
     }
 
-    /**
-     * Check if the loop should be aborted.
-     */
     private boolean isAborted(AtomicBoolean signal) {
         return signal != null && signal.get();
     }
 
-    /**
-     * Prepare LLM messages from context.
-     */
     private List<Map<String, Object>> prepareLlmMessages(AtomicBoolean signal) {
-        List<Map<String, Object>> llmMessages = config.convertToLlm().convert(context.messages());
+        // Snapshot messages under lock to avoid races with concurrent addMessage/replaceMessages
+        List<Message> snapshot;
+        synchronized (context.messages()) {
+            snapshot = List.copyOf(context.messages());
+        }
+        List<Map<String, Object>> llmMessages = config.convertToLlm().convert(snapshot);
         if (config.transformContext() != null) {
-            llmMessages = config.transformContext().transform(llmMessages, signal);
+            List<Map<String, Object>> transformed = config.transformContext().transform(llmMessages, signal);
+            if (transformed != null) {
+                llmMessages = transformed;
+            }
         }
         return llmMessages;
     }
 
-    /**
-     * Execute LLM call with retry and backoff logic.
-     */
     private AssistantMessage executeLlmWithRetry(
             List<Map<String, Object>> llmMessages,
             List<Map<String, Object>> toolDefs,
@@ -146,39 +264,34 @@ public class AgentLoop {
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent) {
         
-        int maxRetries = config.maxRetries();
-        AssistantMessage assistant = null;
+        int maxRetries = config.retryConfig().maxRetries();
         int retryCount = 0;
 
         while (true) {
-            var builder = AssistantMessage.builder()
-                    .provider(config.model().provider())
-                    .model(config.model().id());
-
-            if (retryCount == 0) {
-                // First attempt: stream in real-time
-                var tempAssistant = new AssistantMessageRef(builder, onEvent);
-                streamAssistant(llmMessages, toolDefs, auth, signal, tempAssistant);
-                assistant = builder.build();
-
-                // Emit streaming updates
-                for (AgentEvent evt : tempAssistant.collectedEvents) {
-                    onEvent.accept(evt);
-                }
-            } else {
-                // Retry: buffer events
+            // First attempt streams in real-time; retries suppress streaming
+            Consumer<AgentEvent> sink = (retryCount == 0) ? onEvent : null;
+            if (retryCount > 0) {
                 log.info("Retrying LLM call (attempt {}/{})", retryCount + 1, maxRetries + 1);
-                var tempAssistant = new AssistantMessageRef(builder, null);
-                streamAssistant(llmMessages, toolDefs, auth, signal, tempAssistant);
-                assistant = builder.build();
-
-                onEvent.accept(new MessageStart(assistant));
-                for (AgentEvent evt : tempAssistant.collectedEvents) {
-                    onEvent.accept(evt);
-                }
             }
 
-            // Check for retry conditions
+            AssistantMessage assistant;
+            try {
+                var result = streamAccumulator.accumulate(
+                        llmMessages, toolDefs, auth,
+                        context.systemPrompt(), signal, sink);
+                assistant = result.message();
+            } catch (Exception e) {
+                // If streaming itself threw, synthesize an error message
+                log.warn("LLM stream failed on attempt {}", retryCount + 1, e);
+                assistant = AssistantMessage.builder()
+                        .stopReason(StopReason.ERROR)
+                        .errorMessage(e.getMessage())
+                        .retryableError(true)
+                        .provider(config.model().provider())
+                        .model(config.model().id())
+                        .build();
+            }
+
             RetryDecision decision = evaluateRetry(assistant, retryCount, maxRetries, llmMessages, signal);
             
             if (decision.shouldRetry()) {
@@ -190,15 +303,10 @@ public class AgentLoop {
                 continue;
             }
             
-            break;
+            return assistant;
         }
-
-        return assistant;
     }
 
-    /**
-     * Evaluate whether to retry and compute delay.
-     */
     private RetryDecision evaluateRetry(
             AssistantMessage assistant,
             int retryCount,
@@ -206,16 +314,14 @@ public class AgentLoop {
             List<Map<String, Object>> llmMessages,
             AtomicBoolean signal) {
         
-        // Retryable error with exponential backoff
         if (assistant.stopReason() == StopReason.ERROR
                 && assistant.retryableError()
                 && retryCount < maxRetries) {
             double delay = calculateBackoffDelay(retryCount);
-            log.debug("Retryable error detected, backing off for {:.2f}s", delay);
+            log.debug("Retryable error detected, backing off for {}s", String.format("%.2f", delay));
             return new RetryDecision(true, retryCount + 1, delay, llmMessages);
         }
         
-        // Overflow error - trigger compaction
         if (assistant.overflowError()
                 && config.compactCallback() != null
                 && retryCount < maxRetries) {
@@ -230,19 +336,13 @@ public class AgentLoop {
         return new RetryDecision(false, retryCount, 0, llmMessages);
     }
 
-    /**
-     * Calculate exponential backoff delay with jitter.
-     */
     private double calculateBackoffDelay(int retryCount) {
         double delay = Math.min(
-                config.retryBaseDelay() * Math.pow(2, retryCount),
-                config.retryMaxDelay());
+                config.retryConfig().baseDelay() * Math.pow(2, retryCount),
+                config.retryConfig().maxDelay());
         return delay * (0.5 + ThreadLocalRandom.current().nextDouble());
     }
 
-    /**
-     * Sleep with interrupt check, propagating interrupt to signal if present.
-     */
     private void sleepWithInterruptCheck(double seconds, AtomicBoolean signal) {
         try {
             Thread.sleep((long) (seconds * 1000));
@@ -255,75 +355,51 @@ public class AgentLoop {
         }
     }
 
-    /**
-     * Execute tools from assistant message.
-     */
-    private List<ToolResultMessage> executeTools(
+    private ToolRunner.ToolBatchResult executeTools(
             AssistantMessage assistant,
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent) {
         
-        if (!assistant.hasToolCalls() || config.toolRegistry() == null) {
-            return List.of();
+        if (!assistant.hasToolCalls() || toolRunner == null) {
+            return new ToolRunner.ToolBatchResult(List.of(), false);
         }
 
-        var registry = config.toolRegistry();
-        var runner = new ToolRunner(registry, config.toolTimeout(),
-                config.beforeToolCall(), config.afterToolCall());
+        // Sync human-input gate from config for HITL support
+        if (config.humanInputGate() != null) {
+            toolRunner.updateHumanInputGate(config.humanInputGate());
+        }
 
         log.debug("Executing {} tool calls in {} mode", 
-                assistant.toolCalls().size(), config.toolExecution());
+                assistant.toolCalls().size(), config.toolConfig().execution());
 
-        List<ToolResultMessage> results;
-        if (config.toolExecution() == AgentLoopConfig.ToolExecutionMode.PARALLEL) {
-            results = runner.executeParallel(assistant, signal, onEvent);
+        ToolRunner.ToolBatchResult batch;
+        if (config.toolConfig().execution() == AgentLoopConfig.ToolExecutionMode.PARALLEL) {
+            batch = toolRunner.executeParallel(assistant, signal, onEvent);
         } else {
-            results = runner.executeSequential(assistant, signal, onEvent);
+            batch = toolRunner.executeSequential(assistant, signal, onEvent);
         }
 
-        // Add tool results to context
-        for (ToolResultMessage trm : results) {
-            context.messages().add(trm);
+        context.addMessages(batch.messages());
+        for (ToolResultMessage trm : batch.messages()) {
+            onEvent.accept(new MessageStart(trm));
+            onEvent.accept(new MessageEnd(trm));
         }
 
-        return results;
+        return batch;
     }
 
-    /**
-     * Check if loop should terminate based on assistant state.
-     */
-    private boolean shouldTerminateLoop(AssistantMessage assistant, List<ToolResultMessage> toolResults) {
-        // Stop on error/abort
-        if (assistant.stopReason() == StopReason.ERROR || assistant.stopReason() == StopReason.ABORTED) {
-            log.debug("Loop terminating due to stop reason: {}", assistant.stopReason());
-            return true;
-        }
-        
-        // Continue if there were tool calls
-        if (!toolResults.isEmpty()) {
-            return false;
-        }
-        
-        // No tool calls and no error - normal termination
-        return true;
-    }
-
-    /**
-     * Drain and emit messages from a drainer, returning true if messages were injected.
-     */
-    private boolean drainAndEmitMessages(AgentLoopConfig.MessageDrainer drainer, Consumer<AgentEvent> onEvent) {
-        if (drainer == null) return false;
-        
+    private List<Message> drainMessages(AgentLoopConfig.MessageDrainer drainer) {
+        if (drainer == null) return List.of();
         List<Message> messages = drainer.drain();
-        if (messages == null || messages.isEmpty()) return false;
-        
-        addMessagesToContext(messages, onEvent);
-        return true;
+        return (messages == null || messages.isEmpty()) ? List.of() : messages;
     }
 
-    /**
-     * Get tool definitions in provider format.
-     */
+    private void applySnapshot(AgentLoopConfig.NextTurnSnapshot snapshot) {
+        streamAccumulator.updateConfig(snapshot.model(), snapshot.thinkingLevel(), snapshot.temperature());
+        log.debug("Applied NextTurnSnapshot: model={}, thinking={}, temp={}",
+                snapshot.model(), snapshot.thinkingLevel(), snapshot.temperature());
+    }
+
     private List<Map<String, Object>> getToolDefs() {
         if (config.toolRegistry() != null) {
             return config.toolRegistry().toProviderFormat();
@@ -331,114 +407,10 @@ public class AgentLoop {
         return List.of();
     }
 
-    /**
-     * Retry decision record.
-     */
     private record RetryDecision(
             boolean shouldRetry,
             int newRetryCount,
             double delaySeconds,
             List<Map<String, Object>> updatedMessages
     ) {}
-
-    /**
-     * Stream LLM response and accumulate into assistant message builder.
-     * Optimized to avoid building intermediate AssistantMessage objects on every delta.
-     */
-    private void streamAssistant(
-            List<Map<String, Object>> llmMessages,
-            List<Map<String, Object>> toolDefs,
-            ProviderAuth auth,
-            AtomicBoolean signal,
-            AssistantMessageRef ref) {
-
-        StringBuilder textBuf = new StringBuilder();
-        Map<String, Map<String, Object>> toolBuffers = new LinkedHashMap<>();
-        String errorMessage = null;
-
-        Iterator<StreamEvent> stream = config.streamFn().stream(
-                config.model(), llmMessages, toolDefs,
-                context.systemPrompt(),
-                config.thinkingLevel(), config.temperature(), config.maxTokens(),
-                signal, auth);
-
-        while (stream.hasNext()) {
-            StreamEvent evt = stream.next();
-            switch (evt) {
-                case StreamTextDelta td -> {
-                    textBuf.append(td.text());
-                    if (ref.eventConsumer != null) {
-                        ref.collectedEvents.add(new MessageUpdate(
-                                ref.builder.build(),
-                                new AgentEvent.MessageDelta.TextDelta(td.text())));
-                    }
-                }
-                case StreamThinkingDelta thd -> {
-                    if (ref.eventConsumer != null) {
-                        ref.collectedEvents.add(new MessageUpdate(
-                                ref.builder.build(),
-                                new AgentEvent.MessageDelta.ThinkingDelta(thd.text())));
-                    }
-                }
-                case StreamToolCallStart tcs -> {
-                    Map<String, Object> slot = new LinkedHashMap<>();
-                    slot.put("id", tcs.id());
-                    slot.put("name", tcs.name());
-                    slot.put("args", Map.of());
-                    toolBuffers.put(tcs.id(), slot);
-                    if (ref.eventConsumer != null) {
-                        ref.collectedEvents.add(new MessageUpdate(
-                                ref.builder.build(),
-                                new AgentEvent.MessageDelta.ToolCallDelta(tcs.id(), tcs.name(), null)));
-                    }
-                }
-                case StreamToolCallEnd tce -> {
-                    Map<String, Object> slot = toolBuffers.get(tce.id());
-                    if (slot != null) {
-                        slot.put("args", tce.arguments());
-                    }
-                }
-                case StreamMessageEnd sme -> {
-                    ref.builder.usage(new Usage(sme.inputTokens(), sme.outputTokens(), 0, 0));
-                    ref.builder.stopReason(StopReason.fromValue(sme.stopReason()));
-                }
-                case StreamError se -> {
-                    errorMessage = se.message();
-                    ref.builder.stopReason(StopReason.ERROR);
-                    if (se.retryable()) ref.builder.retryableError(true);
-                    if (se.overflow()) ref.builder.overflowError(true);
-                }
-                default -> {}
-            }
-        }
-
-        // Accumulate text and tool calls into builder
-        if (!textBuf.isEmpty()) {
-            ref.builder.addContent(new TextContent(textBuf.toString()));
-        }
-        for (Map<String, Object> slot : toolBuffers.values()) {
-            String id = (String) slot.get("id");
-            String name = (String) slot.get("name");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> args = (Map<String, Object>) slot.getOrDefault("args", Map.of());
-            ref.builder.addContent(new ToolCallContent(id, name != null ? name : "", args));
-        }
-        if (errorMessage != null) {
-            ref.builder.errorMessage(errorMessage);
-        }
-    }
-
-    /**
-     * Mutable reference holder for assistant message construction during streaming.
-     */
-    private static class AssistantMessageRef {
-        final AssistantMessage.Builder builder;
-        final Consumer<AgentEvent> eventConsumer;
-        final List<AgentEvent> collectedEvents = new ArrayList<>();
-
-        AssistantMessageRef(AssistantMessage.Builder builder, Consumer<AgentEvent> eventConsumer) {
-            this.builder = builder;
-            this.eventConsumer = eventConsumer;
-        }
-    }
 }

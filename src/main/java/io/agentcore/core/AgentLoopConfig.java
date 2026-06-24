@@ -1,6 +1,9 @@
 package io.agentcore.core;
 
 import io.agentcore.extensions.HookTypes.*;
+import io.agentcore.tools.util.FileMutationQueue;
+import io.agentcore.core.Message.AssistantMessage;
+import io.agentcore.core.Message.ToolResultMessage;
 import io.agentcore.providers.AuthSource;
 import io.agentcore.providers.ModelInfo;
 import io.agentcore.providers.ProviderAuth;
@@ -9,7 +12,6 @@ import io.agentcore.tools.ToolRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 
 /**
  * Configuration snapshot passed into the agent loop.
@@ -35,57 +37,70 @@ public final class AgentLoopConfig {
         }
     }
 
+    /**
+     * Retry configuration: max attempts and exponential backoff parameters.
+     */
+    public record RetryConfig(int maxRetries, double baseDelay, double maxDelay) {
+        public static final RetryConfig DEFAULT = new RetryConfig(3, 1.0, 60.0);
+    }
+
+    /**
+     * Tool execution configuration: timeout, result size, and execution mode.
+     */
+    public record ToolConfig(Double timeout, int resultMaxChars, ToolExecutionMode execution) {
+        public static final ToolConfig DEFAULT = new ToolConfig(120.0, 4000, ToolExecutionMode.PARALLEL);
+    }
+
     // ── Required fields ────────────────────────────────────────
     private final ModelInfo model;
     private final StreamFunction streamFn;
     private final ConvertToLlm convertToLlm;
     private final AuthResolver authResolver;
 
+    // ── Sub-configs (grouped by concern) ───────────────────────
+    private final RetryConfig retryConfig;
+    private final ToolConfig toolConfig;
+
     // ── Optional fields ────────────────────────────────────────
     private final TransformContext transformContext;
     private final String thinkingLevel;
-    private final ToolExecutionMode toolExecution;
     private final Double temperature;
     private final Integer maxTokens;
     private final ToolRegistry toolRegistry;
     private final BeforeToolCallHook beforeToolCall;
     private final AfterToolCallHook afterToolCall;
-    private final Double toolTimeout;
     private final Integer maxTurns;
-    private final int maxRetries;
-    private final double retryBaseDelay;
-    private final double retryMaxDelay;
-    private final int toolResultMaxChars;
     private final CompactCallback compactCallback;
-    private final Object mutationQueue;  // FileMutationQueue
+    private final FileMutationQueue mutationQueue;
     private final MessageDrainer getSteeringMessages;
     private final MessageDrainer getFollowUpMessages;
     private final HumanInputGate humanInputGate;
+    private final PrepareNextTurn prepareNextTurn;
+    private final ShouldStopAfterTurn shouldStopAfterTurn;
 
     private AgentLoopConfig(Builder b) {
         this.model = b.model;
         this.streamFn = b.streamFn;
         this.convertToLlm = b.convertToLlm;
         this.authResolver = b.authResolver;
+        this.retryConfig = new RetryConfig(b.maxRetries, b.retryBaseDelay, b.retryMaxDelay);
+        this.toolConfig = new ToolConfig(b.toolTimeout, b.toolResultMaxChars,
+                b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL);
         this.transformContext = b.transformContext;
         this.thinkingLevel = b.thinkingLevel != null ? b.thinkingLevel : "off";
-        this.toolExecution = b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL;
         this.temperature = b.temperature;
         this.maxTokens = b.maxTokens;
         this.toolRegistry = b.toolRegistry;
         this.beforeToolCall = b.beforeToolCall;
         this.afterToolCall = b.afterToolCall;
-        this.toolTimeout = b.toolTimeout != null ? b.toolTimeout : 120.0;
         this.maxTurns = b.maxTurns;
-        this.maxRetries = b.maxRetries;
-        this.retryBaseDelay = b.retryBaseDelay;
-        this.retryMaxDelay = b.retryMaxDelay;
-        this.toolResultMaxChars = b.toolResultMaxChars;
         this.compactCallback = b.compactCallback;
         this.mutationQueue = b.mutationQueue;
         this.getSteeringMessages = b.getSteeringMessages;
         this.getFollowUpMessages = b.getFollowUpMessages;
         this.humanInputGate = b.humanInputGate;
+        this.prepareNextTurn = b.prepareNextTurn;
+        this.shouldStopAfterTurn = b.shouldStopAfterTurn;
     }
 
     // ── Functional interfaces ──────────────────────────────────
@@ -158,6 +173,48 @@ public final class AgentLoopConfig {
         boolean compact(List<Message> messages);
     }
 
+    /**
+     * Callback invoked after each turn to allow dynamic config adjustment.
+     * Return null to keep current config, or a NextTurnSnapshot to update.
+     */
+    @FunctionalInterface
+    public interface PrepareNextTurn {
+        NextTurnSnapshot apply(TurnContext context);
+    }
+
+    /**
+     * Callback invoked after each turn to decide if the loop should stop.
+     * Return true to stop the agent loop.
+     */
+    @FunctionalInterface
+    public interface ShouldStopAfterTurn {
+        boolean apply(TurnContext context);
+    }
+
+    // ── Context/Snapshot records ───────────────────────────────
+
+    /**
+     * Context provided to both prepareNextTurn and shouldStopAfterTurn callbacks.
+     * Represents the completed turn's state including assistant response,
+     * tool results, and full message history.
+     */
+    public record TurnContext(
+            AssistantMessage message,
+            List<ToolResultMessage> toolResults,
+            List<Message> allMessages,
+            List<Message> newMessages
+    ) {}
+
+    /**
+     * Snapshot returned by prepareNextTurn to update config for the next turn.
+     * Null fields mean "keep current value".
+     */
+    public record NextTurnSnapshot(
+            ModelInfo model,
+            String thinkingLevel,
+            Double temperature
+    ) {}
+
     // ── Builder ────────────────────────────────────────────────
 
     public static Builder builder() { return new Builder(); }
@@ -173,23 +230,25 @@ public final class AgentLoopConfig {
         b.authResolver = this.authResolver;
         b.transformContext = this.transformContext;
         b.thinkingLevel = this.thinkingLevel;
-        b.toolExecution = this.toolExecution;
+        b.toolExecution = this.toolConfig.execution();
         b.temperature = this.temperature;
         b.maxTokens = this.maxTokens;
         b.toolRegistry = this.toolRegistry;
         b.beforeToolCall = this.beforeToolCall;
         b.afterToolCall = this.afterToolCall;
-        b.toolTimeout = this.toolTimeout;
+        b.toolTimeout = this.toolConfig.timeout();
         b.maxTurns = this.maxTurns;
-        b.maxRetries = this.maxRetries;
-        b.retryBaseDelay = this.retryBaseDelay;
-        b.retryMaxDelay = this.retryMaxDelay;
-        b.toolResultMaxChars = this.toolResultMaxChars;
+        b.maxRetries = this.retryConfig.maxRetries();
+        b.retryBaseDelay = this.retryConfig.baseDelay();
+        b.retryMaxDelay = this.retryConfig.maxDelay();
+        b.toolResultMaxChars = this.toolConfig.resultMaxChars();
         b.compactCallback = this.compactCallback;
         b.mutationQueue = this.mutationQueue;
         b.getSteeringMessages = this.getSteeringMessages;
         b.getFollowUpMessages = this.getFollowUpMessages;
         b.humanInputGate = this.humanInputGate;
+        b.prepareNextTurn = this.prepareNextTurn;
+        b.shouldStopAfterTurn = this.shouldStopAfterTurn;
         return b;
     }
 
@@ -213,10 +272,12 @@ public final class AgentLoopConfig {
         private double retryMaxDelay = 60.0;
         private int toolResultMaxChars = 4000;
         private CompactCallback compactCallback;
-        private Object mutationQueue;
+        private FileMutationQueue mutationQueue;
         private MessageDrainer getSteeringMessages;
         private MessageDrainer getFollowUpMessages;
         private HumanInputGate humanInputGate;
+        private PrepareNextTurn prepareNextTurn;
+        private ShouldStopAfterTurn shouldStopAfterTurn;
 
         public Builder model(ModelInfo v) { this.model = v; return this; }
         public Builder streamFn(StreamFunction v) { this.streamFn = v; return this; }
@@ -238,16 +299,44 @@ public final class AgentLoopConfig {
         public Builder retryMaxDelay(double v) { this.retryMaxDelay = v; return this; }
         public Builder toolResultMaxChars(int v) { this.toolResultMaxChars = v; return this; }
         public Builder compactCallback(CompactCallback v) { this.compactCallback = v; return this; }
-        public Builder mutationQueue(Object v) { this.mutationQueue = v; return this; }
+        public Builder mutationQueue(FileMutationQueue v) { this.mutationQueue = v; return this; }
         public Builder getSteeringMessages(MessageDrainer v) { this.getSteeringMessages = v; return this; }
         public Builder getFollowUpMessages(MessageDrainer v) { this.getFollowUpMessages = v; return this; }
         public Builder humanInputGate(HumanInputGate v) { this.humanInputGate = v; return this; }
+        public Builder prepareNextTurn(PrepareNextTurn v) { this.prepareNextTurn = v; return this; }
+        public Builder shouldStopAfterTurn(ShouldStopAfterTurn v) { this.shouldStopAfterTurn = v; return this; }
+
+        /**
+         * Set all retry parameters from a RetryConfig (preferred over individual setters).
+         */
+        public Builder retryConfig(RetryConfig c) {
+            this.maxRetries = c.maxRetries();
+            this.retryBaseDelay = c.baseDelay();
+            this.retryMaxDelay = c.maxDelay();
+            return this;
+        }
+
+        /**
+         * Set all tool parameters from a ToolConfig (preferred over individual setters).
+         */
+        public Builder toolConfig(ToolConfig c) {
+            this.toolTimeout = c.timeout();
+            this.toolResultMaxChars = c.resultMaxChars();
+            this.toolExecution = c.execution();
+            return this;
+        }
 
         public AgentLoopConfig build() {
             if (model == null) throw new IllegalStateException("model is required");
             if (streamFn == null) throw new IllegalStateException("streamFn is required");
             if (convertToLlm == null) throw new IllegalStateException("convertToLlm is required");
             if (authResolver == null) throw new IllegalStateException("authResolver is required");
+            if (maxRetries < 0) throw new IllegalStateException("maxRetries must be >= 0, got " + maxRetries);
+            if (maxTurns != null && maxTurns <= 0) throw new IllegalStateException("maxTurns must be > 0, got " + maxTurns);
+            if (toolTimeout != null && toolTimeout <= 0) throw new IllegalStateException("toolTimeout must be > 0, got " + toolTimeout);
+            if (retryBaseDelay <= 0) throw new IllegalStateException("retryBaseDelay must be > 0, got " + retryBaseDelay);
+            if (retryMaxDelay < retryBaseDelay) throw new IllegalStateException("retryMaxDelay must be >= retryBaseDelay");
+            if (toolResultMaxChars < 0) throw new IllegalStateException("toolResultMaxChars must be >= 0, got " + toolResultMaxChars);
             return new AgentLoopConfig(this);
         }
     }
@@ -260,21 +349,43 @@ public final class AgentLoopConfig {
     public AuthResolver authResolver() { return authResolver; }
     public TransformContext transformContext() { return transformContext; }
     public String thinkingLevel() { return thinkingLevel; }
-    public ToolExecutionMode toolExecution() { return toolExecution; }
     public Double temperature() { return temperature; }
     public Integer maxTokens() { return maxTokens; }
     public ToolRegistry toolRegistry() { return toolRegistry; }
     public BeforeToolCallHook beforeToolCall() { return beforeToolCall; }
     public AfterToolCallHook afterToolCall() { return afterToolCall; }
-    public Double toolTimeout() { return toolTimeout; }
     public Integer maxTurns() { return maxTurns; }
-    public int maxRetries() { return maxRetries; }
-    public double retryBaseDelay() { return retryBaseDelay; }
-    public double retryMaxDelay() { return retryMaxDelay; }
-    public int toolResultMaxChars() { return toolResultMaxChars; }
     public CompactCallback compactCallback() { return compactCallback; }
-    public Object mutationQueue() { return mutationQueue; }
+    public FileMutationQueue mutationQueue() { return mutationQueue; }
     public MessageDrainer getSteeringMessages() { return getSteeringMessages; }
     public MessageDrainer getFollowUpMessages() { return getFollowUpMessages; }
     public HumanInputGate humanInputGate() { return humanInputGate; }
+    public PrepareNextTurn prepareNextTurn() { return prepareNextTurn; }
+    public ShouldStopAfterTurn shouldStopAfterTurn() { return shouldStopAfterTurn; }
+
+    // ── Sub-config getters (preferred) ─────────────────────────
+
+    public RetryConfig retryConfig() { return retryConfig; }
+    public ToolConfig toolConfig() { return toolConfig; }
+
+    // ── Convenience getters (delegate to sub-configs) ──────────
+
+    /** @deprecated Use {@code toolConfig().execution()} instead */
+    @Deprecated
+    public ToolExecutionMode toolExecution() { return toolConfig.execution(); }
+    /** @deprecated Use {@code toolConfig().timeout()} instead */
+    @Deprecated
+    public Double toolTimeout() { return toolConfig.timeout(); }
+    /** @deprecated Use {@code toolConfig().resultMaxChars()} instead */
+    @Deprecated
+    public int toolResultMaxChars() { return toolConfig.resultMaxChars(); }
+    /** @deprecated Use {@code retryConfig().maxRetries()} instead */
+    @Deprecated
+    public int maxRetries() { return retryConfig.maxRetries(); }
+    /** @deprecated Use {@code retryConfig().baseDelay()} instead */
+    @Deprecated
+    public double retryBaseDelay() { return retryConfig.baseDelay(); }
+    /** @deprecated Use {@code retryConfig().maxDelay()} instead */
+    @Deprecated
+    public double retryMaxDelay() { return retryConfig.maxDelay(); }
 }

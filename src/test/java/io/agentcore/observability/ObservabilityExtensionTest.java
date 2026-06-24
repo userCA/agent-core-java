@@ -47,7 +47,7 @@ class ObservabilityExtensionTest {
         ObservabilityExtension ext = new ObservabilityExtension("s2", "", "", sink);
 
         ext.onEvent(new ToolExecutionStart("tc1", "bash", Map.of("command", "ls")));
-        ext.onEvent(new ToolExecutionEnd("tc1", "bash", "output", false));
+        ext.onEvent(new ToolExecutionEnd("tc1", "bash", new io.agentcore.tools.ToolResult("output"), false));
 
         assertEquals("agent.tool_call.start", sink.eventTypes.get(0));
         assertEquals("agent.tool_call.end", sink.eventTypes.get(1));

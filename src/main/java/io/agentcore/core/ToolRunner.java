@@ -1,6 +1,5 @@
 package io.agentcore.core;
 
-import io.agentcore.core.Content.TextContent;
 import io.agentcore.core.Content.ToolCallContent;
 import io.agentcore.core.Message.AssistantMessage;
 import io.agentcore.core.Message.ToolResultMessage;
@@ -9,6 +8,7 @@ import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolRegistry;
 import io.agentcore.tools.ToolResult;
+import io.agentcore.tools.util.FileMutationQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,111 +18,164 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.concurrent.StructuredTaskScope;
 
 /**
  * Tool execution engine — dispatches tool calls, manages hooks and error handling.
  *
- * <p>Mirrors Python {@code agent_core/core/tool_runner.py}.
- * Supports sequential and parallel execution modes.
+ * <p>Supports sequential and parallel execution modes.
+ * Hooks are resolved dynamically via {@link #updateHooks} to allow
+ * runtime hook registration (e.g. extensions added after construction).
  */
-public class ToolRunner {
+public class ToolRunner implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(ToolRunner.class);
+    private static final long SHUTDOWN_TIMEOUT_SECONDS = 5;
+
+    /** Shared ToolResult for interrupted tool executions (avoids per-call allocation). */
+    private static final ToolResult INTERRUPTED_RESULT = new ToolResult("Tool execution interrupted");
 
     /**
      * Result of executing one tool call.
+     *
+     * @param terminate true if this tool requested loop termination
+     *                  (via {@link ToolContext#requestTerminate()} or after-hook override)
      */
     public record ToolCallResult(
             String toolCallId,
             String toolName,
             ToolResult result,
-            boolean isError
+            boolean isError,
+            boolean terminate
+    ) {}
+
+    /**
+     * Result of executing a batch of tool calls.
+     *
+     * <p>{@code terminate} is true when <b>all</b> tool results in the batch
+     * have their individual {@code terminate} flag set. This "unanimous consent"
+     * strategy prevents a single tool from accidentally stopping the loop when
+     * other tools expect to continue.
+     *
+     * @param messages  tool result messages
+     * @param terminate true if ALL tool results requested termination
+     */
+    public record ToolBatchResult(
+            List<ToolResultMessage> messages,
+            boolean terminate
     ) {}
 
     private final ToolRegistry registry;
     private final Double defaultTimeout;
-    private final AgentLoopConfig.BeforeToolCallHook beforeToolCall;
-    private final AgentLoopConfig.AfterToolCallHook afterToolCall;
+    private final int toolResultMaxChars;
+    private final FileMutationQueue mutationQueue;
+    private final ExecutorService executor;
 
-    public ToolRunner(ToolRegistry registry, Double defaultTimeout,
+    // Volatile hooks — resolved at execution time, not construction time.
+    // This allows Agent to update hooks dynamically (e.g. after adding extensions).
+    private volatile AgentLoopConfig.BeforeToolCallHook beforeToolCall;
+    private volatile AgentLoopConfig.AfterToolCallHook afterToolCall;
+
+    // Human-in-the-loop gate — allows tools to pause for user input.
+    // Set via updateHumanInputGate() when the config has a gate configured.
+    private volatile HumanInputGate humanInputGate;
+
+    /**
+     * Create a ToolRunner from a ToolConfig sub-config (preferred).
+     */
+    public ToolRunner(ToolRegistry registry, AgentLoopConfig.ToolConfig toolConfig,
+                      FileMutationQueue mutationQueue,
                       AgentLoopConfig.BeforeToolCallHook beforeToolCall,
                       AgentLoopConfig.AfterToolCallHook afterToolCall) {
         this.registry = registry;
-        this.defaultTimeout = defaultTimeout;
+        this.defaultTimeout = toolConfig != null ? toolConfig.timeout() : null;
+        this.toolResultMaxChars = toolConfig != null ? toolConfig.resultMaxChars() : 4000;
+        this.mutationQueue = mutationQueue;
+        this.beforeToolCall = beforeToolCall;
+        this.afterToolCall = afterToolCall;
+        this.executor = Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    /**
+     * Update hooks dynamically. Called by Agent before each runLoop iteration
+     * to ensure the latest extension hooks are resolved.
+     */
+    public void updateHooks(AgentLoopConfig.BeforeToolCallHook beforeToolCall,
+                            AgentLoopConfig.AfterToolCallHook afterToolCall) {
         this.beforeToolCall = beforeToolCall;
         this.afterToolCall = afterToolCall;
     }
 
-    public ToolRunner(ToolRegistry registry, Double defaultTimeout) {
-        this(registry, defaultTimeout, null, null);
-    }
-
-    public ToolRunner(ToolRegistry registry) {
-        this(registry, null, null, null);
+    /**
+     * Set the human-input gate for HITL (Human-in-the-Loop) support.
+     * When set, tools that throw {@link HumanInputGate.RequiresHumanInput} will
+     * pause execution, emit a HumanInputRequired event, and resume when input arrives.
+     */
+    public void updateHumanInputGate(HumanInputGate gate) {
+        this.humanInputGate = gate;
     }
 
     /**
      * Execute all tool calls from an assistant message sequentially.
-     *
-     * @param assistant  the assistant message containing tool calls
-     * @param signal     abort signal (nullable)
-     * @param onEvent    callback for emitting events (ToolExecutionStart, End, etc.)
-     * @return list of tool result messages
      */
-    public List<ToolResultMessage> executeSequential(
+    public ToolBatchResult executeSequential(
             AssistantMessage assistant,
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent) {
 
         List<ToolCallContent> calls = assistant.toolCalls();
-        if (calls.isEmpty()) return List.of();
+        if (calls.isEmpty()) return new ToolBatchResult(List.of(), false);
 
         List<ToolResultMessage> results = new ArrayList<>();
+        boolean allTerminate = true;
 
         for (ToolCallContent tc : calls) {
-            // Emit start event
+            // Check abort signal before each tool
+            if (signal != null && signal.get()) {
+                log.debug("Sequential execution aborted by signal");
+                break;
+            }
+
             if (onEvent != null) {
                 onEvent.accept(new AgentEvent.ToolExecutionStart(
                         tc.id(), tc.name(), tc.arguments()));
             }
 
-            ToolCallResult callResult = runSingleTool(tc, signal, null);
+            ToolCallResult callResult = runSingleTool(tc, signal, null, onEvent);
 
-            // Emit end event
             if (onEvent != null) {
                 onEvent.accept(new AgentEvent.ToolExecutionEnd(
                         tc.id(), tc.name(), callResult.result(), callResult.isError()));
             }
 
-            // Create tool result message
-            ToolResultMessage msg = new ToolResultMessage(
-                    tc.id(),
-                    tc.name(),
-                    callResult.result().content(),
+            results.add(new ToolResultMessage(
+                    tc.id(), tc.name(),
+                    truncateContent(callResult.result().content()),
                     callResult.isError(),
-                    System.currentTimeMillis() / 1000.0
-            );
-            results.add(msg);
+                    Message.nowEpochSeconds()
+            ));
+            if (!callResult.terminate()) allTerminate = false;
+
+            // Early-terminate: stop executing remaining tools
+            if (callResult.terminate()) {
+                log.debug("Sequential execution stopped early: tool '{}' requested terminate", tc.name());
+                break;
+            }
         }
 
-        return results;
+        return new ToolBatchResult(results, !results.isEmpty() && allTerminate);
     }
 
     /**
-     * Execute all tool calls in parallel using virtual threads.
-     *
-     * @param assistant  the assistant message containing tool calls
-     * @param signal     abort signal (nullable)
-     * @param onEvent    callback for emitting events
-     * @return list of tool result messages
+     * Execute all tool calls in parallel using StructuredTaskScope (Java 21+).
      */
-    public List<ToolResultMessage> executeParallel(
+    public ToolBatchResult executeParallel(
             AssistantMessage assistant,
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent) {
 
         List<ToolCallContent> calls = assistant.toolCalls();
-        if (calls.isEmpty()) return List.of();
+        if (calls.isEmpty()) return new ToolBatchResult(List.of(), false);
 
         // Emit all start events first
         if (onEvent != null) {
@@ -132,37 +185,35 @@ public class ToolRunner {
             }
         }
 
-        // Run in parallel using virtual threads via ExecutorService
+        // Run in parallel using StructuredTaskScope for lifecycle safety
         ToolCallResult[] results = new ToolCallResult[calls.size()];
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<?>> futures = new ArrayList<>(calls.size());
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            List<StructuredTaskScope.Subtask<Integer>> subtasks = new ArrayList<>(calls.size());
             for (int i = 0; i < calls.size(); i++) {
                 final int idx = i;
                 final ToolCallContent tc = calls.get(i);
-                futures.add(executor.submit(() -> {
-                    results[idx] = runSingleTool(tc, signal, null);
+                subtasks.add(scope.fork(() -> {
+                    results[idx] = runSingleTool(tc, signal, null, onEvent);
+                    return idx;
                 }));
             }
-            // Wait for all tasks
-            for (Future<?> f : futures) {
-                try {
-                    f.get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } catch (ExecutionException e) {
-                    log.warn("Parallel tool execution failed", e.getCause());
-                }
-            }
+            scope.join();
+            scope.throwIfFailed();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.debug("Parallel tool execution interrupted");
+        } catch (Exception e) {
+            log.warn("Parallel tool execution failed", e);
         }
 
         // Emit end events and build messages
         List<ToolResultMessage> messages = new ArrayList<>();
+        boolean allTerminate = true;
         for (int i = 0; i < calls.size(); i++) {
             ToolCallContent tc = calls.get(i);
             ToolCallResult cr = results[i];
             if (cr == null) {
-                cr = new ToolCallResult(tc.id(), tc.name(),
-                        new ToolResult("Tool execution interrupted"), true);
+                cr = new ToolCallResult(tc.id(), tc.name(), INTERRUPTED_RESULT, true, false);
             }
 
             if (onEvent != null) {
@@ -171,37 +222,70 @@ public class ToolRunner {
             }
 
             messages.add(new ToolResultMessage(
-                    tc.id(), tc.name(), cr.result().content(), cr.isError(),
-                    System.currentTimeMillis() / 1000.0));
+                    tc.id(), tc.name(), truncateContent(cr.result().content()), cr.isError(),
+                    Message.nowEpochSeconds()));
+            if (!cr.terminate()) allTerminate = false;
         }
 
-        return messages;
+        return new ToolBatchResult(messages, !messages.isEmpty() && allTerminate);
     }
 
-    // ── Single tool execution ────────────────────────────────
+    // ── Three-stage tool pipeline ──────────────────────────
 
-    private ToolCallResult runSingleTool(
-            ToolCallContent tc,
-            AtomicBoolean signal,
-            Consumer<ToolResult> onUpdate) {
+    /**
+     * Result of the prepare stage: resolved tool, possibly mutated args, or a block.
+     */
+    private record PreparedToolCall(
+            Tool tool,
+            ToolCallContent toolCall,
+            Map<String, Object> arguments,
+            Double effectiveTimeout,
+            ToolCallResult blockedResult  // non-null if the call was blocked by before-hook
+    ) {
+        boolean isBlocked() { return blockedResult != null; }
+    }
 
+    /**
+     * Result of the execute stage: raw tool result, error flag, and terminate signal.
+     */
+    private record RawToolResult(
+            ToolResult result,
+            boolean isError,
+            boolean terminate
+    ) {}
+
+    /**
+     * Stage 1: Prepare — resolve tool, apply prepareArguments + before-hook, compute timeout.
+     */
+    private PreparedToolCall prepareToolCall(ToolCallContent tc) {
         Tool tool = registry.get(tc.name());
         if (tool == null) {
-            return new ToolCallResult(tc.id(), tc.name(),
-                    new ToolResult("Tool '" + tc.name() + "' not found."), true);
+            return new PreparedToolCall(null, tc, null, null,
+                    new ToolCallResult(tc.id(), tc.name(),
+                            new ToolResult("Tool '" + tc.name() + "' not found."), true, false));
+        }
+
+        Map<String, Object> args = tc.arguments();
+
+        // prepareArguments hook on the tool itself
+        try {
+            args = tool.prepareArguments(args);
+        } catch (Exception e) {
+            log.warn("prepareArguments hook failed for '{}', using raw args", tc.name(), e);
         }
 
         // Before hook (typed)
-        Map<String, Object> args = tc.arguments();
-        if (beforeToolCall != null) {
+        AgentLoopConfig.BeforeToolCallHook hook = this.beforeToolCall;
+        if (hook != null) {
             try {
                 ToolCallContext hookCtx = new ToolCallContext(tc, args);
-                ToolCallHookResult hookResult = beforeToolCall.apply(hookCtx);
+                ToolCallHookResult hookResult = hook.apply(hookCtx);
                 if (hookResult != null) {
                     switch (hookResult) {
                         case ToolCallHookResult.Block b -> {
-                            return new ToolCallResult(tc.id(), tc.name(),
-                                    new ToolResult(b.reason()), true);
+                            return new PreparedToolCall(null, tc, null, null,
+                                    new ToolCallResult(tc.id(), tc.name(),
+                                            new ToolResult(b.reason()), true, false));
                         }
                         case ToolCallHookResult.Proceed p -> {
                             if (p.mutatedArguments() != null) {
@@ -218,19 +302,38 @@ public class ToolRunner {
             }
         }
 
-        // Determine effective timeout
         Double effectiveTimeout = tool.definition().timeoutSeconds();
         if (effectiveTimeout == null) effectiveTimeout = defaultTimeout;
 
-        // Execute with optional timeout enforcement
-        ToolContext ctx = new ToolContext(signal, onUpdate, Map.of(), null);
+        return new PreparedToolCall(tool, tc, args, effectiveTimeout, null);
+    }
+
+    /**
+     * Stage 2: Execute — run the tool with optional timeout, capture terminate signal.
+     */
+    private RawToolResult executePreparedToolCall(
+            PreparedToolCall prepared,
+            AtomicBoolean signal,
+            Consumer<ToolResult> onUpdate) {
+
+        Tool tool = prepared.tool();
+        ToolCallContent tc = prepared.toolCall();
+        Map<String, Object> args = prepared.arguments();
+
+        // Create terminate signal channel for the tool to use
+        AtomicBoolean terminateSignal = new AtomicBoolean(false);
+        ToolContext ctx = new ToolContext(signal, onUpdate, Map.of(), mutationQueue, terminateSignal);
+
         ToolResult result;
         boolean isError;
 
+        Double effectiveTimeout = prepared.effectiveTimeout();
         if (effectiveTimeout != null && effectiveTimeout > 0) {
             try {
                 result = executeWithTimeout(tool, tc.id(), args, ctx, effectiveTimeout);
                 isError = false;
+            } catch (HumanInputGate.RequiresHumanInput e) {
+                throw e;  // Propagate to runSingleTool for HITL handling
             } catch (TimeoutException e) {
                 result = new ToolResult("Tool '" + tc.name() + "' timed out after "
                         + Math.round(effectiveTimeout) + "s");
@@ -243,51 +346,216 @@ public class ToolRunner {
             try {
                 result = tool.execute(tc.id(), args, ctx);
                 isError = false;
+            } catch (HumanInputGate.RequiresHumanInput e) {
+                throw e;  // Propagate to runSingleTool for HITL handling
             } catch (Exception e) {
                 result = new ToolResult(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
                 isError = true;
             }
         }
 
-        // After hook (typed)
-        if (afterToolCall != null) {
+        // Read terminate signal from the tool's context
+        boolean terminate = terminateSignal.get();
+        return new RawToolResult(result, isError, terminate);
+    }
+
+    /**
+     * Stage 3: Finalize — apply after-hook (may override terminate), produce final result.
+     */
+    private ToolCallResult finalizeToolCall(
+            PreparedToolCall prepared,
+            RawToolResult rawResult) {
+
+        ToolCallContent tc = prepared.toolCall();
+        Map<String, Object> args = prepared.arguments();
+        ToolResult result = rawResult.result();
+        boolean isError = rawResult.isError();
+        boolean terminate = rawResult.terminate();
+
+        // After hook (typed) — may override content, details, isError, and terminate
+        AgentLoopConfig.AfterToolCallHook hook = this.afterToolCall;
+        if (hook != null) {
             try {
                 AfterToolCallContext hookCtx = new AfterToolCallContext(tc, args, result, isError);
-                AfterToolCallHookResult hookResult = afterToolCall.apply(hookCtx);
+                AfterToolCallHookResult hookResult = hook.apply(hookCtx);
                 if (hookResult instanceof AfterToolCallHookResult.ModifyResult mr) {
-                    result = new ToolResult(mr.content());
+                    var newContent = mr.content() != null ? mr.content() : result.content();
+                    var newDetails = mr.details() != null ? mr.details() : result.details();
+                    result = new ToolResult(newContent, newDetails, result.display());
+                    if (mr.isError() != null) isError = mr.isError();
+                    if (mr.terminate() != null) terminate = mr.terminate();
                 }
             } catch (Exception e) {
                 log.warn("After-tool-call hook failure", e);
             }
         }
 
-        return new ToolCallResult(tc.id(), tc.name(), result, isError);
+        return new ToolCallResult(tc.id(), tc.name(), result, isError, terminate);
     }
 
     /**
-     * Execute a tool with a timeout using a virtual thread + Future.
+     * Run the full three-stage pipeline for a single tool call.
+     * Handles HumanInputRequired (HITL) by emitting event, blocking on gate, and re-executing.
+     */
+    private ToolCallResult runSingleTool(
+            ToolCallContent tc,
+            AtomicBoolean signal,
+            Consumer<ToolResult> onUpdate) {
+        return runSingleTool(tc, signal, onUpdate, null);
+    }
+
+    /**
+     * Run the full three-stage pipeline for a single tool call, with event consumer for HITL.
+     */
+    private ToolCallResult runSingleTool(
+            ToolCallContent tc,
+            AtomicBoolean signal,
+            Consumer<ToolResult> onUpdate,
+            Consumer<AgentEvent> onEvent) {
+
+        // Stage 1: Prepare
+        PreparedToolCall prepared = prepareToolCall(tc);
+        if (prepared.isBlocked()) return prepared.blockedResult();
+
+        // Stage 2: Execute (with HITL handling)
+        try {
+            RawToolResult rawResult = executePreparedToolCall(prepared, signal, onUpdate);
+            // Stage 3: Finalize
+            return finalizeToolCall(prepared, rawResult);
+        } catch (HumanInputGate.RequiresHumanInput e) {
+            return handleHumanInput(tc, prepared, signal, onUpdate, onEvent, e);
+        }
+    }
+
+    /**
+     * Handle RequiresHumanInput: emit event, block on gate, re-execute with provided input.
+     */
+    private ToolCallResult handleHumanInput(
+            ToolCallContent tc,
+            PreparedToolCall prepared,
+            AtomicBoolean signal,
+            Consumer<ToolResult> onUpdate,
+            Consumer<AgentEvent> onEvent,
+            HumanInputGate.RequiresHumanInput e) {
+
+        HumanInputGate gate = this.humanInputGate;
+        if (gate == null) {
+            log.warn("RequiresHumanInput thrown but no HumanInputGate configured");
+            return new ToolCallResult(tc.id(), tc.name(),
+                    new ToolResult("Human input required but no input channel configured"), true, false);
+        }
+
+        // Emit HumanInputRequired event
+        if (onEvent != null) {
+            onEvent.accept(new AgentEvent.HumanInputRequired(
+                    tc.id(), e.prompt(), e.inputSchema()));
+        }
+
+        // Block until input arrives (virtual thread friendly)
+        try {
+            java.util.concurrent.CompletableFuture<Map<String, Object>> future = gate.requireInput(tc.id());
+            Map<String, Object> input = future.get();
+            log.debug("Human input received for tool call {}", tc.id());
+
+            // Merge user input into arguments and re-execute
+            Map<String, Object> mergedArgs = new java.util.LinkedHashMap<>(prepared.arguments());
+            mergedArgs.putAll(input);
+            mergedArgs.put("_user_input", input);  // Signal for HumanInputTool re-execution path
+
+            PreparedToolCall retryPrepared = new PreparedToolCall(
+                    prepared.tool(), tc, mergedArgs, prepared.effectiveTimeout(), null);
+            RawToolResult rawResult = executePreparedToolCall(retryPrepared, signal, onUpdate);
+            return finalizeToolCall(retryPrepared, rawResult);
+        } catch (java.util.concurrent.CancellationException ce) {
+            return new ToolCallResult(tc.id(), tc.name(),
+                    new ToolResult("Human input request was cancelled"), true, false);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return new ToolCallResult(tc.id(), tc.name(), INTERRUPTED_RESULT, true, false);
+        } catch (Exception ex) {
+            log.warn("Human input handling failed for tool call {}", tc.id(), ex);
+            return new ToolCallResult(tc.id(), tc.name(),
+                    new ToolResult("Human input handling failed: " + ex.getMessage()), true, false);
+        }
+    }
+
+    /**
+     * Execute a tool with a timeout using the shared virtual thread executor.
      */
     private ToolResult executeWithTimeout(Tool tool, String callId,
                                            Map<String, Object> args, ToolContext ctx,
                                            double timeoutSeconds) throws Exception {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<ToolResult> future = executor.submit(() -> tool.execute(callId, args, ctx));
-            try {
-                return future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
-            } catch (TimeoutException e) {
-                future.cancel(true);
-                throw e;
-            } catch (ExecutionException e) {
-                future.cancel(true);
-                Throwable cause = e.getCause();
-                if (cause instanceof Exception ex) throw ex;
-                throw new RuntimeException(cause);
-            } catch (InterruptedException e) {
-                future.cancel(true);
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("Tool execution interrupted", e);
+        Future<ToolResult> future = executor.submit(() -> tool.execute(callId, args, ctx));
+        try {
+            return future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw e;
+        } catch (ExecutionException e) {
+            future.cancel(true);
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception ex) throw ex;
+            throw new RuntimeException(cause);
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Tool execution interrupted", e);
+        }
+    }
+
+    @Override
+    public void close() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                log.warn("ToolRunner executor did not terminate within {}s, forcing shutdown",
+                        SHUTDOWN_TIMEOUT_SECONDS);
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * Truncate tool result content to stay within {@code toolResultMaxChars}.
+     * Only truncates TextContent blocks; other content types pass through unchanged.
+     */
+    private List<Content> truncateContent(List<Content> content) {
+        if (toolResultMaxChars <= 0 || content == null) return content;
+
+        int totalChars = 0;
+        boolean needsTruncation = false;
+        for (var c : content) {
+            if (c instanceof Content.TextContent tc) {
+                totalChars += tc.text().length();
+                if (totalChars > toolResultMaxChars) { needsTruncation = true; break; }
             }
         }
+        if (!needsTruncation) return content;
+
+        List<Content> truncated = new ArrayList<>();
+        int used = 0;
+        for (var c : content) {
+            if (c instanceof Content.TextContent tc) {
+                int remaining = toolResultMaxChars - used;
+                if (remaining <= 0) {
+                    truncated.add(new Content.TextContent("[truncated]"));
+                    break;
+                }
+                String text = tc.text();
+                if (text.length() > remaining) {
+                    truncated.add(new Content.TextContent(
+                            text.substring(0, remaining) + "\n[truncated " + (text.length() - remaining) + " chars]"));
+                    break;
+                }
+                truncated.add(c);
+                used += text.length();
+            } else {
+                truncated.add(c);
+            }
+        }
+        return truncated;
     }
 }

@@ -3,6 +3,8 @@ package io.agentcore.core;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
+import io.agentcore.tools.ToolResult;
+
 import java.util.List;
 import java.util.Map;
 
@@ -63,7 +65,7 @@ public sealed interface AgentEvent {
     ) implements AgentEvent {}
 
     record ToolExecutionEnd(
-        String toolCallId, String toolName, Object result, boolean isError
+        String toolCallId, String toolName, ToolResult result, boolean isError
     ) implements AgentEvent {}
 
     // ── Human-in-the-loop ──────────────────────────────────────

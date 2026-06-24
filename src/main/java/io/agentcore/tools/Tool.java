@@ -15,10 +15,23 @@ public interface Tool {
     ToolDefinition definition();
 
     /**
+     * Pre-process raw arguments before schema validation and execution.
+     *
+     * <p>Mirrors pi-mono {@code AgentTool.prepareArguments}.
+     * Override to normalize, coerce, or fill default values.
+     *
+     * @param raw the raw arguments parsed from the LLM output
+     * @return processed arguments (may be the same or a new map)
+     */
+    default Map<String, Object> prepareArguments(Map<String, Object> raw) {
+        return raw;
+    }
+
+    /**
      * Execute the tool with the given parameters.
      *
      * @param toolCallId unique ID for this tool call invocation
-     * @param params     parsed parameters from the LLM
+     * @param params     parsed parameters from the LLM (after prepareArguments)
      * @param ctx        execution context (signal, metadata, update callback)
      * @return the tool result
      * @throws Exception if execution fails

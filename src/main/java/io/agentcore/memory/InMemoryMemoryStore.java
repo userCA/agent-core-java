@@ -1,12 +1,12 @@
 package io.agentcore.memory;
 
+import io.agentcore.util.TextTokenizer;
+
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * In-memory {@link MemoryStore} with token-overlap ranking.
@@ -17,7 +17,8 @@ import java.util.stream.Collectors;
  */
 public class InMemoryMemoryStore implements MemoryStore {
 
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("\\w+");
+    /** Score multiplier for token overlap; recency index serves as tiebreaker. */
+    private static final long OVERLAP_WEIGHT = 1000L;
 
     private final ConcurrentHashMap<String, List<MemoryRecord>> store = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
@@ -51,7 +52,7 @@ public class InMemoryMemoryStore implements MemoryStore {
                 // Copy snapshot to release lock quickly
                 List<MemoryRecord> snapshot = new ArrayList<>(records);
 
-                Set<String> queryTokens = tokenize(query);
+                Set<String> queryTokens = TextTokenizer.tokenize(query);
                 if (queryTokens.isEmpty()) {
                     return List.<MemoryRecord>of();
                 }
@@ -60,11 +61,11 @@ public class InMemoryMemoryStore implements MemoryStore {
                 List<ScoredRecord> scored = new ArrayList<>();
                 for (int i = 0; i < snapshot.size(); i++) {
                     MemoryRecord rec = snapshot.get(i);
-                    Set<String> recTokens = tokenize(rec.text());
-                    int overlap = intersectionSize(queryTokens, recTokens);
+                    Set<String> recTokens = TextTokenizer.tokenize(rec.text());
+                    int overlap = TextTokenizer.intersectionSize(queryTokens, recTokens);
                     if (overlap > 0) {
                         // Score: overlap * 1000 + index (recency tiebreaker)
-                        scored.add(new ScoredRecord(rec, overlap * 1000L + i));
+                        scored.add(new ScoredRecord(rec, overlap * OVERLAP_WEIGHT + i));
                     }
                 }
 
@@ -72,7 +73,7 @@ public class InMemoryMemoryStore implements MemoryStore {
                 return scored.stream()
                         .limit(limit)
                         .map(s -> s.record)
-                        .collect(Collectors.toList());
+                        .toList();
             } finally {
                 lock.unlock();
             }
@@ -94,26 +95,6 @@ public class InMemoryMemoryStore implements MemoryStore {
     /** Returns the total number of records across all sessions. */
     public int size() {
         return store.values().stream().mapToInt(List::size).sum();
-    }
-
-    // ── Internals ──
-
-    private static Set<String> tokenize(String text) {
-        if (text == null || text.isBlank()) return Set.of();
-        return TOKEN_PATTERN.matcher(text.toLowerCase())
-                .results()
-                .map(mr -> mr.group())
-                .collect(Collectors.toSet());
-    }
-
-    private static int intersectionSize(Set<String> a, Set<String> b) {
-        Set<String> smaller = a.size() <= b.size() ? a : b;
-        Set<String> larger = a.size() <= b.size() ? b : a;
-        int count = 0;
-        for (String token : smaller) {
-            if (larger.contains(token)) count++;
-        }
-        return count;
     }
 
     private record ScoredRecord(MemoryRecord record, long score) {}

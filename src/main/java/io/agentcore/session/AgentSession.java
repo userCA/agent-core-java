@@ -1,6 +1,5 @@
 package io.agentcore.session;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.TextNode;
 
 import io.agentcore.compaction.CompactionResult;
@@ -30,10 +29,9 @@ import java.util.function.Consumer;
  *
  * <p>Mirrors Python {@code agent_core/session/session.py} AgentSession.
  */
-public class AgentSession {
+public class AgentSession implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(AgentSession.class);
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final int DEFAULT_CONTEXT_WINDOW = 128000;
 
@@ -134,7 +132,7 @@ public class AgentSession {
 
     public void continueSession(Consumer<AgentEvent> onEvent) {
         checkReady();
-        agent.continue_(onEvent, createCompactCallback());
+        agent.continueLoop(onEvent, createCompactCallback());
     }
 
     /**
@@ -161,6 +159,17 @@ public class AgentSession {
         agent.abort();
     }
 
+    /**
+     * Provide human input for a pending HITL request.
+     *
+     * @param toolCallId  the tool_call_id from the HumanInputRequired event
+     * @param values      the user-provided input values
+     * @return true if the input was accepted
+     */
+    public boolean provideHumanInput(String toolCallId, Map<String, Object> values) {
+        return agent.provideHumanInput(toolCallId, values);
+    }
+
     public void dispose() {
         if (closed) return;
         closed = true;
@@ -168,7 +177,13 @@ public class AgentSession {
             agentUnsub.run();
             agentUnsub = null;
         }
+        agent.close();
         store.close();
+    }
+
+    @Override
+    public void close() {
+        dispose();
     }
 
     // ── State ─────────────────────────────────────────────
@@ -191,27 +206,7 @@ public class AgentSession {
         return messages -> {
             try {
                 CompactionResult result = compactor.compact(messages, "overflow", null, null);
-                if (result.summary() != null && result.keptCount() > 0) {
-                    store.appendEntry(sessionId, new SessionEntry.CompactionEntry(
-                            "compaction-" + UUID.randomUUID(),
-                            result.summary(),
-                            result.firstKeptEntryId(),
-                            result.tokensBefore()
-                    ));
-
-                    Message summaryMsg = new CustomMessage(
-                            "compaction_summary", new TextNode(result.summary()),
-                            null, null, System.currentTimeMillis() / 1000.0);
-
-                    List<Message> kept = new ArrayList<>(
-                            messages.subList(messages.size() - result.keptCount(), messages.size()));
-                    List<Message> replacement = new ArrayList<>();
-                    replacement.add(summaryMsg);
-                    replacement.addAll(kept);
-                    agent.context().replaceMessages(replacement);
-                    return true;
-                }
-                return false;
+                return applyCompactionResult(messages, result);
             } catch (Exception e) {
                 log.warn("Overflow compaction failed for session {}: {}", sessionId, e.getMessage());
                 return false;
@@ -219,12 +214,42 @@ public class AgentSession {
         };
     }
 
+    /**
+     * Apply a compaction result: create summary message, replace context messages.
+     * Shared between overflow callback and threshold compaction.
+     */
+    private boolean applyCompactionResult(List<Message> messages, CompactionResult result) {
+        if (result.summary() != null && result.keptCount() > 0) {
+            if (!result.summary().isEmpty()) {
+                store.appendEntry(sessionId, new SessionEntry.CompactionEntry(
+                        "compaction-" + UUID.randomUUID(),
+                        result.summary(),
+                        result.firstKeptEntryId(),
+                        result.tokensBefore()
+                ));
+            }
+
+            Message summaryMsg = new CustomMessage(
+                    "compaction_summary", new TextNode(result.summary()),
+                    null, null, System.currentTimeMillis() / 1000.0);
+
+            List<Message> kept = new ArrayList<>(
+                    messages.subList(messages.size() - result.keptCount(), messages.size()));
+            List<Message> replacement = new ArrayList<>();
+            replacement.add(summaryMsg);
+            replacement.addAll(kept);
+            agent.context().replaceMessages(replacement);
+            return true;
+        }
+        return false;
+    }
+
     private void restoreMessages(SessionSnapshot snapshot) {
         List<Message> restored = new ArrayList<>();
         for (SessionEntry entry : snapshot.entries()) {
             if (entry instanceof SessionEntry.MessageEntry me && me.message() instanceof Map<?, ?> msgMap) {
                 try {
-                    Message msg = deserializeMessage(msgMap);
+                    Message msg = MessageSerializer.deserialize(msgMap);
                     if (msg != null) restored.add(msg);
                 } catch (Exception e) {
                     log.warn("Failed to restore message {} in session {}: {}",
@@ -233,7 +258,7 @@ public class AgentSession {
             }
         }
         if (!restored.isEmpty()) {
-            agent.context().messages().addAll(restored);
+            agent.context().addMessages(restored);
         }
     }
 
@@ -260,22 +285,20 @@ public class AgentSession {
     }
 
     private void persistMessage(Message message) {
-        Map<String, Object> msgData = serializeMessage(message);
+        Map<String, Object> msgData = MessageSerializer.serialize(message);
         store.appendEntry(sessionId, new SessionEntry.MessageEntry(
                 "msg-" + UUID.randomUUID(), msgData, null));
     }
 
     private void persistToolResult(ToolExecutionEnd tee) {
         String resultText = "";
-        if (tee.result() instanceof io.agentcore.tools.ToolResult tr) {
-            for (var c : tr.content()) {
+        if (tee.result() != null) {
+            for (var c : tee.result().content()) {
                 if (c instanceof Content.TextContent tc) {
                     resultText = tc.text();
                     break;
                 }
             }
-        } else if (tee.result() != null) {
-            resultText = tee.result().toString();
         }
 
         Map<String, Object> msgData = new LinkedHashMap<>();
@@ -293,135 +316,14 @@ public class AgentSession {
     private void maybeCompact() {
         if (compactor == null) return;
         try {
-            List<Message> msgs = new ArrayList<>(agent.context().messages());
+            // Snapshot to avoid ConcurrentModificationException from subList on live list
+            List<Message> msgs = List.copyOf(agent.context().messages());
             if (!compactor.shouldCompact(msgs, contextWindow)) return;
 
             CompactionResult result = compactor.compact(msgs, "threshold", null, null);
-            store.appendEntry(sessionId, new SessionEntry.CompactionEntry(
-                    "compaction-" + UUID.randomUUID(),
-                    result.summary(), result.firstKeptEntryId(), result.tokensBefore()));
-
-            if (result.summary() != null && result.keptCount() > 0) {
-                Message summaryMsg = new CustomMessage(
-                        "compaction_summary", new TextNode(result.summary()),
-                        null, null, System.currentTimeMillis() / 1000.0);
-                List<Message> current = agent.context().messages();
-                List<Message> kept = new ArrayList<>(
-                        current.subList(current.size() - result.keptCount(), current.size()));
-                List<Message> replacement = new ArrayList<>();
-                replacement.add(summaryMsg);
-                replacement.addAll(kept);
-                agent.context().replaceMessages(replacement);
-            }
+            applyCompactionResult(msgs, result);
         } catch (Exception e) {
             log.warn("Compaction failed for session {}: {}", sessionId, e.getMessage());
         }
-    }
-
-    // ── Message serialization helpers ─────────────────────
-
-    private Map<String, Object> serializeMessage(Message msg) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        switch (msg) {
-            case UserMessage um -> {
-                map.put("role", "user");
-                map.put("content", serializeContent(um.content()));
-                map.put("timestamp", um.timestamp());
-            }
-            case AssistantMessage am -> {
-                map.put("role", "assistant");
-                map.put("content", serializeContent(am.content()));
-                map.put("timestamp", am.timestamp());
-            }
-            case ToolResultMessage trm -> {
-                map.put("role", "tool_result");
-                map.put("tool_call_id", trm.toolCallId());
-                map.put("content", serializeContent(trm.content()));
-                map.put("is_error", trm.isError());
-                map.put("timestamp", trm.timestamp());
-            }
-            case CustomMessage cm -> {
-                map.put("role", "custom");
-                map.put("custom_type", cm.customType());
-                map.put("content", cm.content() != null ? cm.content().toString() : null);
-                map.put("timestamp", cm.timestamp());
-            }
-        }
-        return map;
-    }
-
-    private List<Map<String, Object>> serializeContent(List<Content> contents) {
-        if (contents == null) return List.of();
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (var c : contents) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            if (c instanceof Content.TextContent tc) {
-                item.put("type", "text");
-                item.put("text", tc.text());
-            } else if (c instanceof Content.ImageContent ic) {
-                item.put("type", "image");
-                item.put("data", ic.data());
-                item.put("mimeType", ic.mimeType());
-            } else if (c instanceof Content.ToolCallContent tcc) {
-                item.put("type", "tool_call");
-                item.put("id", tcc.id());
-                item.put("name", tcc.name());
-                item.put("arguments", tcc.arguments());
-            }
-            result.add(item);
-        }
-        return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Message deserializeMessage(Map<?, ?> msgMap) {
-        String role = (String) msgMap.get("role");
-        double timestamp = msgMap.get("timestamp") instanceof Number n ? n.doubleValue() : 0;
-
-        return switch (role) {
-            case "user" -> {
-                List<Content> content = deserializeContent(msgMap.get("content"));
-                yield new UserMessage(content, timestamp);
-            }
-            case "assistant" -> {
-                List<Content> content = deserializeContent(msgMap.get("content"));
-                yield new AssistantMessage(content, null, null, null, false, false, "", "", 0);
-            }
-            case "tool_result" -> {
-                List<Content> content = deserializeContent(msgMap.get("content"));
-                String toolCallId = (String) msgMap.get("tool_call_id");
-                String toolName = msgMap.get("tool_name") instanceof String tn ? tn : "";
-                boolean isError = Boolean.TRUE.equals(msgMap.get("is_error"));
-                yield new ToolResultMessage(toolCallId, toolName, content, isError, timestamp);
-            }
-            case "custom" -> {
-                String customType = (String) msgMap.get("custom_type");
-                com.fasterxml.jackson.databind.JsonNode content = null;
-                Object rawContent = msgMap.get("content");
-                if (rawContent instanceof String s) {
-                    content = new TextNode(s);
-                } else if (rawContent != null) {
-                    content = OBJECT_MAPPER.valueToTree(rawContent);
-                }
-                yield new CustomMessage(customType, content, null, null, timestamp);
-            }
-            default -> null;
-        };
-    }
-
-    private List<Content> deserializeContent(Object contentObj) {
-        if (contentObj instanceof List<?> list) {
-            List<Content> result = new ArrayList<>();
-            for (Object item : list) {
-                if (item instanceof Map<?, ?> m) {
-                    String type = (String) m.get("type");
-                    if ("text".equals(type)) {
-                        result.add(new Content.TextContent((String) m.get("text")));
-                    }
-                }
-            }
-            return result;
-        }
-        return List.of();
     }
 }

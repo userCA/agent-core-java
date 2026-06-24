@@ -31,15 +31,15 @@ import java.util.stream.Collectors;
  */
 public class AnthropicProvider implements ModelProvider {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = ProviderUtils.mapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private static final Map<String, Integer> THINKING_BUDGETS = Map.of(
-            "minimal", 128,
-            "low", 512,
-            "medium", 1024,
-            "high", 2048,
-            "xhigh", 4096
+            "minimal", 256,
+            "low", 1024,
+            "medium", 4096,
+            "high", 10000,
+            "xhigh", 20000
     );
 
     private final String providerName;
@@ -204,7 +204,7 @@ public class AnthropicProvider implements ModelProvider {
             try (var body = response.body()) {
                 String bodyText = new String(body.readAllBytes(), StandardCharsets.UTF_8);
                 boolean retryable = Set.of(429, 500, 502, 503, 504).contains(response.statusCode());
-                boolean overflow = ProviderUtils.isContextOverflow(response.statusCode(), bodyText);
+                boolean overflow = ProviderUtils.isContextOverflow(bodyText);
                 queue.offer(new StreamError("HTTP " + response.statusCode() + ": " + bodyText, retryable, overflow));
             }
             return;

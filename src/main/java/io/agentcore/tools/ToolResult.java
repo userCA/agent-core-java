@@ -6,9 +6,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Result returned by a tool execution.
+ * Result returned by a tool execution — pure data model.
  *
- * <p>Mirrors Python {@code agent_core/tools/base.py} ToolResult.
+ * <p>Control flow signals (e.g. terminate) are handled separately via
+ * {@link ToolContext#requestTerminate()} and {@link io.agentcore.core.ToolRunner.ToolCallResult},
+ * keeping this record focused on tool output data.
  *
  * @param content  list of text/image content blocks
  * @param details  optional structured details

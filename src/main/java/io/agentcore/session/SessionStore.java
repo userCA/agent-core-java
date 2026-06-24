@@ -8,7 +8,7 @@ import java.util.List;
  * <p>Mirrors Python {@code agent_core/session/store.py} SessionStore Protocol.
  * Implementations: {@link MemorySessionStore}, {@link JsonlSessionStore}.
  */
-public interface SessionStore {
+public interface SessionStore extends AutoCloseable {
 
     /**
      * Create a new session with the given header.

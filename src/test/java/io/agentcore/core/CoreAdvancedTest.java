@@ -82,13 +82,8 @@ class CoreAdvancedTest {
             assertTrue(ctx.isStreaming());
             assertFalse(ctx.tryStartStreaming()); // already streaming
 
-            var msg = Message.AssistantMessage.builder().build();
-            ctx.setStreamingMessage(msg);
-            assertEquals(msg, ctx.streamingMessage());
-
             ctx.stopStreaming();
             assertFalse(ctx.isStreaming());
-            assertNull(ctx.streamingMessage());
         }
 
         @Test
@@ -104,7 +99,7 @@ class CoreAdvancedTest {
 
         @Test
         void resetState() {
-            var ctx = new AgentContext("system prompt", List.of(), List.of());
+            var ctx = new AgentContext("system prompt", List.of());
             ctx.addMessage(new Message.UserMessage(List.of(), 1.0));
             ctx.tryStartStreaming();
             ctx.setErrorMessage("error");
@@ -132,11 +127,11 @@ class CoreAdvancedTest {
         @Test
         void emptyToolCalls_returnsEmpty() {
             var registry = new ToolRegistry();
-            var runner = new ToolRunner(registry);
+            var runner = new ToolRunner(registry, null, null, null, null);
             var assistant = AssistantMessage.builder().build();
 
-            assertTrue(runner.executeSequential(assistant, null, null).isEmpty());
-            assertTrue(runner.executeParallel(assistant, null, null).isEmpty());
+            assertTrue(runner.executeSequential(assistant, null, null).messages().isEmpty());
+            assertTrue(runner.executeParallel(assistant, null, null).messages().isEmpty());
         }
 
         @Test
@@ -150,14 +145,14 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry, null,
+            var runner = new ToolRunner(registry, null, null,
                     ctx -> new ToolCallHookResult.Block("Blocked!"), null);
 
             var assistant = AssistantMessage.builder()
                     .addContent(new Content.ToolCallContent("tc1", "echo", Map.of()))
                     .build();
 
-            var results = runner.executeSequential(assistant, null, null);
+            var results = runner.executeSequential(assistant, null, null).messages();
             assertEquals(1, results.size());
             assertTrue(results.get(0).isError());
         }
@@ -174,7 +169,7 @@ class CoreAdvancedTest {
             });
 
             AtomicBoolean hookCalled = new AtomicBoolean(false);
-            var runner = new ToolRunner(registry, null, null,
+            var runner = new ToolRunner(registry, null, null, null,
                     ctx -> { hookCalled.set(true); return null; });
 
             var assistant = AssistantMessage.builder()
@@ -196,7 +191,7 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry, null,
+            var runner = new ToolRunner(registry, null, null,
                     ctx -> { throw new RuntimeException("hook boom"); },
                     ctx -> { throw new RuntimeException("hook boom"); });
 
@@ -204,7 +199,7 @@ class CoreAdvancedTest {
                     .addContent(new Content.ToolCallContent("tc1", "echo", Map.of()))
                     .build();
 
-            var results = runner.executeSequential(assistant, null, null);
+            var results = runner.executeSequential(assistant, null, null).messages();
             assertEquals(1, results.size());
             assertFalse(results.get(0).isError());
         }
@@ -221,12 +216,14 @@ class CoreAdvancedTest {
                 }
             });
 
-            var runner = new ToolRunner(registry, 0.5); // 0.5s timeout
+            var runner = new ToolRunner(registry,
+                    new AgentLoopConfig.ToolConfig(0.5, 4000, AgentLoopConfig.ToolExecutionMode.PARALLEL),
+                    null, null, null);
             var assistant = AssistantMessage.builder()
                     .addContent(new Content.ToolCallContent("tc1", "sleeper", Map.of()))
                     .build();
 
-            var results = runner.executeSequential(assistant, null, null);
+            var results = runner.executeSequential(assistant, null, null).messages();
             assertEquals(1, results.size());
             assertTrue(results.get(0).isError());
             assertTrue(results.get(0).content().stream()

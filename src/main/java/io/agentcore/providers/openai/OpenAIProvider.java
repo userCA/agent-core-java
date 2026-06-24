@@ -8,6 +8,8 @@ import io.agentcore.providers.ProviderAuth;
 import io.agentcore.providers.ProviderUtils;
 import io.agentcore.providers.StreamEvent;
 import io.agentcore.providers.StreamEvent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -29,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class OpenAIProvider implements ModelProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(OpenAIProvider.class);
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
@@ -92,7 +95,7 @@ public class OpenAIProvider implements ModelProvider {
                 queue.offer(new StreamError("Stream failed: " + e.getMessage(), true, false));
             } finally {
                 done.set(true);
-                queue.offer(null); // sentinel
+                // No null sentinel needed — QueueBackedIterator terminates via done flag
             }
         });
 
@@ -169,7 +172,7 @@ public class OpenAIProvider implements ModelProvider {
             try (var body = response.body()) {
                 String bodyText = new String(body.readAllBytes(), StandardCharsets.UTF_8);
                 boolean retryable = Set.of(429, 500, 502, 503, 504).contains(response.statusCode());
-                boolean overflow = ProviderUtils.isContextOverflow(response.statusCode(), bodyText);
+                boolean overflow = ProviderUtils.isContextOverflow(bodyText);
                 queue.offer(new StreamError("HTTP " + response.statusCode() + ": " + bodyText, retryable, overflow));
             }
             return;
@@ -269,10 +272,13 @@ public class OpenAIProvider implements ModelProvider {
                     for (Map<String, Object> slot : toolCalls.values()) {
                         String slotId = (String) slot.get("id");
                         String slotName = (String) slot.get("name");
-                        if (slotId != null && slotName != null) {
-                            Map<String, Object> args = ProviderUtils.parseJsonMap((String) slot.get("args"));
-                            queue.offer(new StreamToolCallEnd(slotId, args));
+                        if (slotId == null || slotName == null) {
+                            // Incomplete tool call from fragmented streaming — skip defensively
+                            log.debug("Skipping incomplete tool call slot: id={}, name={}", slotId, slotName);
+                            continue;
                         }
+                        Map<String, Object> args = ProviderUtils.parseJsonMap((String) slot.get("args"));
+                        queue.offer(new StreamToolCallEnd(slotId, args));
                     }
                     @SuppressWarnings("unchecked")
                     Map<String, Object> usage = (Map<String, Object>) event.get("usage");
@@ -294,24 +300,5 @@ public class OpenAIProvider implements ModelProvider {
                 new ModelInfo(providerName, "gpt-4o-mini", 128_000, 16_384)
         );
     }
-
-    /**
-     * Convert tool definitions to OpenAI function-calling format.
-     */
-    public static List<Map<String, Object>> toolsToProviderFormat(List<Map<String, Object>> tools) {
-        if (tools == null) return List.of();
-        return tools.stream().map(t -> {
-            Map<String, Object> fn = new LinkedHashMap<>();
-            fn.put("name", t.get("name"));
-            fn.put("description", t.getOrDefault("description", ""));
-            fn.put("parameters", t.getOrDefault("parameters",
-                    Map.of("type", "object", "properties", Map.of())));
-            Map<String, Object> out = new LinkedHashMap<>();
-            out.put("type", "function");
-            out.put("function", fn);
-            return out;
-        }).toList();
-    }
-
 
 }

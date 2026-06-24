@@ -41,7 +41,8 @@ public final class SilentObserver {
     public String getLastTopic()  { return lastTopic; }
 
     public double sessionDuration() {
-        return System.currentTimeMillis() / 1000.0 - (lastActiveAt > 0 ? lastActiveAt : System.currentTimeMillis() / 1000.0);
+        long now = System.currentTimeMillis() / 1000;
+        return (double) (now - (lastActiveAt > 0 ? lastActiveAt : now));
     }
 
     public boolean repeatedTool(String tool, int count) {
