@@ -21,16 +21,16 @@ class InMemoryRetrieverTest {
     @Nested
     class BasicRetrieval {
         @Test
-        void emptyRetrieverReturnsNoResults() throws Exception {
-            List<RetrievedChunk> results = retriever.retrieve(new Query("anything")).get();
+        void emptyRetrieverReturnsNoResults() {
+            List<RetrievedChunk> results = retriever.retrieve(new Query("anything"));
             assertTrue(results.isEmpty());
         }
 
         @Test
-        void retrievesMatchingDocument() throws Exception {
+        void retrievesMatchingDocument() {
             retriever.add("Agent architecture uses ReAct loop pattern");
 
-            List<RetrievedChunk> results = retriever.retrieve(new Query("agent architecture")).get();
+            List<RetrievedChunk> results = retriever.retrieve(new Query("agent architecture"));
             assertFalse(results.isEmpty());
             assertEquals(1, results.size());
             assertTrue(results.get(0).text().contains("ReAct"));
@@ -38,40 +38,40 @@ class InMemoryRetrieverTest {
         }
 
         @Test
-        void returnsEmptyWhenNoTokenOverlap() throws Exception {
+        void returnsEmptyWhenNoTokenOverlap() {
             retriever.add("Agent architecture uses ReAct loop");
 
-            List<RetrievedChunk> results = retriever.retrieve(new Query("xyz abc")).get();
+            List<RetrievedChunk> results = retriever.retrieve(new Query("xyz abc"));
             assertTrue(results.isEmpty());
         }
 
         @Test
-        void ranksByTokenOverlapFraction() throws Exception {
+        void ranksByTokenOverlapFraction() {
             retriever.add("Python is a scripting tool");             // 0 overlap with query
             retriever.add("Java language supports lambda expressions"); // 2 overlap: "java", "language"
 
             List<RetrievedChunk> results = retriever.retrieve(
-                    new Query("java language features", 5)).get();
+                    new Query("java language features", 5));
 
             assertEquals(1, results.size()); // only doc2 matches
             assertTrue(results.get(0).text().contains("lambda"));
         }
 
         @Test
-        void respectsTopKLimit() throws Exception {
+        void respectsTopKLimit() {
             for (int i = 0; i < 10; i++) {
                 retriever.add("document number " + i + " about testing");
             }
 
             List<RetrievedChunk> results = retriever.retrieve(
-                    new Query("document testing", 3)).get();
+                    new Query("document testing", 3));
             assertEquals(3, results.size());
         }
 
         @Test
-        void blankQueryReturnsEmpty() throws Exception {
+        void blankQueryReturnsEmpty() {
             retriever.add("some document");
-            List<RetrievedChunk> results = retriever.retrieve(new Query("")).get();
+            List<RetrievedChunk> results = retriever.retrieve(new Query(""));
             assertTrue(results.isEmpty());
         }
     }
@@ -79,20 +79,20 @@ class InMemoryRetrieverTest {
     @Nested
     class SourceAndMetadata {
         @Test
-        void preservesSourceTag() throws Exception {
+        void preservesSourceTag() {
             retriever.add("Server uses port 8080", "config.yaml");
 
-            List<RetrievedChunk> results = retriever.retrieve(new Query("server port")).get();
+            List<RetrievedChunk> results = retriever.retrieve(new Query("server port"));
             assertEquals(1, results.size());
             assertEquals("config.yaml", results.get(0).source());
         }
 
         @Test
-        void preservesMetadata() throws Exception {
+        void preservesMetadata() {
             retriever.add("API endpoint for users", "api.md",
                     Map.of("category", "api", "version", 2));
 
-            List<RetrievedChunk> results = retriever.retrieve(new Query("api endpoint")).get();
+            List<RetrievedChunk> results = retriever.retrieve(new Query("api endpoint"));
             assertEquals(1, results.size());
             assertEquals("api", results.get(0).metadata().get("category"));
             assertEquals(2, results.get(0).metadata().get("version"));
@@ -102,24 +102,24 @@ class InMemoryRetrieverTest {
     @Nested
     class Filters {
         @Test
-        void filtersExcludeNonMatchingDocs() throws Exception {
+        void filtersExcludeNonMatchingDocs() {
             retriever.add("Java guide", "java.md", Map.of("lang", "java"));
             retriever.add("Python guide", "py.md", Map.of("lang", "python"));
 
             List<RetrievedChunk> results = retriever.retrieve(
-                    new Query("guide", 5, Map.of("lang", "java"))).get();
+                    new Query("guide", 5, Map.of("lang", "java")));
 
             assertEquals(1, results.size());
             assertTrue(results.get(0).text().contains("Java"));
         }
 
         @Test
-        void emptyFiltersMatchAll() throws Exception {
+        void emptyFiltersMatchAll() {
             retriever.add("Java guide", "java.md", Map.of("lang", "java"));
             retriever.add("Python guide", "py.md", Map.of("lang", "python"));
 
             List<RetrievedChunk> results = retriever.retrieve(
-                    new Query("guide", 5, Map.of())).get();
+                    new Query("guide", 5, Map.of()));
             assertEquals(2, results.size());
         }
     }
@@ -127,18 +127,18 @@ class InMemoryRetrieverTest {
     @Nested
     class ThreadSafety {
         @Test
-        void concurrentAddAndRetrieve() throws Exception {
+        void concurrentAddAndRetrieve() {
             // Add documents from multiple threads
             for (int i = 0; i < 100; i++) {
                 final int idx = i;
                 new Thread(() -> retriever.add("document about topic " + idx)).start();
             }
             // Wait a bit for threads to finish
-            Thread.sleep(200);
+            try { Thread.sleep(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 
             assertEquals(100, retriever.size());
             List<RetrievedChunk> results = retriever.retrieve(
-                    new Query("document topic", 10)).get();
+                    new Query("document topic", 10));
             assertFalse(results.isEmpty());
             assertTrue(results.size() <= 10);
         }

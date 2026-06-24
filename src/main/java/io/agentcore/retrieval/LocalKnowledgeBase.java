@@ -8,9 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -30,7 +27,6 @@ public class LocalKnowledgeBase implements Retriever {
 
     private static final Logger log = LoggerFactory.getLogger(LocalKnowledgeBase.class);
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
-    private static final ExecutorService VIRTUAL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private static final Pattern SENT_SPLIT = Pattern.compile("(?<=[。！？.!?\\n])\\s*");
     public static final int CHUNK_SIZE = 500;
@@ -258,75 +254,57 @@ public class LocalKnowledgeBase implements Retriever {
      * Retrieve chunks matching a query using cosine similarity on embeddings.
      */
     @Override
-    public CompletableFuture<List<RetrievedChunk>> retrieve(Query query) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return doRetrieve(query);
-            } catch (IOException e) {
-                log.warn("Retrieval failed", e);
-                return List.of();
-            }
-        }, VIRTUAL_EXECUTOR);
-    }
+    public List<RetrievedChunk> retrieve(Query query) {
+        try {
+            double[] qVec = embeddingFn.embed(query.text());
+            if (qVec == null || qVec.length == 0) return List.of();
 
-    private List<RetrievedChunk> doRetrieve(Query query) throws IOException {
-        double[] qVec = embeddingFn.embed(query.text());
-        if (qVec == null || qVec.length == 0) return List.of();
+            List<ScoredChunk> candidates = new ArrayList<>();
 
-        List<double[]> scored = new ArrayList<>(); // [score, docIdx, chunkIdx, ...]
-        List<String> texts = new ArrayList<>();
-        List<String> sources = new ArrayList<>();
+            if (!Files.isDirectory(directory)) return List.of();
 
-        if (!Files.isDirectory(directory)) return List.of();
+            try (Stream<Path> docs = Files.list(directory)) {
+                for (Path docDir : docs.sorted().toList()) {
+                    if (!Files.isDirectory(docDir)) continue;
+                    String docName = docDir.getFileName().toString();
 
-        try (Stream<Path> docs = Files.list(directory)) {
-            for (Path docDir : docs.sorted().toList()) {
-                if (!Files.isDirectory(docDir)) continue;
-                String docName = docDir.getFileName().toString();
+                    try (Stream<Path> files = Files.list(docDir)) {
+                        for (Path vecPath : files.sorted().toList()) {
+                            String fileName = vecPath.getFileName().toString();
+                            if (!fileName.endsWith(".vec")) continue;
 
-                try (Stream<Path> files = Files.list(docDir)) {
-                    for (Path vecPath : files.sorted().toList()) {
-                        String fileName = vecPath.getFileName().toString();
-                        if (!fileName.endsWith(".vec")) continue;
+                            Path txtPath = docDir.resolve(fileName.replace(".vec", ".txt"));
+                            if (!Files.exists(txtPath)) continue;
 
-                        Path txtPath = docDir.resolve(fileName.replace(".vec", ".txt"));
-                        if (!Files.exists(txtPath)) continue;
+                            try {
+                                double[] docVec = readVector(vecPath);
+                                String text = Files.readString(txtPath);
+                                double score = cosineSimilarity(qVec, docVec);
 
-                        try {
-                            double[] docVec = readVector(vecPath);
-                            String text = Files.readString(txtPath);
-                            double score = cosineSimilarity(qVec, docVec);
-
-                            if (score >= MIN_SCORE) {
-                                String chunkId = fileName.replace(".vec", "").replace("chunk_", "");
-                                texts.add(text);
-                                sources.add(docName + "/" + chunkId);
-                                scored.add(new double[]{score});
+                                if (score >= MIN_SCORE) {
+                                    String chunkId = fileName.replace(".vec", "").replace("chunk_", "");
+                                    candidates.add(new ScoredChunk(text, score, docName + "/" + chunkId));
+                                }
+                            } catch (Exception e) {
+                                log.debug("Failed to load chunk for {}", docName, e);
                             }
-                        } catch (Exception e) {
-                            log.debug("Failed to load chunk for {}", docName, e);
                         }
                     }
                 }
             }
-        }
 
-        // Sort by score descending
-        Integer[] indices = new Integer[scored.size()];
-        for (int i = 0; i < indices.length; i++) indices[i] = i;
-        Arrays.sort(indices, (a, b) -> Double.compare(scored.get(b)[0], scored.get(a)[0]));
-
-        List<RetrievedChunk> results = new ArrayList<>();
-        int topK = Math.min(query.topK(), indices.length);
-        for (int i = 0; i < topK; i++) {
-            int idx = indices[i];
-            String text = texts.get(idx);
-            results.add(new RetrievedChunk(
-                    text.length() > 1200 ? text.substring(0, 1200) : text,
-                    Math.round(scored.get(idx)[0] * 10000.0) / 10000.0,
-                    sources.get(idx)));
+            return candidates.stream()
+                    .sorted((a, b) -> Double.compare(b.score(), a.score()))
+                    .limit(query.topK())
+                    .map(c -> new RetrievedChunk(
+                            c.text().length() > 1200 ? c.text().substring(0, 1200) : c.text(),
+                            Math.round(c.score() * 10000.0) / 10000.0,
+                            c.source()))
+                    .toList();
+        } catch (IOException e) {
+            log.warn("Retrieval failed", e);
+            return List.of();
         }
-        return results;
     }
 
     // ── Chunking ─────────────────────────────────────────────
@@ -427,4 +405,6 @@ public class LocalKnowledgeBase implements Retriever {
         String safe = name.replaceAll("[^a-zA-Z0-9_\\-. ]", "_").strip();
         return safe.isEmpty() ? "doc" : safe;
     }
+
+    private record ScoredChunk(String text, double score, String source) {}
 }

@@ -201,8 +201,7 @@ class LocalKnowledgeBaseTest {
         kb.add("doc1", "Java programming language features and syntax.");
         kb.add("doc2", "Python is a dynamic scripting language.");
 
-        var future = kb.retrieve(new Query("Java programming", 3));
-        var results = future.get();
+        var results = kb.retrieve(new Query("Java programming", 3));
         assertNotNull(results);
         // Results should include at least some chunks
         assertFalse(results.isEmpty());
@@ -213,8 +212,7 @@ class LocalKnowledgeBaseTest {
         var kb = new LocalKnowledgeBase(tempDir); // no-op embedding
         kb.add("doc1", "Some content");
 
-        var future = kb.retrieve(new Query("test", 3));
-        var results = future.get();
+        var results = kb.retrieve(new Query("test", 3));
         // With no-op embeddings (empty vectors), retrieval returns empty
         assertTrue(results.isEmpty());
     }

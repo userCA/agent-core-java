@@ -71,7 +71,7 @@ public class RetrieverTool implements Tool {
         Query query = new Query(queryText, topK, filters);
 
         try {
-            List<RetrievedChunk> chunks = retriever.retrieve(query).join();
+            List<RetrievedChunk> chunks = retriever.retrieve(query);
             if (chunks == null || chunks.isEmpty()) {
                 return new ToolResult("No matching results.");
             }

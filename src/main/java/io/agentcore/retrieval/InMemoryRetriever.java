@@ -3,10 +3,7 @@ package io.agentcore.retrieval;
 import io.agentcore.util.TextTokenizer;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * In-memory keyword-overlap {@link Retriever} for tests and small-scale demos.
@@ -23,12 +20,10 @@ import java.util.concurrent.Executors;
  * retriever.add("Tool calling supports parallel execution", "docs/tools.md");
  *
  * List<RetrievedChunk> results = retriever.retrieve(
- *         new Query("agent tool calling", 5)).get();
+ *         new Query("agent tool calling", 5));
  * }</pre>
  */
 public class InMemoryRetriever implements Retriever {
-
-    private static final ExecutorService VIRTUAL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final List<Doc> docs = new CopyOnWriteArrayList<>();
 
@@ -54,31 +49,29 @@ public class InMemoryRetriever implements Retriever {
     }
 
     @Override
-    public CompletableFuture<List<RetrievedChunk>> retrieve(Query query) {
-        return CompletableFuture.supplyAsync(() -> {
-            Set<String> qTokens = TextTokenizer.tokenize(query.text());
-            if (qTokens.isEmpty()) return List.<RetrievedChunk>of();
-            List<ScoredDoc> scored = new ArrayList<>();
-            for (Doc doc : docs) {
-                // Apply metadata filters
-                if (!matchesFilters(doc, query.filters())) continue;
+    public List<RetrievedChunk> retrieve(Query query) {
+        Set<String> qTokens = TextTokenizer.tokenize(query.text());
+        if (qTokens.isEmpty()) return List.of();
 
-                int overlap = TextTokenizer.intersectionSize(qTokens, doc.tokens());
-                if (overlap == 0) continue;
+        List<ScoredDoc> scored = new ArrayList<>();
+        for (Doc doc : docs) {
+            // Apply metadata filters
+            if (!matchesFilters(doc, query.filters())) continue;
 
-                // Score = overlap / queryTokens → fraction of query covered
-                double score = (double) overlap / qTokens.size();
-                scored.add(new ScoredDoc(doc, score));
-            }
+            int overlap = TextTokenizer.intersectionSize(qTokens, doc.tokens());
+            if (overlap == 0) continue;
 
-            scored.sort((a, b) -> Double.compare(b.score(), a.score()));
-            return scored.stream()
-                    .limit(query.topK())
-                    .map(s -> new RetrievedChunk(s.doc().text(), s.score(),
-                            s.doc().source(), s.doc().metadata()))
-                    .toList();
-        }, VIRTUAL_EXECUTOR);
+            // Score = overlap / queryTokens → fraction of query covered
+            double score = (double) overlap / qTokens.size();
+            scored.add(new ScoredDoc(doc, score));
+        }
 
+        scored.sort((a, b) -> Double.compare(b.score(), a.score()));
+        return scored.stream()
+                .limit(query.topK())
+                .map(s -> new RetrievedChunk(s.doc().text(), s.score(),
+                        s.doc().source(), s.doc().metadata()))
+                .toList();
     }
 
     private static boolean matchesFilters(Doc doc, Map<String, Object> filters) {
