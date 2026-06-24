@@ -9,7 +9,8 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -29,6 +30,7 @@ public class LocalKnowledgeBase implements Retriever {
 
     private static final Logger log = LoggerFactory.getLogger(LocalKnowledgeBase.class);
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
+    private static final ExecutorService VIRTUAL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private static final Pattern SENT_SPLIT = Pattern.compile("(?<=[。！？.!?\\n])\\s*");
     public static final int CHUNK_SIZE = 500;
@@ -264,7 +266,7 @@ public class LocalKnowledgeBase implements Retriever {
                 log.warn("Retrieval failed", e);
                 return List.of();
             }
-        });
+        }, VIRTUAL_EXECUTOR);
     }
 
     private List<RetrievedChunk> doRetrieve(Query query) throws IOException {

@@ -5,6 +5,8 @@ import io.agentcore.util.TextTokenizer;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * In-memory keyword-overlap {@link Retriever} for tests and small-scale demos.
@@ -25,6 +27,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * }</pre>
  */
 public class InMemoryRetriever implements Retriever {
+
+    private static final ExecutorService VIRTUAL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final List<Doc> docs = new CopyOnWriteArrayList<>();
 
@@ -54,7 +58,6 @@ public class InMemoryRetriever implements Retriever {
         return CompletableFuture.supplyAsync(() -> {
             Set<String> qTokens = TextTokenizer.tokenize(query.text());
             if (qTokens.isEmpty()) return List.<RetrievedChunk>of();
-
             List<ScoredDoc> scored = new ArrayList<>();
             for (Doc doc : docs) {
                 // Apply metadata filters
@@ -74,7 +77,8 @@ public class InMemoryRetriever implements Retriever {
                     .map(s -> new RetrievedChunk(s.doc().text(), s.score(),
                             s.doc().source(), s.doc().metadata()))
                     .toList();
-        });
+        }, VIRTUAL_EXECUTOR);
+
     }
 
     private static boolean matchesFilters(Doc doc, Map<String, Object> filters) {
