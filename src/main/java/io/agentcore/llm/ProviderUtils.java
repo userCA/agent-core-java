@@ -11,8 +11,6 @@ import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
 
 /**
  * Shared utilities for provider implementations.
