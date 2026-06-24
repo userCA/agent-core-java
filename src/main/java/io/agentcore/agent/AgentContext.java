@@ -107,18 +107,27 @@ public final class AgentContext {
     /**
      * Returns the internal message list (synchronized wrapper).
      *
-     * <p>The returned list is backed by {@link Collections#synchronizedList},
-     * so individual operations ({@code get}, {@code size}, {@code add}) are
-     * thread-safe. <b>Iteration</b> still requires external synchronization:
-     * <pre>{@code
-     *   synchronized (ctx.messages()) {
-     *       for (Message m : ctx.messages()) { ... }
-     *   }
-     * }</pre>
+     * <p>Prefer {@link #messagesSnapshot()} for iteration. The returned list
+     * is backed by {@link Collections#synchronizedList} — iteration requires
+     * external synchronization.
      *
      * @return the internal synchronized list (not a copy)
      */
     public List<Message> messages() { return messages; }
+
+    /**
+     * Returns an immutable snapshot of the current messages.
+     *
+     * <p>Safe for iteration without external synchronization.
+     * Preferred over {@link #messages()} for read-only access.
+     *
+     * @return an unmodifiable copy of the message list
+     */
+    public List<Message> messagesSnapshot() {
+        synchronized (messages) {
+            return List.copyOf(messages);
+        }
+    }
     public boolean isStreaming() { return streaming.get(); }
     public String errorMessage() { return errorMessage; }
 

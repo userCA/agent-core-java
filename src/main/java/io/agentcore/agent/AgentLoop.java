@@ -195,10 +195,7 @@ public class AgentLoop {
         }
 
         // Build shared TurnContext for both callbacks (snapshot for safe iteration)
-        List<Message> allMessagesSnapshot;
-        synchronized (context.messages()) {
-            allMessagesSnapshot = List.copyOf(context.messages());
-        }
+        List<Message> allMessagesSnapshot = context.messagesSnapshot();
         AgentLoopConfig.TurnContext turnContext = new AgentLoopConfig.TurnContext(
                 assistant, toolResults, allMessagesSnapshot, newMessagesProduced);
 
@@ -244,11 +241,8 @@ public class AgentLoop {
     }
 
     private List<Map<String, Object>> prepareLlmMessages(AtomicBoolean signal) {
-        // Snapshot messages under lock to avoid races with concurrent addMessage/replaceMessages
-        List<Message> snapshot;
-        synchronized (context.messages()) {
-            snapshot = List.copyOf(context.messages());
-        }
+        // Snapshot messages to avoid races with concurrent addMessage/replaceMessages
+        List<Message> snapshot = context.messagesSnapshot();
         List<Map<String, Object>> llmMessages = config.convertToLlm().convert(snapshot);
         if (config.transformContext() != null) {
             List<Map<String, Object>> transformed = config.transformContext().transform(llmMessages, signal);
