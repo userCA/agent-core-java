@@ -29,6 +29,16 @@ public final class PersonaLoader {
      * Load persona definitions from .pi/personas/*.json and ~/.pi/agent/personas/*.json.
      */
     public static List<Persona> loadPersonas(Path cwd) {
+        return loadPersonas(cwd, null);
+    }
+
+    /**
+     * Load persona definitions with diagnostics support.
+     *
+     * @param cwd         the project working directory
+     * @param diagnostics optional collector for warnings/errors (may be null)
+     */
+    public static List<Persona> loadPersonas(Path cwd, DiagnosticsCollector diagnostics) {
         List<Path> searchDirs = new ArrayList<>();
 
         Path localDir = cwd.resolve(".pi").resolve("personas");
@@ -51,7 +61,23 @@ public final class PersonaLoader {
                                 Files.readString(file), Map.class);
 
                         String id = (String) data.get("id");
-                        if (id == null || id.isBlank() || seenIds.contains(id)) continue;
+                        if (id == null || id.isBlank()) {
+                            if (diagnostics != null) {
+                                diagnostics.warning("Missing 'id' in persona file", file.toString());
+                            }
+                            continue;
+                        }
+                        if (seenIds.contains(id)) {
+                            if (diagnostics != null) {
+                                diagnostics.collision(
+                                        "Persona id \"" + id + "\" collision",
+                                        personas.stream()
+                                                .filter(p -> p.id().equals(id))
+                                                .findFirst().map(Persona::id).orElse(""),
+                                        file.toString());
+                            }
+                            continue;
+                        }
                         seenIds.add(id);
 
                         @SuppressWarnings("unchecked")
@@ -68,10 +94,12 @@ public final class PersonaLoader {
                                 (String) data.getOrDefault("system_prompt", ""),
                                 tools, kbs));
                     } catch (Exception e) {
+                        if (diagnostics != null) diagnostics.warning(e.getMessage(), file.toString());
                         log.debug("Failed to load persona: {}", file, e);
                     }
                 }
             } catch (IOException e) {
+                if (diagnostics != null) diagnostics.warning("Failed to list personas: " + e.getMessage(), dir.toString());
                 log.debug("Failed to list personas dir: {}", dir, e);
             }
         }
