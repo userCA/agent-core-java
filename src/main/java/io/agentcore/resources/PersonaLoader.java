@@ -128,8 +128,8 @@ public final class PersonaLoader {
         data.put("name", persona.name());
         data.put("description", persona.description());
         data.put("system_prompt", persona.systemPrompt());
-        if (persona.enabledTools() != null) data.put("enabled_tools", persona.enabledTools());
-        if (persona.knowledgeBases() != null) data.put("knowledge_bases", persona.knowledgeBases());
+        if (persona.enabledTools() != null && !persona.enabledTools().isEmpty()) data.put("enabled_tools", persona.enabledTools());
+        if (persona.knowledgeBases() != null && !persona.knowledgeBases().isEmpty()) data.put("knowledge_bases", persona.knowledgeBases());
 
         Path file = dir.resolve(persona.id() + ".json");
         Files.writeString(file,

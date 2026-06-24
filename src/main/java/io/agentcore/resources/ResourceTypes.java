@@ -91,6 +91,8 @@ public final class ResourceTypes {
             if (name == null) name = id;
             if (description == null) description = "";
             if (systemPrompt == null) systemPrompt = "";
+            if (enabledTools == null) enabledTools = List.of();
+            if (knowledgeBases == null) knowledgeBases = List.of();
         }
     }
 }
