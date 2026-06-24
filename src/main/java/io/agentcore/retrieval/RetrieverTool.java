@@ -14,6 +14,8 @@ import java.util.Map;
  * <p>When the model calls this tool with a natural-language query, the
  * retriever searches its index and returns formatted results including
  * relevance scores and source tags.
+ *
+ * <p>Result formatting is pluggable via {@link ResultFormatter}.
  */
 public class RetrieverTool implements Tool {
 
@@ -22,18 +24,48 @@ public class RetrieverTool implements Tool {
             "Retrieve relevant context documents for a natural-language query. "
                     + "Returns ranked chunks with relevance scores.";
 
+    /**
+     * Pluggable formatter that converts retrieval results into a tool output string.
+     */
+    @FunctionalInterface
+    public interface ResultFormatter {
+        String format(List<RetrievedChunk> chunks);
+    }
+
+    /** Default formatter: numbered chunks with score and source. */
+    public static final ResultFormatter DEFAULT_FORMATTER = chunks -> {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < chunks.size(); i++) {
+            RetrievedChunk c = chunks.get(i);
+            if (i > 0) sb.append("\n\n");
+            sb.append('[').append(i + 1).append("] ");
+            sb.append("(score=").append(String.format("%.3f", c.score())).append(')');
+            if (c.source() != null) {
+                sb.append(" [").append(c.source()).append(']');
+            }
+            sb.append('\n').append(c.text());
+        }
+        return sb.toString();
+    };
+
     private final Retriever retriever;
     private final String toolName;
     private final String toolDescription;
+    private final ResultFormatter formatter;
 
     public RetrieverTool(Retriever retriever) {
-        this(retriever, DEFAULT_NAME, DEFAULT_DESCRIPTION);
+        this(retriever, DEFAULT_NAME, DEFAULT_DESCRIPTION, DEFAULT_FORMATTER);
     }
 
     public RetrieverTool(Retriever retriever, String name, String description) {
+        this(retriever, name, description, DEFAULT_FORMATTER);
+    }
+
+    public RetrieverTool(Retriever retriever, String name, String description, ResultFormatter formatter) {
         this.retriever = retriever;
         this.toolName = name;
         this.toolDescription = description;
+        this.formatter = formatter != null ? formatter : DEFAULT_FORMATTER;
     }
 
     @Override
@@ -75,18 +107,7 @@ public class RetrieverTool implements Tool {
             if (chunks == null || chunks.isEmpty()) {
                 return new ToolResult("No matching results.");
             }
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < chunks.size(); i++) {
-                RetrievedChunk c = chunks.get(i);
-                if (i > 0) sb.append("\n\n");
-                sb.append('[').append(i + 1).append("] ");
-                sb.append("(score=").append(String.format("%.3f", c.score())).append(')');
-                if (c.source() != null) {
-                    sb.append(" [").append(c.source()).append(']');
-                }
-                sb.append('\n').append(c.text());
-            }
-            return new ToolResult(sb.toString());
+            return new ToolResult(formatter.format(chunks));
         } catch (Exception e) {
             return new ToolResult("Error retrieving: " + e.getMessage());
         }
