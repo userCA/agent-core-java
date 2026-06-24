@@ -30,8 +30,8 @@ public class LocalKnowledgeBase implements Retriever {
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
 
     private static final Pattern SENT_SPLIT = Pattern.compile("(?<=[。！？.!?\\n])\\s*");
-    public static final int CHUNK_SIZE = 500;
-    public static final int CHUNK_OVERLAP = 80;
+    public static final int DEFAULT_CHUNK_SIZE = 500;
+    public static final int DEFAULT_CHUNK_OVERLAP = 80;
     private static final double MIN_SCORE = 0.2;
 
     /**
@@ -44,15 +44,32 @@ public class LocalKnowledgeBase implements Retriever {
 
     private final Path directory;
     private final EmbeddingFunction embeddingFn;
+    private final int chunkSize;
+    private final int chunkOverlap;
     private final Map<Path, double[]> vectorCache = new ConcurrentHashMap<>();
+
+    /**
+     * Create a knowledge base with full configuration.
+     *
+     * @param directory    storage directory for documents
+     * @param embeddingFn  pluggable embedding function
+     * @param chunkSize    target chunk size in characters
+     * @param chunkOverlap overlap between adjacent chunks in characters
+     */
+    public LocalKnowledgeBase(Path directory, EmbeddingFunction embeddingFn,
+                              int chunkSize, int chunkOverlap) throws IOException {
+        this.directory = directory;
+        this.embeddingFn = embeddingFn;
+        this.chunkSize = chunkSize > 0 ? chunkSize : DEFAULT_CHUNK_SIZE;
+        this.chunkOverlap = chunkOverlap >= 0 ? chunkOverlap : DEFAULT_CHUNK_OVERLAP;
+        Files.createDirectories(directory);
+    }
 
     /**
      * Create a knowledge base in the given directory with a pluggable embedding function.
      */
     public LocalKnowledgeBase(Path directory, EmbeddingFunction embeddingFn) throws IOException {
-        this.directory = directory;
-        this.embeddingFn = embeddingFn;
-        Files.createDirectories(directory);
+        this(directory, embeddingFn, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
     }
 
     /**
@@ -320,14 +337,21 @@ public class LocalKnowledgeBase implements Retriever {
     // ── Chunking ─────────────────────────────────────────────
 
     /**
-     * Split text into chunks of approximately CHUNK_SIZE characters.
+     * Split text into chunks using this knowledge base's configured chunk size and overlap.
      */
-    public static List<String> chunkText(String text) {
+    public List<String> chunkText(String text) {
+        return chunkText(text, chunkSize, chunkOverlap);
+    }
+
+    /**
+     * Split text into chunks of approximately {@code chunkSize} characters.
+     */
+    public static List<String> chunkText(String text, int chunkSize, int chunkOverlap) {
         List<String> pieces = new ArrayList<>();
         for (String para : text.split("\\n\\n")) {
             para = para.strip();
             if (para.isEmpty()) continue;
-            if (para.length() <= CHUNK_SIZE) {
+            if (para.length() <= chunkSize) {
                 pieces.add(para);
             } else {
                 String[] sentences = SENT_SPLIT.split(para);
@@ -341,15 +365,15 @@ public class LocalKnowledgeBase implements Retriever {
         List<String> chunks = new ArrayList<>();
         String buf = "";
         for (String piece : pieces) {
-            if (piece.length() > CHUNK_SIZE * 2) {
-                for (int i = 0; i < piece.length(); i += CHUNK_SIZE - CHUNK_OVERLAP) {
-                    chunks.add(piece.substring(i, Math.min(i + CHUNK_SIZE, piece.length())));
+            if (piece.length() > chunkSize * 2) {
+                for (int i = 0; i < piece.length(); i += chunkSize - chunkOverlap) {
+                    chunks.add(piece.substring(i, Math.min(i + chunkSize, piece.length())));
                 }
                 buf = "";
                 continue;
             }
             String candidate = buf.isEmpty() ? piece : (buf + " " + piece).strip();
-            if (candidate.length() <= CHUNK_SIZE) {
+            if (candidate.length() <= chunkSize) {
                 buf = candidate;
             } else {
                 if (!buf.isEmpty()) chunks.add(buf);

@@ -44,16 +44,18 @@ class LocalKnowledgeBaseTest {
 
     @Test
     void chunkTextShort() {
-        var chunks = LocalKnowledgeBase.chunkText("Hello world");
+        var chunks = LocalKnowledgeBase.chunkText("Hello world",
+                LocalKnowledgeBase.DEFAULT_CHUNK_SIZE, LocalKnowledgeBase.DEFAULT_CHUNK_OVERLAP);
         assertEquals(1, chunks.size());
         assertEquals("Hello world", chunks.get(0));
     }
 
     @Test
     void chunkTextParagraphs() {
-        // Short paragraphs may be merged since they're under CHUNK_SIZE (500)
+        // Short paragraphs may be merged since they're under DEFAULT_CHUNK_SIZE (500)
         String text = "Paragraph one.\n\nParagraph two.\n\nParagraph three.";
-        var chunks = LocalKnowledgeBase.chunkText(text);
+        var chunks = LocalKnowledgeBase.chunkText(text,
+                LocalKnowledgeBase.DEFAULT_CHUNK_SIZE, LocalKnowledgeBase.DEFAULT_CHUNK_OVERLAP);
         assertTrue(chunks.size() >= 1);
         String joined = String.join(" ", chunks);
         assertTrue(joined.contains("Paragraph one"));
@@ -63,13 +65,15 @@ class LocalKnowledgeBaseTest {
     @Test
     void chunkTextLongParagraph() {
         String longPara = "A".repeat(600);
-        var chunks = LocalKnowledgeBase.chunkText(longPara + "\n\n" + "Short.");
+        var chunks = LocalKnowledgeBase.chunkText(longPara + "\n\n" + "Short.",
+                LocalKnowledgeBase.DEFAULT_CHUNK_SIZE, LocalKnowledgeBase.DEFAULT_CHUNK_OVERLAP);
         assertTrue(chunks.size() >= 2);
     }
 
     @Test
     void chunkTextEmpty() {
-        var chunks = LocalKnowledgeBase.chunkText("");
+        var chunks = LocalKnowledgeBase.chunkText("",
+                LocalKnowledgeBase.DEFAULT_CHUNK_SIZE, LocalKnowledgeBase.DEFAULT_CHUNK_OVERLAP);
         assertEquals(1, chunks.size());
     }
 
