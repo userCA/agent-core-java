@@ -511,7 +511,7 @@ class CoreModelTest {
             AgentLoopConfig.StreamFunction streamFn =
                     (m, msgs, tools, sp, tl, temp, mt, sig, auth) -> List.<StreamEvent>of().iterator();
             AgentLoopConfig.ConvertToLlm convertFn = msgs -> List.of();
-            AgentLoopConfig.AuthResolver authFn = name -> new ProviderAuth("key");
+            java.util.function.Function<String, ProviderAuth> authFn = name -> new ProviderAuth("key");
 
             var original = AgentLoopConfig.builder()
                     .model(model1)

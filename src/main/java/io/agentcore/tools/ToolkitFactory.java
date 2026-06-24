@@ -139,18 +139,18 @@ public final class ToolkitFactory {
                         httpHeaders, httpBearerToken, 30));
             }
 
-            // External tools — registered with typed source
+            // External tools
             if (includeAgnesImage) {
-                registry.register(new AgnesImageTool(), new ToolSource.External("agnes"));
+                registry.register(new AgnesImageTool());
             }
 
             if (includeAgnesVideo) {
-                registry.register(new AgnesVideoTool(), new ToolSource.External("agnes"));
-                registry.register(new CheckVideoTool(), new ToolSource.External("agnes"));
+                registry.register(new AgnesVideoTool());
+                registry.register(new CheckVideoTool());
             }
 
             if (includeFeishu) {
-                registry.register(new FeishuCLITool(), new ToolSource.External("feishu"));
+                registry.register(new FeishuCLITool());
             }
 
             if (includeMcp) {

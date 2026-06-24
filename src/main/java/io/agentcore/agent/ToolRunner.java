@@ -187,9 +187,11 @@ public class ToolRunner implements AutoCloseable {
             }
         }
 
-        // Run in parallel using StructuredTaskScope with semaphore-bounded concurrency
+        // Run in parallel using StructuredTaskScope (plain — no ShutdownOnFailure).
+        // Each tool handles its own errors via runSingleTool, so individual tool
+        // failures do NOT cancel other running tools.
         ToolCallResult[] results = new ToolCallResult[calls.size()];
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        try (var scope = new StructuredTaskScope()) {
             List<StructuredTaskScope.Subtask<Integer>> subtasks = new ArrayList<>(calls.size());
             for (int i = 0; i < calls.size(); i++) {
                 final int idx = i;
@@ -205,7 +207,6 @@ public class ToolRunner implements AutoCloseable {
                 }));
             }
             scope.join();
-            scope.throwIfFailed();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.debug("Parallel tool execution interrupted");

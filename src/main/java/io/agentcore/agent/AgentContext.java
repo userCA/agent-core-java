@@ -5,12 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import io.agentcore.model.Message;
-import io.agentcore.model.Content;
 import io.agentcore.model.AgentEvent;
 
 /**
@@ -23,53 +20,6 @@ import io.agentcore.model.AgentEvent;
 public final class AgentContext {
 
     private static final Logger log = LoggerFactory.getLogger(AgentContext.class);
-
-    /**
-     * Thinking levels for model reasoning.
-     */
-    public enum ThinkingLevel {
-        OFF("off"),
-        MINIMAL("minimal"),
-        LOW("low"),
-        MEDIUM("medium"),
-        HIGH("high"),
-        XHIGH("xhigh");
-
-        private static final Map<String, ThinkingLevel> LOOKUP;
-        static {
-            Map<String, ThinkingLevel> m = new HashMap<>();
-            for (ThinkingLevel level : values()) {
-                m.put(level.value.toLowerCase(), level);
-            }
-            LOOKUP = Map.copyOf(m);
-        }
-
-        private final String value;
-
-        ThinkingLevel(String value) {
-            this.value = value;
-        }
-
-        /** Returns the string value used by providers. */
-        public String value() {
-            return value;
-        }
-
-        /**
-         * Parse a string to ThinkingLevel (case-insensitive).
-         * @return the matching level, or {@link #OFF} if not recognized
-         */
-        public static ThinkingLevel fromValue(String s) {
-            if (s == null) return OFF;
-            ThinkingLevel level = LOOKUP.get(s.toLowerCase());
-            return level != null ? level : OFF;
-        }
-
-        @Override
-        public String toString() {
-            return value;
-        }
-    }
 
     private volatile String systemPrompt;
     private final List<Message> messages;
@@ -99,7 +49,10 @@ public final class AgentContext {
      * external synchronization.
      *
      * @return the internal synchronized list (not a copy)
+     * @deprecated Use {@link #messagesSnapshot()} instead. Direct iteration of
+     *             the returned list is unsafe without external synchronization.
      */
+    @Deprecated
     public List<Message> messages() { return messages; }
 
     /**

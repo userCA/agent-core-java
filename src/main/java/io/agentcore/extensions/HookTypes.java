@@ -22,11 +22,9 @@ public final class HookTypes {
     /**
      * Result returned from {@link Extension#onBeforeAgentStart(String, String)}.
      *
-     * <p>Sealed interface with three variants:
+     * <p>Sealed interface with one variant:
      * <ul>
      *   <li>{@link ModifySystemPrompt} — replace the system prompt</li>
-     *   <li>{@link InjectMessage} — inject an additional message</li>
-     *   <li>{@link NoOp} — no modification</li>
      * </ul>
      */
     public sealed interface BeforeAgentStartResult {
@@ -36,19 +34,6 @@ public final class HookTypes {
             public ModifySystemPrompt {
                 if (systemPrompt == null) throw new IllegalArgumentException("systemPrompt must not be null");
             }
-        }
-
-        /** Inject an additional message into the agent context. */
-        record InjectMessage(Map<String, Object> message) implements BeforeAgentStartResult {
-            public InjectMessage {
-                if (message == null) message = Map.of();
-                else message = Map.copyOf(message);
-            }
-        }
-
-        /** No-op: keep the original system prompt unchanged. */
-        record NoOp() implements BeforeAgentStartResult {
-            public static final NoOp INSTANCE = new NoOp();
         }
     }
 
@@ -142,10 +127,9 @@ public final class HookTypes {
     /**
      * Result returned from {@link Extension#afterToolCall(AfterToolCallContext)}.
      *
-     * <p>Sealed interface with two variants:
+     * <p>Sealed interface with one variant:
      * <ul>
      *   <li>{@link ModifyResult} — replace the tool result, optionally overriding isError/terminate</li>
-     *   <li>{@link NoOp} — no modification</li>
      * </ul>
      */
     public sealed interface AfterToolCallHookResult {
@@ -171,11 +155,6 @@ public final class HookTypes {
             public ModifyResult(List<io.agentcore.model.Content> content) {
                 this(content, null, null, null);
             }
-        }
-
-        /** No-op: keep original result. */
-        record NoOp() implements AfterToolCallHookResult {
-            public static final NoOp INSTANCE = new NoOp();
         }
     }
 }

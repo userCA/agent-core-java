@@ -20,7 +20,10 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Mirrors Python {@code agent_core/resources/prompts.py}.
  * Uses a simple YAML subset parser (no external YAML library needed).
+ *
+ * @deprecated Not integrated into the main agent runtime.
  */
+@Deprecated
 public final class PromptLoader {
 
     private static final Logger log = LoggerFactory.getLogger(PromptLoader.class);

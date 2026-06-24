@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import io.agentcore.model.Message;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.Content;
@@ -164,7 +165,7 @@ public class AgentLoop {
 
         // Prepare LLM call context
         List<Map<String, Object>> llmMessages = prepareLlmMessages(signal);
-        var auth = config.authResolver().resolve(config.model().provider());
+        var auth = config.authResolver().apply(config.model().provider());
         List<Map<String, Object>> toolDefs = getToolDefs();
 
         // Execute LLM call with retry logic — streaming events emitted in real-time
@@ -194,18 +195,8 @@ public class AgentLoop {
             return new TurnOutcome(false, false);
         }
 
-        // Build shared TurnContext for both callbacks (snapshot for safe iteration)
-        List<Message> allMessagesSnapshot = context.messagesSnapshot();
         AgentLoopConfig.TurnContext turnContext = new AgentLoopConfig.TurnContext(
-                assistant, toolResults, allMessagesSnapshot, newMessagesProduced);
-
-        // prepareNextTurn: dynamic config adjustment
-        if (config.prepareNextTurn() != null) {
-            var snapshot = config.prepareNextTurn().apply(turnContext);
-            if (snapshot != null) {
-                applySnapshot(snapshot);
-            }
-        }
+                assistant, toolResults, context.messagesSnapshot(), newMessagesProduced);
 
         // shouldStopAfterTurn: business-level termination
         if (config.shouldStopAfterTurn() != null
@@ -241,16 +232,7 @@ public class AgentLoop {
     }
 
     private List<Map<String, Object>> prepareLlmMessages(AtomicBoolean signal) {
-        // Snapshot messages to avoid races with concurrent addMessage/replaceMessages
-        List<Message> snapshot = context.messagesSnapshot();
-        List<Map<String, Object>> llmMessages = config.convertToLlm().convert(snapshot);
-        if (config.transformContext() != null) {
-            List<Map<String, Object>> transformed = config.transformContext().transform(llmMessages, signal);
-            if (transformed != null) {
-                llmMessages = transformed;
-            }
-        }
-        return llmMessages;
+        return config.convertToLlm().convert(context.messagesSnapshot());
     }
 
     private AssistantMessage executeLlmWithRetry(
@@ -322,7 +304,7 @@ public class AgentLoop {
                 && config.compactCallback() != null
                 && retryCount < maxRetries) {
             log.info("Context overflow detected, triggering compaction");
-            boolean compacted = config.compactCallback().compact(context.messages());
+            boolean compacted = config.compactCallback().compact(context.messagesSnapshot());
             if (compacted) {
                 List<Map<String, Object>> newMessages = prepareLlmMessages(signal);
                 return new RetryDecision(true, retryCount + 1, 0, newMessages);
@@ -384,16 +366,10 @@ public class AgentLoop {
         return batch;
     }
 
-    private List<Message> drainMessages(AgentLoopConfig.MessageDrainer drainer) {
-        if (drainer == null) return List.of();
-        List<Message> messages = drainer.drain();
+    private List<Message> drainMessages(Supplier<List<Message>> supplier) {
+        if (supplier == null) return List.of();
+        List<Message> messages = supplier.get();
         return (messages == null || messages.isEmpty()) ? List.of() : messages;
-    }
-
-    private void applySnapshot(AgentLoopConfig.NextTurnSnapshot snapshot) {
-        streamAccumulator.updateConfig(snapshot.model(), snapshot.thinkingLevel(), snapshot.temperature());
-        log.debug("Applied NextTurnSnapshot: model={}, thinking={}, temp={}",
-                snapshot.model(), snapshot.thinkingLevel(), snapshot.temperature());
     }
 
     private List<Map<String, Object>> getToolDefs() {

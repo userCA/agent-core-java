@@ -92,9 +92,6 @@ class Phase3Test {
             registry.register(createTool("tool_a", "Tool A"));
             registry.register(createTool("tool_b", "Tool B"));
 
-            var infos = registry.list();
-            assertEquals(2, infos.size());
-
             var defs = registry.toDefinitions();
             assertEquals(2, defs.size());
 

@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Runs registered extensions in order with error isolation.
@@ -133,25 +132,6 @@ public final class ExtensionRunner {
 
         if (!hasModification) return null;
         return new AfterToolCallHookResult.ModifyResult(accContent, accDetails, accIsError, accTerminate);
-    }
-
-    /**
-     * Transform context messages before LLM call.
-     */
-    public List<Map<String, Object>> transformContext(
-            List<Map<String, Object>> messages, AtomicBoolean signal) {
-        if (extensions.isEmpty()) return messages;
-
-        List<Map<String, Object>> result = messages;
-        for (Extension ext : extensions) {
-            try {
-                List<Map<String, Object>> transformed = ext.transformContext(result, signal);
-                if (transformed != null) result = transformed;
-            } catch (Exception e) {
-                log.warn("Extension {} transformContext failed: {}", ext.name(), e.getMessage());
-            }
-        }
-        return result;
     }
 
     /**

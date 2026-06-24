@@ -16,7 +16,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
@@ -38,8 +37,8 @@ import java.util.function.Function;
  *       .url("http://localhost:1933")
  *       .apiKey("sk-xxx")
  *       .build();
- *   store.remember("session-1", "User prefers dark mode", null).join();
- *   List<MemoryRecord> records = store.recall("session-1", "UI preference", 5).join();
+ *   store.remember("session-1", "User prefers dark mode", null);
+ *   List<MemoryRecord> records = store.recall("session-1", "UI preference", 5);
  * }</pre>
  */
 public class OpenVikingMemoryStore implements MemoryStore {
@@ -122,86 +121,80 @@ public class OpenVikingMemoryStore implements MemoryStore {
     // ── MemoryStore ──
 
     @Override
-    public CompletableFuture<Void> remember(String sessionId, String text, Map<String, Object> metadata) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                String payload = text;
-                if (metadata != null && !metadata.isEmpty()) {
-                    payload = text + "\n[metadata: " + MAPPER.writeValueAsString(metadata) + "]";
-                }
-
-                // Add message
-                Map<String, Object> addBody = new LinkedHashMap<>();
-                addBody.put("session_id", sessionId);
-                addBody.put("role", "user");
-                addBody.put("content", payload);
-                if (!agentId.isEmpty()) addBody.put("agent_id", agentId);
-
-                String resolvedKey = resolveApiKey(sessionId);
-                HttpRequest addReq = buildPostRequest("/api/v1/messages", addBody, resolvedKey);
-                HttpResponse<String> addResp = httpClient.send(addReq, HttpResponse.BodyHandlers.ofString());
-
-                if (addResp.statusCode() >= 400) {
-                    log.warn("OpenViking remember (add) failed: {} {}", addResp.statusCode(), addResp.body());
-                    return;
-                }
-
-                // Commit session
-                Map<String, Object> commitBody = Map.of("session_id", sessionId);
-                HttpRequest commitReq = buildPostRequest("/api/v1/sessions/commit", commitBody, resolvedKey);
-                HttpResponse<String> commitResp = httpClient.send(commitReq, HttpResponse.BodyHandlers.ofString());
-
-                if (commitResp.statusCode() >= 400) {
-                    log.warn("OpenViking remember (commit) failed: {} {}", commitResp.statusCode(), commitResp.body());
-                }
-            } catch (Exception e) {
-                log.warn("OpenViking remember error: {}", e.getMessage(), e);
+    public void remember(String sessionId, String text, Map<String, Object> metadata) {
+        try {
+            String payload = text;
+            if (metadata != null && !metadata.isEmpty()) {
+                payload = text + "\n[metadata: " + MAPPER.writeValueAsString(metadata) + "]";
             }
-        });
+
+            // Add message
+            Map<String, Object> addBody = new LinkedHashMap<>();
+            addBody.put("session_id", sessionId);
+            addBody.put("role", "user");
+            addBody.put("content", payload);
+            if (!agentId.isEmpty()) addBody.put("agent_id", agentId);
+
+            String resolvedKey = resolveApiKey(sessionId);
+            HttpRequest addReq = buildPostRequest("/api/v1/messages", addBody, resolvedKey);
+            HttpResponse<String> addResp = httpClient.send(addReq, HttpResponse.BodyHandlers.ofString());
+
+            if (addResp.statusCode() >= 400) {
+                log.warn("OpenViking remember (add) failed: {} {}", addResp.statusCode(), addResp.body());
+                return;
+            }
+
+            // Commit session
+            Map<String, Object> commitBody = Map.of("session_id", sessionId);
+            HttpRequest commitReq = buildPostRequest("/api/v1/sessions/commit", commitBody, resolvedKey);
+            HttpResponse<String> commitResp = httpClient.send(commitReq, HttpResponse.BodyHandlers.ofString());
+
+            if (commitResp.statusCode() >= 400) {
+                log.warn("OpenViking remember (commit) failed: {} {}", commitResp.statusCode(), commitResp.body());
+            }
+        } catch (Exception e) {
+            log.warn("OpenViking remember error: {}", e.getMessage(), e);
+        }
     }
 
     @Override
-    public CompletableFuture<List<MemoryRecord>> recall(String sessionId, String query, int limit) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> body = new LinkedHashMap<>();
-                body.put("query", query);
-                body.put("target_uri", "viking://user/memories");
-                body.put("node_limit", limit);
+    public List<MemoryRecord> recall(String sessionId, String query, int limit) {
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("query", query);
+            body.put("target_uri", "viking://user/memories");
+            body.put("node_limit", limit);
 
-                String resolvedKey = resolveApiKey(sessionId);
-                HttpRequest request = buildPostRequest("/api/v1/search", body, resolvedKey);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String resolvedKey = resolveApiKey(sessionId);
+            HttpRequest request = buildPostRequest("/api/v1/search", body, resolvedKey);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                if (response.statusCode() >= 400) {
-                    log.warn("OpenViking recall failed: {} {}", response.statusCode(), response.body());
-                    return List.of();
-                }
-
-                return parseRecallResponse(response.body(), sessionId);
-            } catch (Exception e) {
-                log.warn("OpenViking recall error: {}", e.getMessage(), e);
+            if (response.statusCode() >= 400) {
+                log.warn("OpenViking recall failed: {} {}", response.statusCode(), response.body());
                 return List.of();
             }
-        });
+
+            return parseRecallResponse(response.body(), sessionId);
+        } catch (Exception e) {
+            log.warn("OpenViking recall error: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     @Override
-    public CompletableFuture<Void> forget(String sessionId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> body = Map.of("session_id", sessionId);
-                String resolvedKey = resolveApiKey(sessionId);
-                HttpRequest request = buildPostRequest("/api/v1/sessions/delete", body, resolvedKey);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public void forget(String sessionId) {
+        try {
+            Map<String, Object> body = Map.of("session_id", sessionId);
+            String resolvedKey = resolveApiKey(sessionId);
+            HttpRequest request = buildPostRequest("/api/v1/sessions/delete", body, resolvedKey);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                if (response.statusCode() >= 400) {
-                    log.warn("OpenViking forget failed: {} {}", response.statusCode(), response.body());
-                }
-            } catch (Exception e) {
-                log.warn("OpenViking forget error: {}", e.getMessage(), e);
+            if (response.statusCode() >= 400) {
+                log.warn("OpenViking forget failed: {} {}", response.statusCode(), response.body());
             }
-        });
+        } catch (Exception e) {
+            log.warn("OpenViking forget error: {}", e.getMessage(), e);
+        }
     }
 
     // ── Helpers ──

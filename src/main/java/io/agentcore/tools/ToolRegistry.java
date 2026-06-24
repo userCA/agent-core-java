@@ -20,19 +20,11 @@ public class ToolRegistry {
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
 
     private final Map<String, Tool> tools = new ConcurrentHashMap<>();
-    private final Map<String, ToolSource> sources = new ConcurrentHashMap<>();
 
     /**
-     * Register a tool with default builtin source.
+     * Register a tool.
      */
     public void register(Tool tool) {
-        register(tool, ToolSource.Builtin.INSTANCE);
-    }
-
-    /**
-     * Register a tool with an associated source.
-     */
-    public void register(Tool tool, ToolSource source) {
         String name = tool.definition().name();
 
         // Lifecycle: call start() before registration
@@ -46,7 +38,6 @@ public class ToolRegistry {
         }
 
         tools.put(name, tool);
-        sources.put(name, source != null ? source : ToolSource.Builtin.INSTANCE);
     }
 
     /**
@@ -56,7 +47,6 @@ public class ToolRegistry {
      */
     public boolean unregister(String name) {
         Tool removed = tools.remove(name);
-        sources.remove(name);
 
         if (removed instanceof ToolLifecycle lifecycle) {
             try {
@@ -74,20 +64,6 @@ public class ToolRegistry {
      */
     public Tool get(String name) {
         return tools.get(name);
-    }
-
-    /**
-     * List all registered tool infos.
-     */
-    public List<ToolInfo> list() {
-        return tools.entrySet().stream()
-                .map(e -> new ToolInfo(
-                        e.getValue().definition().name(),
-                        e.getValue().definition().description(),
-                        e.getValue().definition().parameters(),
-                        sources.getOrDefault(e.getKey(), ToolSource.Builtin.INSTANCE)
-                ))
-                .toList();
     }
 
     /**

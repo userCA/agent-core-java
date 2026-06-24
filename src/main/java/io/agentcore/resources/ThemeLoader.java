@@ -17,7 +17,10 @@ import org.slf4j.LoggerFactory;
  * Theme discovery and loading from JSON files.
  *
  * <p>Mirrors Python {@code agent_core/resources/themes.py}.
+ *
+ * @deprecated Not integrated into the main agent runtime.
  */
+@Deprecated
 public final class ThemeLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ThemeLoader.class);

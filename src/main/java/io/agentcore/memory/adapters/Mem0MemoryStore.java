@@ -16,7 +16,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * {@link MemoryStore} adapter for the Mem0 memory service.
@@ -27,8 +26,8 @@ import java.util.concurrent.CompletableFuture;
  * <p>Usage:
  * <pre>{@code
  *   Mem0MemoryStore store = new Mem0MemoryStore("http://localhost:8081", "");
- *   store.remember("session-1", "User likes Java", null).join();
- *   List<MemoryRecord> records = store.recall("session-1", "programming", 5).join();
+ *   store.remember("session-1", "User likes Java", null);
+ *   List<MemoryRecord> records = store.recall("session-1", "programming", 5);
  * }</pre>
  */
 public class Mem0MemoryStore implements MemoryStore {
@@ -63,69 +62,63 @@ public class Mem0MemoryStore implements MemoryStore {
     }
 
     @Override
-    public CompletableFuture<Void> remember(String sessionId, String text, Map<String, Object> metadata) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> body = new LinkedHashMap<>();
-                body.put("messages", List.of(Map.of("role", "user", "content", text)));
-                body.put("user_id", sessionId);
-                body.put("metadata", metadata != null ? metadata : Map.of());
+    public void remember(String sessionId, String text, Map<String, Object> metadata) {
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("messages", List.of(Map.of("role", "user", "content", text)));
+            body.put("user_id", sessionId);
+            body.put("metadata", metadata != null ? metadata : Map.of());
 
-                String json = MAPPER.writeValueAsString(body);
-                HttpRequest request = buildPostRequest("/v1/memories/", json);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String json = MAPPER.writeValueAsString(body);
+            HttpRequest request = buildPostRequest("/v1/memories/", json);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                if (response.statusCode() >= 400) {
-                    log.warn("Mem0 remember failed: {} {}", response.statusCode(), response.body());
-                }
-            } catch (Exception e) {
-                log.warn("Mem0 remember error: {}", e.getMessage(), e);
+            if (response.statusCode() >= 400) {
+                log.warn("Mem0 remember failed: {} {}", response.statusCode(), response.body());
             }
-        });
+        } catch (Exception e) {
+            log.warn("Mem0 remember error: {}", e.getMessage(), e);
+        }
     }
 
     @Override
-    public CompletableFuture<List<MemoryRecord>> recall(String sessionId, String query, int limit) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> body = new LinkedHashMap<>();
-                body.put("query", query);
-                body.put("filters", Map.of("user_id", sessionId));
-                body.put("top_k", limit);
+    public List<MemoryRecord> recall(String sessionId, String query, int limit) {
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("query", query);
+            body.put("filters", Map.of("user_id", sessionId));
+            body.put("top_k", limit);
 
-                String json = MAPPER.writeValueAsString(body);
-                HttpRequest request = buildPostRequest("/v1/memories/search/", json);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String json = MAPPER.writeValueAsString(body);
+            HttpRequest request = buildPostRequest("/v1/memories/search/", json);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                if (response.statusCode() >= 400) {
-                    log.warn("Mem0 recall failed: {} {}", response.statusCode(), response.body());
-                    return List.of();
-                }
-
-                return parseRecallResponse(response.body(), sessionId);
-            } catch (Exception e) {
-                log.warn("Mem0 recall error: {}", e.getMessage(), e);
+            if (response.statusCode() >= 400) {
+                log.warn("Mem0 recall failed: {} {}", response.statusCode(), response.body());
                 return List.of();
             }
-        });
+
+            return parseRecallResponse(response.body(), sessionId);
+        } catch (Exception e) {
+            log.warn("Mem0 recall error: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     @Override
-    public CompletableFuture<Void> forget(String sessionId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> body = Map.of("user_id", sessionId);
-                String json = MAPPER.writeValueAsString(body);
-                HttpRequest request = buildPostRequest("/v1/memories/delete/", json);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public void forget(String sessionId) {
+        try {
+            Map<String, Object> body = Map.of("user_id", sessionId);
+            String json = MAPPER.writeValueAsString(body);
+            HttpRequest request = buildPostRequest("/v1/memories/delete/", json);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                if (response.statusCode() >= 400) {
-                    log.warn("Mem0 forget failed: {} {}", response.statusCode(), response.body());
-                }
-            } catch (Exception e) {
-                log.warn("Mem0 forget error: {}", e.getMessage(), e);
+            if (response.statusCode() >= 400) {
+                log.warn("Mem0 forget failed: {} {}", response.statusCode(), response.body());
             }
-        });
+        } catch (Exception e) {
+            log.warn("Mem0 forget error: {}", e.getMessage(), e);
+        }
     }
 
     // ── Helpers ──

@@ -72,7 +72,7 @@ public class BashTool implements Tool {
         double timeout = Math.max(1.0, Math.min(300.0, p.getDouble("timeout", 60.0)));
 
         CompletableFuture<BashResult> future = bashOps.execute(
-                command, null, timeout, null, null, null);
+                command, null, timeout, null, null, ctx.signal());
 
         try {
             BashResult result = future.join();

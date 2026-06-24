@@ -3,10 +3,6 @@ package io.agentcore.extensions;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.extensions.HookTypes.*;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * Extension interface — plugins that hook into the agent lifecycle.
  *
@@ -26,7 +22,6 @@ public interface Extension {
      * Called before the agent loop starts. Can return a typed result:
      * <ul>
      *   <li>{@link BeforeAgentStartResult.ModifySystemPrompt} — replace system prompt</li>
-     *   <li>{@link BeforeAgentStartResult.InjectMessage} — inject a message</li>
      *   <li>{@code null} — no modification</li>
      * </ul>
      */
@@ -53,14 +48,6 @@ public interface Extension {
      */
     default AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
         return null;
-    }
-
-    /**
-     * Transform the LLM message context before each call.
-     */
-    default List<Map<String, Object>> transformContext(
-            List<Map<String, Object>> messages, AtomicBoolean signal) {
-        return messages;
     }
 
     /**

@@ -3,6 +3,7 @@ package io.agentcore.agent;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.HookTypes.*;
 import io.agentcore.tools.*;
+import io.agentcore.model.ThinkingLevel;
 
 import org.junit.jupiter.api.*;
 
@@ -70,12 +71,12 @@ class CoreAdvancedTest {
 
         @Test
         void thinkingLevel_constants() {
-            assertEquals("off", AgentContext.ThinkingLevel.OFF.value());
-            assertEquals("minimal", AgentContext.ThinkingLevel.MINIMAL.value());
-            assertEquals("low", AgentContext.ThinkingLevel.LOW.value());
-            assertEquals("medium", AgentContext.ThinkingLevel.MEDIUM.value());
-            assertEquals("high", AgentContext.ThinkingLevel.HIGH.value());
-            assertEquals("xhigh", AgentContext.ThinkingLevel.XHIGH.value());
+            assertEquals("off", ThinkingLevel.OFF.value());
+            assertEquals("minimal", ThinkingLevel.MINIMAL.value());
+            assertEquals("low", ThinkingLevel.LOW.value());
+            assertEquals("medium", ThinkingLevel.MEDIUM.value());
+            assertEquals("high", ThinkingLevel.HIGH.value());
+            assertEquals("xhigh", ThinkingLevel.XHIGH.value());
         }
 
         @Test

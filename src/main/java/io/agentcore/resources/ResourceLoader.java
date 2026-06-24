@@ -23,14 +23,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Mirrors Python {@code agent_core/resources/loader.py ResourceLoader}.
  *
- * <p>Search order (per resource type):
- * <ol>
- *   <li>Explicit extra paths (constructor arg)</li>
- *   <li>{@code <cwd>/.pi/<resource_type>}</li>
- *   <li>{@code ~/.pi/agent/<resource_type>}</li>
- *   <li>{@code AGENT_CORE_<TYPE>_PATH} environment variable</li>
- * </ol>
+ * @deprecated Not integrated into the main agent runtime. Most resource types
+ *             (themes, personas, extension specs) are loaded but never consumed.
+ *             Prefer {@link ContextFileLoader} directly for context file loading.
  */
+@Deprecated
 public final class ResourceLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceLoader.class);

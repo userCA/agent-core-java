@@ -17,7 +17,10 @@ import org.slf4j.LoggerFactory;
  * Persona (agent role) loading from .pi/personas/*.json.
  *
  * <p>Mirrors Python {@code agent_core/resources/personas.py}.
+ *
+ * @deprecated Not integrated into the main agent runtime.
  */
+@Deprecated
 public final class PersonaLoader {
 
     private static final Logger log = LoggerFactory.getLogger(PersonaLoader.class);

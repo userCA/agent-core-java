@@ -11,6 +11,8 @@ import io.agentcore.tools.ToolRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import io.agentcore.model.Message;
 import io.agentcore.model.Content;
 
@@ -52,14 +54,13 @@ public final class AgentLoopConfig {
     private final ModelInfo model;
     private final StreamFunction streamFn;
     private final ConvertToLlm convertToLlm;
-    private final AuthResolver authResolver;
+    private final Function<String, ProviderAuth> authResolver;
 
     // ── Sub-configs (grouped by concern) ───────────────────────
     private final RetryConfig retryConfig;
     private final ToolConfig toolConfig;
 
     // ── Optional fields ────────────────────────────────────────
-    private final TransformContext transformContext;
     private final String thinkingLevel;
     private final Double temperature;
     private final Integer maxTokens;
@@ -68,10 +69,9 @@ public final class AgentLoopConfig {
     private final AfterToolCallHook afterToolCall;
     private final Integer maxTurns;
     private final CompactCallback compactCallback;
-    private final MessageDrainer getSteeringMessages;
-    private final MessageDrainer getFollowUpMessages;
+    private final Supplier<List<Message>> getSteeringMessages;
+    private final Supplier<List<Message>> getFollowUpMessages;
     private final HumanInputGate humanInputGate;
-    private final PrepareNextTurn prepareNextTurn;
     private final ShouldStopAfterTurn shouldStopAfterTurn;
 
     private AgentLoopConfig(Builder b) {
@@ -83,7 +83,6 @@ public final class AgentLoopConfig {
         this.toolConfig = new ToolConfig(b.toolTimeout, b.toolResultMaxChars,
                 b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL,
                 b.maxParallelTools);
-        this.transformContext = b.transformContext;
         this.thinkingLevel = b.thinkingLevel != null ? b.thinkingLevel : "off";
         this.temperature = b.temperature;
         this.maxTokens = b.maxTokens;
@@ -95,8 +94,14 @@ public final class AgentLoopConfig {
         this.getSteeringMessages = b.getSteeringMessages;
         this.getFollowUpMessages = b.getFollowUpMessages;
         this.humanInputGate = b.humanInputGate;
-        this.prepareNextTurn = b.prepareNextTurn;
         this.shouldStopAfterTurn = b.shouldStopAfterTurn;
+    }
+
+    /**
+     * Create a lightweight copy with only compactCallback changed.
+     */
+    public AgentLoopConfig withCompactCallback(CompactCallback callback) {
+        return toBuilder().compactCallback(callback).build();
     }
 
     // ── Functional interfaces ──────────────────────────────────
@@ -123,18 +128,15 @@ public final class AgentLoopConfig {
 
     /**
      * Resolve auth credentials for a provider.
+     * @deprecated Use {@link Function}{@code <String, ProviderAuth>} directly.
      */
+    @Deprecated
     @FunctionalInterface
-    public interface AuthResolver {
+    public interface AuthResolver extends Function<String, ProviderAuth> {
         ProviderAuth resolve(String providerName);
-    }
 
-    /**
-     * Transform the LLM message context before each call.
-     */
-    @FunctionalInterface
-    public interface TransformContext {
-        List<Map<String,Object>> transform(List<Map<String,Object>> messages, AtomicBoolean signal);
+        @Override
+        default ProviderAuth apply(String providerName) { return resolve(providerName); }
     }
 
     /**
@@ -155,10 +157,15 @@ public final class AgentLoopConfig {
 
     /**
      * Drain pending steering/follow-up messages.
+     * @deprecated Use {@link Supplier}{@code <List<Message>>} directly.
      */
+    @Deprecated
     @FunctionalInterface
-    public interface MessageDrainer {
+    public interface MessageDrainer extends Supplier<List<Message>> {
         List<Message> drain();
+
+        @Override
+        default List<Message> get() { return drain(); }
     }
 
     /**
@@ -170,15 +177,6 @@ public final class AgentLoopConfig {
     }
 
     /**
-     * Callback invoked after each turn to allow dynamic config adjustment.
-     * Return null to keep current config, or a NextTurnSnapshot to update.
-     */
-    @FunctionalInterface
-    public interface PrepareNextTurn {
-        NextTurnSnapshot apply(TurnContext context);
-    }
-
-    /**
      * Callback invoked after each turn to decide if the loop should stop.
      * Return true to stop the agent loop.
      */
@@ -187,10 +185,10 @@ public final class AgentLoopConfig {
         boolean apply(TurnContext context);
     }
 
-    // ── Context/Snapshot records ───────────────────────────────
+    // ── Context records ─────────────────────────────────────
 
     /**
-     * Context provided to both prepareNextTurn and shouldStopAfterTurn callbacks.
+     * Context provided to shouldStopAfterTurn callback.
      * Represents the completed turn's state including assistant response,
      * tool results, and full message history.
      */
@@ -199,16 +197,6 @@ public final class AgentLoopConfig {
             List<ToolResultMessage> toolResults,
             List<Message> allMessages,
             List<Message> newMessages
-    ) {}
-
-    /**
-     * Snapshot returned by prepareNextTurn to update config for the next turn.
-     * Null fields mean "keep current value".
-     */
-    public record NextTurnSnapshot(
-            ModelInfo model,
-            String thinkingLevel,
-            Double temperature
     ) {}
 
     // ── Builder ────────────────────────────────────────────────
@@ -224,7 +212,6 @@ public final class AgentLoopConfig {
         b.streamFn = this.streamFn;
         b.convertToLlm = this.convertToLlm;
         b.authResolver = this.authResolver;
-        b.transformContext = this.transformContext;
         b.thinkingLevel = this.thinkingLevel;
         b.toolExecution = this.toolConfig.execution();
         b.temperature = this.temperature;
@@ -243,7 +230,6 @@ public final class AgentLoopConfig {
         b.getSteeringMessages = this.getSteeringMessages;
         b.getFollowUpMessages = this.getFollowUpMessages;
         b.humanInputGate = this.humanInputGate;
-        b.prepareNextTurn = this.prepareNextTurn;
         b.shouldStopAfterTurn = this.shouldStopAfterTurn;
         return b;
     }
@@ -252,8 +238,7 @@ public final class AgentLoopConfig {
         private ModelInfo model;
         private StreamFunction streamFn;
         private ConvertToLlm convertToLlm;
-        private AuthResolver authResolver;
-        private TransformContext transformContext;
+        private Function<String, ProviderAuth> authResolver;
         private String thinkingLevel = "off";
         private ToolExecutionMode toolExecution = ToolExecutionMode.PARALLEL;
         private Double temperature;
@@ -269,17 +254,15 @@ public final class AgentLoopConfig {
         private int toolResultMaxChars = 4000;
         private int maxParallelTools = 10;
         private CompactCallback compactCallback;
-        private MessageDrainer getSteeringMessages;
-        private MessageDrainer getFollowUpMessages;
+        private Supplier<List<Message>> getSteeringMessages;
+        private Supplier<List<Message>> getFollowUpMessages;
         private HumanInputGate humanInputGate;
-        private PrepareNextTurn prepareNextTurn;
         private ShouldStopAfterTurn shouldStopAfterTurn;
 
         public Builder model(ModelInfo v) { this.model = v; return this; }
         public Builder streamFn(StreamFunction v) { this.streamFn = v; return this; }
         public Builder convertToLlm(ConvertToLlm v) { this.convertToLlm = v; return this; }
-        public Builder authResolver(AuthResolver v) { this.authResolver = v; return this; }
-        public Builder transformContext(TransformContext v) { this.transformContext = v; return this; }
+        public Builder authResolver(Function<String, ProviderAuth> v) { this.authResolver = v; return this; }
         public Builder thinkingLevel(String v) { this.thinkingLevel = v; return this; }
         public Builder toolExecution(ToolExecutionMode v) { this.toolExecution = v; return this; }
         public Builder temperature(Double v) { this.temperature = v; return this; }
@@ -295,10 +278,9 @@ public final class AgentLoopConfig {
         public Builder toolResultMaxChars(int v) { this.toolResultMaxChars = v; return this; }
         public Builder maxParallelTools(int v) { this.maxParallelTools = v; return this; }
         public Builder compactCallback(CompactCallback v) { this.compactCallback = v; return this; }
-        public Builder getSteeringMessages(MessageDrainer v) { this.getSteeringMessages = v; return this; }
-        public Builder getFollowUpMessages(MessageDrainer v) { this.getFollowUpMessages = v; return this; }
+        public Builder getSteeringMessages(Supplier<List<Message>> v) { this.getSteeringMessages = v; return this; }
+        public Builder getFollowUpMessages(Supplier<List<Message>> v) { this.getFollowUpMessages = v; return this; }
         public Builder humanInputGate(HumanInputGate v) { this.humanInputGate = v; return this; }
-        public Builder prepareNextTurn(PrepareNextTurn v) { this.prepareNextTurn = v; return this; }
         public Builder shouldStopAfterTurn(ShouldStopAfterTurn v) { this.shouldStopAfterTurn = v; return this; }
 
         /**
@@ -342,8 +324,7 @@ public final class AgentLoopConfig {
     public ModelInfo model() { return model; }
     public StreamFunction streamFn() { return streamFn; }
     public ConvertToLlm convertToLlm() { return convertToLlm; }
-    public AuthResolver authResolver() { return authResolver; }
-    public TransformContext transformContext() { return transformContext; }
+    public Function<String, ProviderAuth> authResolver() { return authResolver; }
     public String thinkingLevel() { return thinkingLevel; }
     public Double temperature() { return temperature; }
     public Integer maxTokens() { return maxTokens; }
@@ -352,10 +333,9 @@ public final class AgentLoopConfig {
     public AfterToolCallHook afterToolCall() { return afterToolCall; }
     public Integer maxTurns() { return maxTurns; }
     public CompactCallback compactCallback() { return compactCallback; }
-    public MessageDrainer getSteeringMessages() { return getSteeringMessages; }
-    public MessageDrainer getFollowUpMessages() { return getFollowUpMessages; }
+    public Supplier<List<Message>> getSteeringMessages() { return getSteeringMessages; }
+    public Supplier<List<Message>> getFollowUpMessages() { return getFollowUpMessages; }
     public HumanInputGate humanInputGate() { return humanInputGate; }
-    public PrepareNextTurn prepareNextTurn() { return prepareNextTurn; }
     public ShouldStopAfterTurn shouldStopAfterTurn() { return shouldStopAfterTurn; }
 
     // ── Sub-config getters (preferred) ─────────────────────────

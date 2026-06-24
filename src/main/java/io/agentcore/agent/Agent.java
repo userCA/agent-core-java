@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
@@ -34,14 +33,16 @@ public class Agent implements AutoCloseable {
     private final AgentLoopConfig baseConfig;
     private final AgentContext context;
     private final AtomicBoolean abortSignal = new AtomicBoolean(false);
-    private final List<Consumer<AgentEvent>> subscribers = new CopyOnWriteArrayList<>();
+    private final AgentEventDispatcher eventDispatcher = new AgentEventDispatcher();
 
     // Extension-based hook system (unified)
     private final ExtensionRunner extensionRunner;
-    private final List<AgentLoopConfig.TransformContext> transformHooks = new CopyOnWriteArrayList<>();
 
     private final PendingMessageQueue steeringQueue;
     private final PendingMessageQueue followUpQueue;
+
+    // Cached base config with hooks — reused across runs
+    private volatile AgentLoopConfig cachedBaseConfig;
 
     private final ToolCallTracker toolCallTracker = new ToolCallTracker();
 
@@ -91,8 +92,7 @@ public class Agent implements AutoCloseable {
     // ── Subscribe ──────────────────────────────────────────
 
     public Runnable subscribe(Consumer<AgentEvent> listener) {
-        subscribers.add(listener);
-        return () -> subscribers.remove(listener);
+        return eventDispatcher.subscribe(listener);
     }
 
     // ── Prompt / Continue / Abort ──────────────────────────
@@ -142,6 +142,7 @@ public class Agent implements AutoCloseable {
         return continueLoop(onEvent, null);
     }
 
+    @SuppressWarnings("deprecation") // single atomic ops on synchronizedList are safe
     public List<Message> continueLoop(Consumer<AgentEvent> onEvent,
                                       AgentLoopConfig.CompactCallback compactCallback) {
         // Validate preconditions (mirrors pi-mono agentLoopContinue)
@@ -274,30 +275,12 @@ public class Agent implements AutoCloseable {
         followUpQueue.setMode(mode);
     }
 
-    // ── Extension / Hook registration ──────────────────────
-
-    /**
-     * Add a transform-context hook (called before each LLM call).
-     */
-    public void addTransformContextHook(AgentLoopConfig.TransformContext hook) {
-        transformHooks.add(hook);
-    }
-
-    /**
-     * Remove a previously registered transform-context hook.
-     *
-     * @return true if the hook was found and removed
-     */
-    public boolean removeTransformContextHook(AgentLoopConfig.TransformContext hook) {
-        return transformHooks.remove(hook);
-    }
-
     // ── State accessors ────────────────────────────────────
 
     public boolean isStreaming() { return context.isStreaming(); }
     public String errorMessage() { return context.errorMessage(); }
     public Set<String> pendingToolCalls() { return toolCallTracker.snapshot(); }
-    public List<Message> messages() { return List.copyOf(context.messages()); }
+    public List<Message> messages() { return context.messagesSnapshot(); }
     public AgentContext context() { return context; }
     public ExtensionRunner extensionRunner() { return extensionRunner; }
 
@@ -370,7 +353,19 @@ public class Agent implements AutoCloseable {
         context.setErrorMessage(null);
         context.tryStartStreaming();
 
-        Consumer<AgentEvent> emitter = createEmitter(onEvent);
+        // Guard against duplicate AgentEnd emission
+        AtomicBoolean agentEndEmitted = new AtomicBoolean(false);
+        Consumer<AgentEvent> emitter = eventDispatcher.createEmitter(onEvent);
+        Consumer<AgentEvent> guardedEmitter = evt -> {
+            if (evt instanceof AgentEvent.AgentEnd) {
+                if (!agentEndEmitted.compareAndSet(false, true)) {
+                    log.warn("Duplicate AgentEnd event suppressed");
+                    return;
+                }
+            }
+            emitter.accept(evt);
+        };
+
         AgentLoopConfig config = buildConfigWithHooks(compactCallback);
         ToolRunner runner = getOrCreateToolRunner(config);
         // Always sync hooks — ToolRunner is shared, but config/hooks may change per run
@@ -384,25 +379,27 @@ public class Agent implements AutoCloseable {
         try {
             loop.run(newMessages, abortSignal, evt -> {
                 toolCallTracker.onEvent(evt);
-                emitter.accept(evt);
+                guardedEmitter.accept(evt);
                 if (evt instanceof AgentEvent.AgentEnd ae) {
                     produced.set(ae.messages());
                 }
             });
         } catch (Exception e) {
-            // Synthesize failure event sequence (mirrors pi-mono handleRunFailure)
+            // Synthesize failure event sequence only if AgentEnd was not yet emitted
             context.setErrorMessage(e.getMessage());
-            AssistantMessage failMsg = AssistantMessage.builder()
-                    .stopReason(StopReason.ERROR)
-                    .errorMessage(e.getMessage())
-                    .provider(baseConfig.model().provider())
-                    .model(baseConfig.model().id())
-                    .timestamp(Message.nowEpochSeconds())
-                    .build();
-            emitter.accept(new AgentEvent.MessageStart(failMsg));
-            emitter.accept(new AgentEvent.MessageEnd(failMsg));
-            emitter.accept(new AgentEvent.TurnEnd(failMsg, List.of()));
-            emitter.accept(new AgentEvent.AgentEnd(List.of(failMsg)));
+            if (!agentEndEmitted.get()) {
+                AssistantMessage failMsg = AssistantMessage.builder()
+                        .stopReason(StopReason.ERROR)
+                        .errorMessage(e.getMessage())
+                        .provider(baseConfig.model().provider())
+                        .model(baseConfig.model().id())
+                        .timestamp(Message.nowEpochSeconds())
+                        .build();
+                guardedEmitter.accept(new AgentEvent.MessageStart(failMsg));
+                guardedEmitter.accept(new AgentEvent.MessageEnd(failMsg));
+                guardedEmitter.accept(new AgentEvent.TurnEnd(failMsg, List.of()));
+                guardedEmitter.accept(new AgentEvent.AgentEnd(List.of(failMsg)));
+            }
         } finally {
             context.stopStreaming();
             toolCallTracker.clear();
@@ -427,6 +424,20 @@ public class Agent implements AutoCloseable {
     }
 
     private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.CompactCallback compactCallback) {
+        if (cachedBaseConfig == null) {
+            cachedBaseConfig = buildBaseConfigWithHooks();
+        }
+
+        return compactCallback != null
+                ? cachedBaseConfig.withCompactCallback(compactCallback)
+                : cachedBaseConfig;
+    }
+
+    /**
+     * Build the base config with all static hooks (extensions + ad-hoc transforms).
+     * Cached and reused across runs to avoid full config reconstruction.
+     */
+    private AgentLoopConfig buildBaseConfigWithHooks() {
         AgentLoopConfig.Builder b = baseConfig.toBuilder();
 
         // Wire extension runner hooks (typed)
@@ -435,69 +446,10 @@ public class Agent implements AutoCloseable {
             b.afterToolCall(extensionRunner::afterToolCall);
         }
 
-        // Wire transform hooks (ad-hoc + extension)
-        boolean hasExtTransform = extensionRunner.hasExtensions();
-        boolean hasAdHocTransform = !transformHooks.isEmpty();
-        if (hasExtTransform || hasAdHocTransform) {
-            b.transformContext(this::chainAllTransformHooks);
-        }
-
         b.getSteeringMessages(() -> steeringQueue.drain());
         b.getFollowUpMessages(() -> followUpQueue.drain());
 
-        if (compactCallback != null) {
-            b.compactCallback(compactCallback);
-        }
-
         return b.build();
-    }
-
-    private List<Map<String, Object>> chainAllTransformHooks(
-            List<Map<String, Object>> msgs, AtomicBoolean signal) {
-        List<Map<String, Object>> result = msgs;
-        // Extension transforms first
-        if (extensionRunner.hasExtensions()) {
-            try {
-                result = extensionRunner.transformContext(result, signal);
-            } catch (Exception e) {
-                log.warn("Extension transformContext failed", e);
-            }
-        }
-        // Then ad-hoc transforms
-        for (var hook : transformHooks) {
-            try {
-                List<Map<String, Object>> transformed = hook.transform(result, signal);
-                if (transformed != null) result = transformed;
-            } catch (Exception e) {
-                log.warn("transformContext hook failed", e);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Create an event emitter that dispatches to BOTH the override consumer
-     * AND all registered subscribers. This ensures session-layer persistence
-     * (via subscribe()) always receives events, even when an explicit onEvent
-     * consumer is provided.
-     */
-    private Consumer<AgentEvent> createEmitter(Consumer<AgentEvent> override) {
-        return evt -> {
-            if (override != null) {
-                try {
-                    override.accept(evt);
-                } catch (Exception e) {
-                    log.warn("Event override consumer failed", e);
-                }
-            }
-            for (Consumer<AgentEvent> sub : subscribers) {
-                try {
-                    sub.accept(evt);
-                } catch (Exception e) {
-                    log.warn("Subscriber failed to handle event", e);
-                }
-            }
-        };
     }
 
     /**
@@ -537,7 +489,7 @@ public class Agent implements AutoCloseable {
                 }
             }
         }
-        // Sync config for this run (may differ due to prepareNextTurn snapshots)
+        // Sync config for this run
         acc.updateConfig(config.model(), config.thinkingLevel(), config.temperature());
         return acc;
     }

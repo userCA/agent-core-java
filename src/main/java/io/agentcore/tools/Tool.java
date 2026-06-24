@@ -2,7 +2,6 @@ package io.agentcore.tools;
 
 import java.util.Map;
 import io.agentcore.model.ToolResult;
-import io.agentcore.tools.ToolRenderer.RenderedOutput;
 
 /**
  * Tool interface — all executable tools implement this.

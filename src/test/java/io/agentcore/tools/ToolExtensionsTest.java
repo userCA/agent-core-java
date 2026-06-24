@@ -22,7 +22,7 @@ import io.agentcore.model.Content;
 
 /**
  * Tests for tool extensions: SandboxPolicyExtension, SelfHealingExtension,
- * ReadTool correctness, BashTool correctness, and ToolRenderer.
+ * ReadTool correctness, BashTool correctness, and RenderedOutput.
  */
 class ToolExtensionsTest {
 
@@ -274,14 +274,14 @@ class ToolExtensionsTest {
         }
     }
 
-    // ── ToolRenderer ─────────────────────────────────────────
+    // ── RenderedOutput ─────────────────────────────────────────
 
     @Nested
-    class ToolRendererTest {
+    class RenderedOutputTest {
 
         @Test
         void renderedOutputDefaults() {
-            var output = new ToolRenderer.RenderedOutput("hello");
+            var output = new RenderedOutput("hello");
             assertEquals("hello", output.text());
             assertNull(output.display());
             assertEquals("text/plain", output.mimeType());
@@ -290,33 +290,18 @@ class ToolExtensionsTest {
         @Test
         void renderedOutputWithDisplay() {
             var display = Map.<String, Object>of("language", "python");
-            var output = new ToolRenderer.RenderedOutput("print('hi')", display);
+            var output = new RenderedOutput("print('hi')", display);
             assertEquals("python", output.display().get("language"));
         }
 
         @Test
-        void defaultRenderer() {
-            ToolRenderer renderer = new ToolRenderer() {
-                @Override
-                public String renderCall(String toolCallId, String name, Map<String, Object> arguments) {
-                    return name + " " + arguments.getOrDefault("path", "");
-                }
-
-                @Override
-                public RenderedOutput renderResult(String toolCallId, String name,
-                                                   ToolResult result, boolean isError) {
-                    return new RenderedOutput(result.text(),
-                            isError ? Map.of("error", true) : null);
-                }
+        void toolDefaultRenderCall() {
+            Tool tool = new Tool() {
+                @Override public ToolDefinition definition() { return new ToolDefinition("test", "test", Map.of()); }
+                @Override public ToolResult execute(String id, Map<String, Object> params, ToolContext ctx) { return new ToolResult("ok"); }
             };
-
-            assertEquals("read /tmp/test",
-                    renderer.renderCall("tc1", "read", Map.of("path", "/tmp/test")));
-
-            var result = new ToolResult("file contents");
-            var rendered = renderer.renderResult("tc1", "read", result, false);
-            assertEquals("file contents", rendered.text());
-            assertNull(rendered.display());
+            assertEquals("test()", tool.renderCall("id1", "test", Map.of()));
+            assertEquals("test(x=1)", tool.renderCall("id1", "test", Map.of("x", 1)));
         }
     }
 }
