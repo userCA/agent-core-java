@@ -1,8 +1,5 @@
 package io.agentcore.retrieval;
 
-import io.agentcore.retrieval.Query;
-import io.agentcore.retrieval.RetrievedChunk;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentcore.llm.ProviderUtils;
 import org.slf4j.Logger;
@@ -28,7 +25,7 @@ import java.util.stream.Stream;
  *   {name}/chunk_000.vec — embedding vector (comma-separated doubles)
  * </pre>
  */
-public class LocalKnowledgeBase {
+public class LocalKnowledgeBase implements Retriever {
 
     private static final Logger log = LoggerFactory.getLogger(LocalKnowledgeBase.class);
     private static final ObjectMapper MAPPER = ProviderUtils.mapper();
@@ -258,6 +255,7 @@ public class LocalKnowledgeBase {
     /**
      * Retrieve chunks matching a query using cosine similarity on embeddings.
      */
+    @Override
     public CompletableFuture<List<RetrievedChunk>> retrieve(Query query) {
         return CompletableFuture.supplyAsync(() -> {
             try {
