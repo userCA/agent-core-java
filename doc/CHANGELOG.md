@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-25 23:38 — refactor: inline prepareLlmMessages method
+
+**问题/需求**: `prepareLlmMessages()` 方法体仅一行委托调用，`signal` 参数未使用，无附加逻辑，属于不必要的抽象。
+
+**方案**: 内联到 2 处调用点，删除该方法。
+
+**改动范围**: `AgentLoop.java` 删除 `prepareLlmMessages()`，调用处直接写 `config.messageAssembler().assemble(...)`。
+
+**影响面**: 无功能变化，仅代码简化。
+
 ## 2026-06-25 23:35 — refactor: replace ConvertToLlm with MessageAssembler
 
 **问题/需求**: AgentLoop 内部直接调用 `convertToLlm().convert()` 完成消息组装，耦合了"消息准备"与"核心循环"两个职责，违背"核心做薄、外层做厚"的设计原则。

@@ -164,7 +164,7 @@ public class AgentLoop {
         }
 
         // Prepare LLM call context
-        List<Map<String, Object>> llmMessages = prepareLlmMessages(signal);
+        List<Map<String, Object>> llmMessages = config.messageAssembler().assemble(context.messagesSnapshot());
         var auth = config.authResolver().apply(config.model().provider());
         List<Map<String, Object>> toolDefs = getToolDefs();
 
@@ -229,10 +229,6 @@ public class AgentLoop {
 
     private boolean isAborted(AtomicBoolean signal) {
         return signal != null && signal.get();
-    }
-
-    private List<Map<String, Object>> prepareLlmMessages(AtomicBoolean signal) {
-        return config.messageAssembler().assemble(context.messagesSnapshot());
     }
 
     private AssistantMessage executeLlmWithRetry(
@@ -311,7 +307,7 @@ public class AgentLoop {
             log.info("Context overflow detected, triggering compaction");
             boolean compacted = config.compactCallback().compact(context.messagesSnapshot());
             if (compacted) {
-                List<Map<String, Object>> newMessages = prepareLlmMessages(signal);
+                List<Map<String, Object>> newMessages = config.messageAssembler().assemble(context.messagesSnapshot());
                 return new RetryDecision(true, retryCount + 1, 0, newMessages);
             }
         }
