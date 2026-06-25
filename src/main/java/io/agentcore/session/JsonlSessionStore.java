@@ -170,6 +170,13 @@ public class JsonlSessionStore implements SessionStore {
 
     @Override
     public List<SessionMeta> listSessions(String owner, int limit) {
+        // Flush all buffered writers before reading from disk
+        // to ensure accurate entryCount and up-to-date content
+        writers.forEach((id, writer) -> {
+            synchronized (writer) {
+                try { writer.flush(); } catch (IOException e) { log.debug("flush failed for {}", id); }
+            }
+        });
         List<SessionMeta> result = new ArrayList<>();
         try (Stream<Path> files = Files.list(directory)) {
             List<Path> jsonlFiles = files

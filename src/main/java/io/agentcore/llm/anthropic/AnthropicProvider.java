@@ -330,7 +330,7 @@ public class AnthropicProvider implements ModelProvider {
                 String tid = (String) buf.get("id");
                 String name = (String) buf.get("name");
                 if (tid != null && name != null && !emittedToolCallEnds.contains(tid)) {
-                    Map<String, Object> args = ProviderUtils.parseJsonMap((String) buf.get("args"));
+                    Map<String, Object> args = ProviderUtils.parseJsonMap(buf.get("args").toString());
                     queue.offer(new StreamToolCallEnd(tid, args));
                     emittedToolCallEnds.add(tid);
                 }
