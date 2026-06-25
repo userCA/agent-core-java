@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>创作工作室 — AI Chat</title>
+  <title>创作工作室 — AI 聊天</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
@@ -242,7 +242,7 @@
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span class="text-sm text-ink-muted">New Project</span>
+            <span class="text-sm text-ink-muted">新项目</span>
           </button>
           <div id="projectsList" class="space-y-2">
             <!-- Projects rendered by JS -->
@@ -293,20 +293,20 @@
 
       // Data
       const projects = [
-        { id: 'p1', name: '网站重构', lastMessage: 'Let me refine the hero section...', time: '2m ago', unread: 0, active: true },
-        { id: 'p2', name: 'Mobile App UI', lastMessage: 'The navigation flow looks good', time: '1h ago', unread: 2, active: false },
+        { id: 'p1', name: '网站重构', lastMessage: 'Let me refine the hero section...', time: '2分钟前', unread: 0, active: true },
+        { id: 'p2', name: 'Mobile App UI', lastMessage: 'The navigation flow looks good', time: '1小时前', unread: 2, active: false },
         { id: 'p3', name: 'Brand Guidelines', lastMessage: 'Color palette approved', time: '3h ago', unread: 0, active: false },
         { id: 'p4', name: 'Design System', lastMessage: 'Component library updated', time: '1d ago', unread: 1, active: false },
         { id: 'p5', name: 'Landing Page', lastMessage: 'A/B test results ready', time: '2d ago', unread: 0, active: false }
       ];
 
-      const tools = [
-        { id: 'code-search', name: 'Code Search', icon: 'search', desc: 'Find code patterns', color: '#a8c4d9', svg: '<circle cx="11" cy="11" r="8" stroke-dasharray="50" stroke-dashoffset="1"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' },
-        { id: 'git-diff', name: 'Git Diff', icon: 'git-compare', desc: 'Review changes', color: '#c5d4c3', svg: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v6a3 3 0 0 0 3 3h6"/><path d="M18 15V9a3 3 0 0 0-3-3h-6"/>' },
-        { id: 'test-run', name: 'Test Run', icon: 'play-circle', desc: 'Run test suite', color: '#e5c5c5', svg: '<circle cx="12" cy="12" r="10" stroke-dasharray="63" stroke-dashoffset="1"/><polygon points="10 8 16 12 10 16 10 8"/>' },
-        { id: 'refactor', name: 'Refactor', icon: 'wand-2', desc: 'Restructure code', color: '#f8c4a8', svg: '<path d="M21 12a9 9 0 0 1-9 9"/><path d="M3.6 9L6 12l-2.4 3"/><path d="M12 3a9 9 0 0 1 9 9"/><path d="M20.4 15L18 12l2.4-3"/>' },
-        { id: 'debug', name: 'Debug', icon: 'bug', desc: 'Trace issues', color: '#eddfc0', svg: '<rect x="8" y="6" width="8" height="10" rx="4" ry="4"/><path d="M8 10h-3a2 2 0 0 0-2 2v1"/><path d="M16 10h3a2 2 0 0 1 2 2v1"/><path d="M12 16v3"/>' },
-        { id: 'docs', name: 'Docs', icon: 'book-open', desc: 'Generate docs', color: '#a8c4d9', svg: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' },
+      const 个工具 = [
+        { id: 'code-search', name: '代码搜索', icon: 'search', desc: 'Find code patterns', color: '#a8c4d9', svg: '<circle cx="11" cy="11" r="8" stroke-dasharray="50" stroke-dashoffset="1"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' },
+        { id: 'git-diff', name: '代码对比', icon: 'git-compare', desc: '查看变更', color: '#c5d4c3', svg: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v6a3 3 0 0 0 3 3h6"/><path d="M18 15V9a3 3 0 0 0-3-3h-6"/>' },
+        { id: 'test-run', name: '运行测试', icon: 'play-circle', desc: 'Run test suite', color: '#e5c5c5', svg: '<circle cx="12" cy="12" r="10" stroke-dasharray="63" stroke-dashoffset="1"/><polygon points="10 8 16 12 10 16 10 8"/>' },
+        { id: 'refactor', name: '重构', icon: 'wand-2', desc: 'Restructure code', color: '#f8c4a8', svg: '<path d="M21 12a9 9 0 0 1-9 9"/><path d="M3.6 9L6 12l-2.4 3"/><path d="M12 3a9 9 0 0 1 9 9"/><path d="M20.4 15L18 12l2.4-3"/>' },
+        { id: 'debug', name: '调试', icon: 'bug', desc: 'Trace issues', color: '#eddfc0', svg: '<rect x="8" y="6" width="8" height="10" rx="4" ry="4"/><path d="M8 10h-3a2 2 0 0 0-2 2v1"/><path d="M16 10h3a2 2 0 0 1 2 2v1"/><path d="M12 16v3"/>' },
+        { id: 'docs', name: '文档', icon: 'book-open', desc: 'Generate docs', color: '#a8c4d9', svg: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' },
         { id: 'optimize', name: 'Optimize', icon: 'gauge', desc: 'Performance', color: '#c5d4c3', svg: '<path d="M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0 -20 0" stroke-dasharray="63" stroke-dashoffset="1"/><path d="M12 2v10l4 4"/>' },
         { id: 'lint', name: 'Lint', icon: 'check-circle', desc: 'Code quality', color: '#e5c5c5', svg: '<circle cx="12" cy="12" r="10" stroke-dasharray="63" stroke-dashoffset="1"/><polyline points="9 12 12 15 16 10"/>' },
         { id: 'deploy', name: 'Deploy', icon: 'rocket', desc: 'Ship changes', color: '#f8c4a8', svg: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M15 12v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>' }
@@ -314,15 +314,15 @@
 
       const petSuggestions = [
         'Try the refactor brush on this function!',
-        'The debug tool might help trace this issue.',
+        'The debug 个工具 might help trace this issue.',
         'Generate docs for the new API endpoint?',
-        'Run tests before committing changes.',
-        'Search for similar patterns in the codebase.',
+        '运行测试 before committing changes.',
+        '搜索 for similar patterns in the codebase.',
         'Consider optimizing this loop structure.'
       ];
 
       let currentProject = projects[0];
-      let messages = {
+      let 条消息 = {
         p1: [
           { id: 1, type: 'ai', text: 'Welcome to your creative studio. I am here to help you design, code, and ship beautiful experiences. What shall we work on today?', time: '9:41 AM' },
           { id: 2, type: 'user', text: 'I need to redesign the hero section of our landing page. The current one feels too generic.', time: '9:42 AM' },
@@ -336,7 +336,7 @@
           { id: 3, type: 'ai', text: 'Consider a floating action bar instead of a fixed tab bar. It frees up vertical space and creates a more modern feel. We could also collapse less-used tabs into a "More" menu.', time: '8:33 AM' }
         ],
         p3: [
-          { id: 1, type: 'ai', text: 'Brand Guidelines project ready. The color palette has been approved by the client.', time: 'Yesterday' },
+          { id: 1, type: 'ai', text: 'Brand Guidelines project ready. The color palette has been approved by the client.', time: '昨天' },
           { id: 2, type: 'user', text: 'Great. Can we document the typography scale?', time: 'Yesterday' },
           { id: 3, type: 'ai', text: 'Documented. Heading: 32px/40px semibold, Body: 16px/24px regular, Caption: 12px/16px medium. All set in Inter with -0.01em letter-spacing for headings.', time: 'Yesterday' }
         ],
@@ -353,7 +353,7 @@
       const $ = id => document.getElementById(id);
       const messagesContainer = $('messagesContainer');
       const projectsList = $('projectsList');
-      const toolsGrid = $('toolsGrid');
+      const 个工具Grid = $('toolsGrid');
       const messageInput = $('messageInput');
       const currentProjectName = $('currentProjectName');
       const typingIndicator = $('typingIndicator');
@@ -361,7 +361,7 @@
       const petText = $('petText');
 
       // Render messages
-      function renderMessages() {
+      function render消息() {
         const msgs = messages[currentProject.id] || [];
         messagesContainer.innerHTML = '';
         msgs.forEach((msg, i) => {
@@ -379,7 +379,7 @@
               </div>
             `;
           } else {
-            const toolBadge = msg.tool ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-cream-200 rounded-pill text-[10px] text-ink-muted mt-2" style="border: 2px solid #3e2723; font-family: 'ZCOOL KuaiLe', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', cursive;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3v4"/><path d="M14 7h8"/><path d="M10 21V7"/><path d="M6 21V11"/><path d="M2 21V17"/></svg> ${msg.tool}</span>` : '';
+            const 个工具Badge = msg.tool ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-cream-200 rounded-pill text-[10px] text-ink-muted mt-2" style="border: 2px solid #3e2723; font-family: 'ZCOOL KuaiLe', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', cursive;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6d4c41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3v4"/><path d="M14 7h8"/><path d="M10 21V7"/><path d="M6 21V11"/><path d="M2 21V17"/></svg> ${msg.tool}</span>` : '';
             el.innerHTML = `
               <div class="max-w-[85%] flex gap-2">
                 <div class="w-8 h-8 rounded-pill bg-cream-200 flex items-center justify-center shrink-0 mt-1" style="border: 2px solid #3e2723;">
@@ -400,7 +400,7 @@
               </div>
             `;
           }
-          messagesContainer.appendChild(el);
+          条消息Container.appendChild(el);
         });
         scrollToBottom();
       }
@@ -443,9 +443,9 @@
         });
       }
 
-      // Render tools
-      function renderTools() {
-        toolsGrid.innerHTML = '';
+      // Render 个工具
+      function render工具() {
+        个工具sGrid.innerHTML = '';
         tools.forEach(t => {
           const el = document.createElement('button');
           el.className = 'skill-card flex flex-col items-center gap-2 p-3 rounded-card bg-cream-50 hover:shadow-card';
@@ -461,7 +461,7 @@
             <span class="text-[10px] text-ink-muted" style="font-family: 'ZCOOL KuaiLe', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', cursive;">${t.desc}</span>
           `;
           el.addEventListener('click', () => activateTool(t));
-          toolsGrid.appendChild(el);
+          个工具Grid.appendChild(el);
         });
       }
 
@@ -473,16 +473,16 @@
         projects.forEach(x => { x.active = x.id === id; x.unread = 0; });
         currentProjectName.textContent = p.name;
         renderProjects();
-        renderMessages();
+        render消息();
         closeProjects();
       }
 
-      // Activate tool
+      // Activate 个工具
       function activateTool(tool) {
         const text = messageInput.value;
         messageInput.value = text ? `${text} [${tool.name}]` : `Using ${tool.name}...`;
         messageInput.focus();
-        closeTools();
+        close工具();
         showPet(`The ${tool.name.toLowerCase()} brush is ready. Apply it to your canvas!`);
       }
 
@@ -494,7 +494,7 @@
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-        if (!messages[currentProject.id]) messages[currentProject.id] = [];
+        if (!messages[currentProject.id]) 条消息[currentProject.id] = [];
         messages[currentProject.id].push({ id: Date.now(), type: 'user', text, time: timeStr });
         messageInput.value = '';
         renderMessages();

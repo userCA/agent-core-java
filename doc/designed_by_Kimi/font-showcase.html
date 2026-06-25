@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>咪兔 - 手绘字体推荐</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&family=LXGW+WenKai:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f4b89a;
+    font-family: 'Noto Sans SC', sans-serif;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .header h1 {
+    font-family: 'ZCOOL QingKe HuangYou', cursive;
+    font-size: 42px;
+    color: #3d2b1f;
+    margin-bottom: 8px;
+  }
+  .header p {
+    font-size: 16px;
+    color: #7a6b5f;
+  }
+
+  .font-card {
+    background: #fdf6e3;
+    border: 2px solid #3d2b1f;
+    border-radius: 16px;
+    box-shadow: 4px 4px 0 #3d2b1f;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    transition: transform 0.15s ease;
+  }
+  .font-card:hover { transform: translateY(-2px); }
+
+  .font-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px dashed rgba(61,43,31,0.15);
+  }
+  .font-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    border: 2px solid #3d2b1f;
+    font-size: 12px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+  .font-name-cn {
+    font-size: 22px;
+    color: #3d2b1f;
+    font-weight: bold;
+  }
+  .font-name-en {
+    font-size: 13px;
+    color: #7a6b5f;
+    margin-left: auto;
+  }
+
+  .sample-large {
+    font-size: 36px;
+    color: #3d2b1f;
+    line-height: 1.3;
+    margin-bottom: 12px;
+    word-break: keep-all;
+  }
+  .sample-medium {
+    font-size: 20px;
+    color: #3d2b1f;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .sample-ui {
+    display: inline-block;
+    padding: 8px 16px;
+    background: #fffbf0;
+    border: 1.5px solid #3d2b1f;
+    border-radius: 10px;
+    font-size: 15px;
+    color: #3d2b1f;
+    margin-bottom: 12px;
+  }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .tag {
+    padding: 3px 10px;
+    border-radius: 9999px;
+    border: 1.5px solid #3d2b1f;
+    font-size: 11px;
+    color: #3d2b1f;
+    font-family: 'ZCOOL KuaiLe', cursive;
+  }
+  .tag.current {
+    background: #a8c4a0;
+  }
+  .tag.recommended {
+    background: #f4a8a8;
+  }
+
+  .current-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 32px 0 24px;
+  }
+  .current-divider::before,
+  .current-divider::after {
+    content: '';
+    flex: 1;
+    border-top: 2px dashed #3d2b1f;
+    opacity: 0.3;
+  }
+  .current-divider span {
+    font-family: 'ZCOOL KuaiLe', cursive;
+    font-size: 14px;
+    color: #7a6b5f;
+    white-space: nowrap;
+  }
+
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    font-family: 'ZCOOL KuaiLe', cursive;
+    font-size: 14px;
+    color: #7a6b5f;
+  }
+
+  /* Google Fonts import note */
+  .code-block {
+    background: #3d2b1f;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    overflow-x: auto;
+  }
+  .code-block code {
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    color: #fdf6e3;
+    line-height: 1.6;
+  }
+  .code-block .token-string { color: #a8c4a0; }
+  .code-block .token-keyword { color: #f4a8a8; }
+
+  @media (max-width: 600px) {
+    .sample-large { font-size: 26px; }
+    .sample-medium { font-size: 16px; }
+    .font-header { flex-wrap: wrap; }
+    .font-name-en { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>咪兔 · 字体推荐</h1>
+    <p>适合手账风格原型的圆润中文字体</p>
+  </div>
+
+  <!-- 当前在用 -->
+  <div class="current-divider"><span>★ 当前在用</span></div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#f4a8a8;">标题</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL QingKe HuangYou',cursive;">站酷庆科黄油体</span>
+      <span class="font-name-en">ZCOOL QingKe HuangYou</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL QingKe HuangYou',cursive;">欢迎使用 Journal Chat</div>
+    <div class="sample-medium" style="font-family:'ZCOOL QingKe HuangYou',cursive;">思考过程 · 工具调用 · 技能执行</div>
+    <span class="sample-ui" style="font-family:'ZCOOL QingKe HuangYou',cursive;">按钮 / 标签 / 卡片标题</span>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag current">当前标题字体</span>
+      <span class="tag">圆润饱满</span>
+      <span class="tag">笔画粗重</span>
+      <span class="tag">大尺寸清晰</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c8e8;">正文</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">站酷快乐体</span>
+      <span class="font-name-en">ZCOOL KuaiLe</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL KuaiLe',cursive;">欢迎使用 Journal Chat</div>
+    <div class="sample-medium" style="font-family:'ZCOOL KuaiLe',cursive;">思考过程 · 工具调用 · 技能执行</div>
+    <span class="sample-ui" style="font-family:'ZCOOL KuaiLe',cursive;">按钮 / 标签 / 卡片标题</span>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag current">当前正文字体</span>
+      <span class="tag">活泼跳跃</span>
+      <span class="tag">略带倾斜</span>
+      <span class="tag">亲切自然</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <!-- 更多推荐 -->
+  <div class="current-divider"><span>♥ 更多推荐</span></div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#f9d5c0;">备选</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL XiaoWei',serif;">站酷小薇体</span>
+      <span class="font-name-en">ZCOOL XiaoWei</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL XiaoWei',serif;">欢迎使用 Journal Chat</div>
+    <div class="sample-medium" style="font-family:'ZCOOL XiaoWei',serif;">思考过程 · 工具调用 · 技能执行</div>
+    <span class="sample-ui" style="font-family:'ZCOOL XiaoWei',serif;">按钮 / 标签 / 卡片标题</span>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag recommended">推荐备选</span>
+      <span class="tag">轻柔纤细</span>
+      <span class="tag">手写感强</span>
+      <span class="tag">文艺清新</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c4a0;">备选</span>
+      <span class="font-name-cn" style="font-family:'LXGW WenKai',serif;">霞鹜文楷</span>
+      <span class="font-name-en">LXGW WenKai</span>
+    </div>
+    <div class="sample-large" style="font-family:'LXGW WenKai',serif; font-weight:700;">欢迎使用 Journal Chat</div>
+    <div class="sample-medium" style="font-family:'LXGW WenKai',serif;">思考过程 · 工具调用 · 技能执行</div>
+    <span class="sample-ui" style="font-family:'LXGW WenKai',serif;">按钮 / 标签 / 卡片标题</span>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=LXGW+WenKai:wght@400;700&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag recommended">推荐备选</span>
+      <span class="tag">温润清晰</span>
+      <span class="tag">楷体基因</span>
+      <span class="tag">可读性佳</span>
+      <span class="tag">开源免费</span>
+    </div>
+  </div>
+
+  <!-- 不在 Google Fonts 上的 -->
+  <div class="current-divider"><span>其他站酷字体</span></div>
+
+  <div class="font-card" style="opacity:0.85;">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e8dcc8;">需手动安装</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">站酷仓耳渔阳体</span>
+      <span class="font-name-en">CangErYuYang</span>
+    </div>
+    <div class="sample-medium" style="font-family:'ZCOOL KuaiLe',cursive;">（需下载安装字体文件）</div>
+    <p style="font-size:13px;color:#7a6b5f;line-height:1.6;margin-bottom:12px;">
+      圆润可爱的圆体风格，字形偏方正，笔画末端呈圆形，整体视觉效果柔和亲切。非常适合儿童、宠物、食品类的可爱风格设计。可在字由（HelloFont）或站酷字体库下载。
+    </p>
+    <div class="tag-row">
+      <span class="tag">圆润可爱</span>
+      <span class="tag">圆体基因</span>
+      <span class="tag">需手动安装</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card" style="opacity:0.85;">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e8dcc8;">需手动安装</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">站酷文艺体</span>
+      <span class="font-name-en">ZCOOL WenYi</span>
+    </div>
+    <div class="sample-medium" style="font-family:'ZCOOL KuaiLe',cursive;">（需下载安装字体文件）</div>
+    <p style="font-size:13px;color:#7a6b5f;line-height:1.6;margin-bottom:12px;">
+      偏文艺气质的手写体，笔画带有明显的手写痕迹和不规则感，适合日记、手账、文艺类应用。字形优美但不失可读性。
+    </p>
+    <div class="tag-row">
+      <span class="tag">文艺气质</span>
+      <span class="tag">手写痕迹</span>
+      <span class="tag">需手动安装</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <!-- 对比总结 -->
+  <div class="current-divider"><span>对比总结</span></div>
+
+  <div class="font-card">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
+      <div>
+        <div style="font-family:'ZCOOL QingKe HuangYou',cursive;font-size:28px;color:#3d2b1f;margin-bottom:8px;">黄油体</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.6;">最圆润饱满，笔画均匀，适合大标题和品牌名。当前用作标题字体。</p>
+      </div>
+      <div>
+        <div style="font-family:'ZCOOL KuaiLe',cursive;font-size:28px;color:#3d2b1f;margin-bottom:8px;">快乐体</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.6;">最活泼有动感，略带倾斜，适合正文和标签。当前用作正文字体。</p>
+      </div>
+      <div>
+        <div style="font-family:'ZCOOL XiaoWei',serif;font-size:28px;color:#3d2b1f;margin-bottom:8px;">小薇体</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.6;">最轻柔文艺，纤细手写感，适合日记类应用的轻量标题。</p>
+      </div>
+      <div>
+        <div style="font-family:'LXGW WenKai',serif;font-size:28px;color:#3d2b1f;margin-bottom:8px;font-weight:700;">霞鹜文楷</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.6;">最清晰可读，楷体基因，有粗细两套字重，适合正文和说明文字。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    以上字体均为免费商用字体 · 可直接通过 Google Fonts 引入使用
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>咪兔 · 中文字体库 - 手绘 & 中国风</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&family=LXGW+WenKai:wght@400;700&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Long+Cang&family=Zhi+Mang+Xing&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f4b89a;
+    font-family: 'Noto Sans SC', sans-serif;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  .header { text-align: center; margin-bottom: 40px; }
+  .header h1 {
+    font-family: 'ZCOOL QingKe HuangYou', cursive;
+    font-size: 42px;
+    color: #3d2b1f;
+    margin-bottom: 8px;
+  }
+  .header p { font-size: 16px; color: #7a6b5f; }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 40px 0 24px;
+  }
+  .section-title::before, .section-title::after {
+    content: ''; flex: 1; border-top: 2px dashed #3d2b1f; opacity: 0.3;
+  }
+  .section-title span {
+    font-family: 'ZCOOL KuaiLe', cursive;
+    font-size: 16px;
+    color: #7a6b5f;
+    white-space: nowrap;
+  }
+
+  .font-card {
+    background: #fdf6e3;
+    border: 2px solid #3d2b1f;
+    border-radius: 16px;
+    box-shadow: 4px 4px 0 #3d2b1f;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    transition: transform 0.15s ease;
+  }
+  .font-card:hover { transform: translateY(-2px); }
+
+  .font-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px dashed rgba(61,43,31,0.15);
+    flex-wrap: wrap;
+  }
+  .font-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    border: 2px solid #3d2b1f;
+    font-size: 12px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+  .font-name-cn { font-size: 22px; color: #3d2b1f; font-weight: bold; }
+  .font-name-en { font-size: 13px; color: #7a6b5f; margin-left: auto; }
+
+  .sample-large { font-size: 34px; color: #3d2b1f; line-height: 1.4; margin-bottom: 10px; word-break: keep-all; }
+  .sample-medium { font-size: 18px; color: #3d2b1f; line-height: 1.6; margin-bottom: 14px; }
+  .sample-poem { font-size: 16px; color: #3d2b1f; line-height: 2; margin-bottom: 14px; padding: 12px 16px; background: rgba(61,43,31,0.03); border-radius: 10px; border-left: 3px solid #f4a8a8; }
+  .sample-ui {
+    display: inline-block;
+    padding: 8px 16px;
+    background: #fffbf0;
+    border: 1.5px solid #3d2b1f;
+    border-radius: 10px;
+    font-size: 15px;
+    color: #3d2b1f;
+    margin-bottom: 12px;
+    margin-right: 8px;
+  }
+
+  .code-block {
+    background: #3d2b1f;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    overflow-x: auto;
+  }
+  .code-block code {
+    font-family: 'SF Mono', monospace;
+    font-size: 11px;
+    color: #fdf6e3;
+    line-height: 1.6;
+  }
+  .code-block .token-string { color: #a8c4a0; }
+  .code-block .token-keyword { color: #f4a8a8; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .tag {
+    padding: 3px 10px;
+    border-radius: 9999px;
+    border: 1.5px solid #3d2b1f;
+    font-size: 11px;
+    color: #3d2b1f;
+    font-family: 'ZCOOL KuaiLe', cursive;
+  }
+  .tag.current { background: #a8c4a0; }
+  .tag.recommended { background: #f4a8a8; }
+  .tag.chinese-style { background: #f9d5c0; }
+
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    font-family: 'ZCOOL KuaiLe', cursive;
+    font-size: 14px;
+    color: #7a6b5f;
+  }
+
+  @media (max-width: 600px) {
+    .sample-large { font-size: 24px; }
+    .sample-medium { font-size: 15px; }
+    .font-header { flex-wrap: wrap; }
+    .font-name-en { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>咪兔 · 中文字体库</h1>
+    <p>手绘风格 & 中国风设计感字体推荐</p>
+  </div>
+
+  <!-- ═══════════ 圆润可爱类 ═══════════ -->
+  <div class="section-title"><span>★ 圆润可爱类（当前在用）</span></div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#f4a8a8;">标题</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL QingKe HuangYou',cursive;">站酷庆科黄油体</span>
+      <span class="font-name-en">ZCOOL QingKe HuangYou</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL QingKe HuangYou',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'ZCOOL QingKe HuangYou',cursive;">思考过程 · 工具调用 · 技能执行 · 代码对比</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag current">当前标题字体</span>
+      <span class="tag">圆润饱满</span>
+      <span class="tag">笔画粗重</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c8e8;">正文</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">站酷快乐体</span>
+      <span class="font-name-en">ZCOOL KuaiLe</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL KuaiLe',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'ZCOOL KuaiLe',cursive;">思考过程 · 工具调用 · 技能执行 · 代码对比</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag current">当前正文字体</span>
+      <span class="tag">活泼跳跃</span>
+      <span class="tag">略带倾斜</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#f9d5c0;">备选</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL XiaoWei',serif;">站酷小薇体</span>
+      <span class="font-name-en">ZCOOL XiaoWei</span>
+    </div>
+    <div class="sample-large" style="font-family:'ZCOOL XiaoWei',serif;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'ZCOOL XiaoWei',serif;">思考过程 · 工具调用 · 技能执行 · 代码对比</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag recommended">推荐备选</span>
+      <span class="tag">轻柔纤细</span>
+      <span class="tag">文艺清新</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 手写感强类 ═══════════ -->
+  <div class="section-title"><span>✎ 手写感强类</span></div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c4a0;">手写</span>
+      <span class="font-name-cn" style="font-family:'LXGW WenKai',serif;">霞鹜文楷</span>
+      <span class="font-name-en">LXGW WenKai</span>
+    </div>
+    <div class="sample-large" style="font-family:'LXGW WenKai',serif; font-weight:700;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'LXGW WenKai',serif;">这是一款基于 Klee 开源字体改造的楷体风格字体，保留了楷体的优雅骨架，同时加入了手写的不规则感。有 Regular 和 Bold 两档字重，正文阅读非常舒适。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=LXGW+WenKai:wght@400;700&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag recommended">推荐</span>
+      <span class="tag">楷体基因</span>
+      <span class="tag">双字重</span>
+      <span class="tag">可读性极佳</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#c8b8d8;">手写</span>
+      <span class="font-name-cn" style="font-family:'Long Cang',cursive;">龙藏体</span>
+      <span class="font-name-en">Long Cang</span>
+    </div>
+    <div class="sample-large" style="font-family:'Long Cang',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'Long Cang',cursive;">龙藏体是一款极具书法气质的字体，笔画粗细变化明显，带有毛笔书写的飞白效果。字形舒展大气，适合大标题和装饰性文字，但不适合小字号正文。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=Long+Cang&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag">毛笔书法</span>
+      <span class="tag">飞白效果</span>
+      <span class="tag">适合大标题</span>
+      <span class="tag">Google Fonts</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c8e8;">手写</span>
+      <span class="font-name-cn" style="font-family:'Zhi Mang Xing',cursive;">直芒行体</span>
+      <span class="font-name-en">Zhi Mang Xing</span>
+    </div>
+    <div class="sample-large" style="font-family:'Zhi Mang Xing',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-medium" style="font-family:'Zhi Mang Xing',cursive;">一款流畅的行书风格字体，笔画连绵自然，有强烈的手写速度感。字形修长优雅，适合文艺气质的应用标题和引言文字。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag">行书风格</span>
+      <span class="tag">流畅连贯</span>
+      <span class="tag">文艺气质</span>
+      <span class="tag">Google Fonts</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 中国风 / 古风类 ═══════════ -->
+  <div class="section-title"><span>❖ 中国风 / 古风类</span></div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#f9d5c0;">书法</span>
+      <span class="font-name-cn" style="font-family:'Ma Shan Zheng',cursive;">马善政楷书</span>
+      <span class="font-name-en">Ma Shan Zheng</span>
+    </div>
+    <div class="sample-large" style="font-family:'Ma Shan Zheng',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-poem" style="font-family:'Ma Shan Zheng',cursive;">
+      千山鸟飞绝，万径人踪灭。<br>
+      孤舟蓑笠翁，独钓寒江雪。
+    </div>
+    <div class="sample-medium" style="font-family:'Ma Shan Zheng',cursive;">马善政楷书是一款标准的毛笔楷书字体，笔画端庄有力，结构严谨。带有浓厚的传统文化气息，非常适合中国风设计、节庆海报、书法展示等场景。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag chinese-style">中国风</span>
+      <span class="tag">毛笔楷书</span>
+      <span class="tag">端庄有力</span>
+      <span class="tag">Google Fonts</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e89080;">草书</span>
+      <span class="font-name-cn" style="font-family:'Liu Jian Mao Cao',cursive;">柳公权草书</span>
+      <span class="font-name-en">Liu Jian Mao Cao</span>
+    </div>
+    <div class="sample-large" style="font-family:'Liu Jian Mao Cao',cursive;">欢迎使用咪兔 Journal</div>
+    <div class="sample-poem" style="font-family:'Liu Jian Mao Cao',cursive;">
+      大江东去，浪淘尽，千古风流人物。<br>
+      故垒西边，人道是，三国周郎赤壁。
+    </div>
+    <div class="sample-medium" style="font-family:'Liu Jian Mao Cao',cursive;">柳公权草书是一款狂草风格的书法字体，笔画奔放不羁，连绵回绕，极具艺术张力。适合装饰性大标题、海报设计，不适合正文阅读。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=Liu+Jian+Mao+Cao&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag chinese-style">中国风</span>
+      <span class="tag">狂草书法</span>
+      <span class="tag">艺术张力</span>
+      <span class="tag">装饰性</span>
+      <span class="tag">Google Fonts</span>
+    </div>
+  </div>
+
+  <div class="font-card">
+    <div class="font-header">
+      <span class="font-badge" style="background:#a8c4a0;">宋体</span>
+      <span class="font-name-cn" style="font-family:'Noto Serif SC',serif; font-weight:700;">思源宋体</span>
+      <span class="font-name-en">Noto Serif SC</span>
+    </div>
+    <div class="sample-large" style="font-family:'Noto Serif SC',serif; font-weight:700;">欢迎使用咪兔 Journal</div>
+    <div class="sample-poem" style="font-family:'Noto Serif SC',serif;">
+      千山鸟飞绝，万径人踪灭。<br>
+      孤舟蓑笠翁，独钓寒江雪。
+    </div>
+    <div class="sample-medium" style="font-family:'Noto Serif SC',serif;">思源宋体是 Adobe 和 Google 联合开发的开源宋体，拥有 7 档字重（200-900）。宋体本身就是极具中国风的字体，横细竖粗的对比、优雅的衬线脚，让文字充满东方韵味。适合中国风应用的正文和标题。</div>
+    <div class="code-block"><code><span class="token-keyword">@import</span> <span class="token-string">'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap'</span>;</code></div>
+    <div class="tag-row">
+      <span class="tag chinese-style">中国风</span>
+      <span class="tag">宋体基因</span>
+      <span class="tag">7档字重</span>
+      <span class="tag">正文可读</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 其他推荐（需手动安装） ═══════════ -->
+  <div class="section-title"><span>♦ 其他推荐（需手动安装）</span></div>
+
+  <div class="font-card" style="opacity:0.85;">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e8dcc8;">下载安装</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">站酷仓耳渔阳体</span>
+      <span class="font-name-en">CangErYuYang</span>
+    </div>
+    <p style="font-size:14px;color:#7a6b5f;line-height:1.7;margin-bottom:12px;">
+      圆润可爱的圆体风格，字形偏方正，笔画末端呈圆形，整体视觉效果柔和亲切。非常适合儿童、宠物、食品类的可爱风格设计。有 W01（常规）和 W02（粗体）两档字重。<br>
+      <strong>获取渠道：</strong>字由(HelloFont) / 站酷字体库
+    </p>
+    <div class="tag-row">
+      <span class="tag">圆润可爱</span>
+      <span class="tag">圆体基因</span>
+      <span class="tag">双字重</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card" style="opacity:0.85;">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e8dcc8;">下载安装</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">江西拙楷</span>
+      <span class="font-name-en">JiangXi ZhuoKai</span>
+    </div>
+    <p style="font-size:14px;color:#7a6b5f;line-height:1.7;margin-bottom:12px;">
+      一款基于颜体改造的楷体书法字体，保留了颜体的雄浑大气，同时加入了拙朴的手写感。笔画粗犷有力，字形方正饱满，非常适合中国风、古风设计的大标题和引言。<br>
+      <strong>获取渠道：</strong>字由(HelloFont) / 求字体网
+    </p>
+    <div class="tag-row">
+      <span class="tag chinese-style">中国风</span>
+      <span class="tag">颜体基因</span>
+      <span class="tag">粗犷有力</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <div class="font-card" style="opacity:0.85;">
+    <div class="font-header">
+      <span class="font-badge" style="background:#e8dcc8;">下载安装</span>
+      <span class="font-name-cn" style="font-family:'ZCOOL KuaiLe',cursive;">鸿雷行书简体</span>
+      <span class="font-name-en">HongLei XingShu</span>
+    </div>
+    <p style="font-size:14px;color:#7a6b5f;line-height:1.7;margin-bottom:12px;">
+      一款现代行书风格的字体，介于楷书和草书之间，笔画流畅但不失辨识度。既有书法的艺术感，又保持了良好的可读性，非常适合文艺类应用的正文和标题。<br>
+      <strong>获取渠道：</strong>字由(HelloFont) / 鸿雷字迹官网
+    </p>
+    <div class="tag-row">
+      <span class="tag">行书风格</span>
+      <span class="tag">流畅优雅</span>
+      <span class="tag">可读性好</span>
+      <span class="tag">免费商用</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 对比总结 ═══════════ -->
+  <div class="section-title"><span>◆ 按场景选择建议</span></div>
+
+  <div class="font-card">
+    <div class="two-col">
+      <div>
+        <div style="font-family:'ZCOOL QingKe HuangYou',cursive;font-size:18px;color:#3d2b1f;margin-bottom:8px;">手账日记类</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.7;">
+          标题：<strong>黄油体</strong> / 小薇体<br>
+          正文：<strong>快乐体</strong> / 霞鹜文楷<br>
+          标签：快乐体
+        </p>
+      </div>
+      <div>
+        <div style="font-family:'Ma Shan Zheng',cursive;font-size:18px;color:#3d2b1f;margin-bottom:8px;">中国风设计</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.7;">
+          大标题：马善政楷书 / 龙藏体<br>
+          正文：思源宋体 / 霞鹜文楷<br>
+          装饰：柳公权草书
+        </p>
+      </div>
+      <div>
+        <div style="font-family:'Long Cang',cursive;font-size:18px;color:#3d2b1f;margin-bottom:8px;">文艺气质类</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.7;">
+          标题：龙藏体 / 直芒行体<br>
+          正文：霞鹜文楷 / 鸿雷行书<br>
+          引言：小薇体
+        </p>
+      </div>
+      <div>
+        <div style="font-family:'ZCOOL KuaiLe',cursive;font-size:18px;color:#3d2b1f;margin-bottom:8px;">可爱活泼类</div>
+        <p style="font-size:13px;color:#7a6b5f;line-height:1.7;">
+          标题：黄油体 / 渔阳体<br>
+          正文：快乐体<br>
+          标签：快乐体
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    以上字体均为免费商用字体 · Google Fonts 可直接引入 · 其他字体需在字由/站酷下载
+  </div>
+</div>
+</body>
+</html>
