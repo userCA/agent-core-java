@@ -79,8 +79,8 @@ public class AgentLoop {
         addMessagesToContext(newMessages, onEvent);
 
         // Track ALL new messages produced in this run (user + assistant + tool results)
-        List<Message> newMessagesProduced = new ArrayList<>();
-        if (newMessages != null) newMessagesProduced.addAll(newMessages);
+        List<Message> producedMessages = new ArrayList<>();
+        if (newMessages != null) producedMessages.addAll(newMessages);
 
         int turnCount = 0;
         List<Message> pendingMessages = drainMessages(config.getSteeringMessages());
@@ -93,22 +93,22 @@ public class AgentLoop {
             while (hasMoreToolCalls || !pendingMessages.isEmpty()) {
                 if (isAborted(signal)) {
                     log.debug("Agent loop aborted by signal");
-                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    onEvent.accept(new AgentEnd(producedMessages));
                     return;
                 }
                 if (config.maxTurns() != null && turnCount >= config.maxTurns()) {
                     log.debug("Max turns ({}) reached", config.maxTurns());
-                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    onEvent.accept(new AgentEnd(producedMessages));
                     return;
                 }
 
                 // Execute one turn — returns outcome with continue/moreToolCalls flags
                 TurnOutcome outcome = executeTurn(
-                        signal, onEvent, newMessagesProduced, pendingMessages, turnCount);
+                        signal, onEvent, producedMessages, pendingMessages, turnCount);
                 turnCount++;
 
                 if (!outcome.shouldContinue()) {
-                    onEvent.accept(new AgentEnd(newMessagesProduced));
+                    onEvent.accept(new AgentEnd(producedMessages));
                     return;
                 }
 
@@ -130,7 +130,7 @@ public class AgentLoop {
         }
 
         log.debug("Agent loop completed after {} turns", turnCount);
-        onEvent.accept(new AgentEnd(newMessagesProduced));
+        onEvent.accept(new AgentEnd(producedMessages));
     }
 
     // ── Turn execution ─────────────────────────────────────────
@@ -149,7 +149,7 @@ public class AgentLoop {
     private TurnOutcome executeTurn(
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent,
-            List<Message> newMessagesProduced,
+            List<Message> producedMessages,
             List<Message> pendingMessages,
             int turnCount) {
 
@@ -159,7 +159,7 @@ public class AgentLoop {
         // Inject pending steering messages before assistant response
         if (!pendingMessages.isEmpty()) {
             addMessagesToContext(pendingMessages, onEvent);
-            newMessagesProduced.addAll(pendingMessages);
+            producedMessages.addAll(pendingMessages);
             pendingMessages.clear();
         }
 
@@ -175,13 +175,13 @@ public class AgentLoop {
         // MessageEnd is emitted here AFTER the full response is accumulated.
         onEvent.accept(new MessageEnd(assistant));
         context.addMessage(assistant);
-        newMessagesProduced.add(assistant);
+        producedMessages.add(assistant);
 
         // Execute tools if present
         var toolBatch = executeTools(assistant, signal, onEvent);
         List<ToolResultMessage> toolResults = toolBatch.messages();
         for (ToolResultMessage tr : toolResults) {
-            newMessagesProduced.add(tr);
+            producedMessages.add(tr);
         }
 
         @SuppressWarnings("unchecked") // ToolResultMessage implements Message; list is local & unmodified
@@ -196,7 +196,7 @@ public class AgentLoop {
         }
 
         AgentLoopConfig.TurnContext turnContext = new AgentLoopConfig.TurnContext(
-                assistant, toolResults, context.messagesSnapshot(), newMessagesProduced);
+                assistant, toolResults, context.messagesSnapshot(), producedMessages);
 
         // shouldStopAfterTurn: business-level termination
         if (config.shouldStopAfterTurn() != null

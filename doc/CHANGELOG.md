@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-25 23:53 — rename: newMessagesProduced → producedMessages
+
+**问题/需求**: `newMessagesProduced` 命名拗口，"new" 多余且被动语序不自然。
+
+**方案**: 重命名为 `producedMessages`，符合名词短语命名规范。
+
+**改动范围**: `AgentLoop.java` 内部变量名，12 处替换。
+
+**影响面**: 纯重命名，无功能变化。
+
 ## 2026-06-25 23:38 — refactor: inline prepareLlmMessages method
 
 **问题/需求**: `prepareLlmMessages()` 方法体仅一行委托调用，`signal` 参数未使用，无附加逻辑，属于不必要的抽象。
