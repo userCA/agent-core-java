@@ -463,7 +463,8 @@ public class Agent implements AutoCloseable {
                 runner = sharedToolRunner;
                 if (runner == null) {
                     runner = new ToolRunner(config.toolRegistry(), config.toolConfig(),
-                            config.beforeToolCall(), config.afterToolCall());
+                            config.beforeToolCall(), config.afterToolCall(),
+                            config.humanInputGate());
                     sharedToolRunner = runner;
                 }
             }

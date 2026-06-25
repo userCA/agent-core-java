@@ -20,13 +20,21 @@ public final class ToolContext {
     private final Consumer<ToolResult> onUpdate;
     private final Map<String, Object> metadata;
     private final AtomicBoolean terminateSignal;
+    private final Map<String, Object> userInput;
 
     public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
                        Map<String, Object> metadata, AtomicBoolean terminateSignal) {
+        this(signal, onUpdate, metadata, terminateSignal, null);
+    }
+
+    public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
+                       Map<String, Object> metadata, AtomicBoolean terminateSignal,
+                       Map<String, Object> userInput) {
         this.signal = signal != null ? signal : new AtomicBoolean(false);
         this.onUpdate = onUpdate;
         this.metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
         this.terminateSignal = terminateSignal != null ? terminateSignal : new AtomicBoolean(false);
+        this.userInput = userInput != null ? Map.copyOf(userInput) : null;
     }
 
     /** Abort signal (check to support cancellation). */
@@ -40,6 +48,13 @@ public final class ToolContext {
 
     /** Set to true by the tool to request agent loop termination. */
     public AtomicBoolean terminateSignal() { return terminateSignal; }
+
+    /**
+     * User input provided by HITL (Human-in-the-Loop) mechanism.
+     * Null on first execution; populated when the tool is re-executed
+     * after the user responds to a {@link ToolResult#requiresHumanInput} request.
+     */
+    public Map<String, Object> userInput() { return userInput; }
 
     /**
      * Check if the tool should abort.

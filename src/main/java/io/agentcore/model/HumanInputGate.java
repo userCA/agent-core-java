@@ -70,21 +70,4 @@ public final class HumanInputGate {
             }
         });
     }
-
-    /**
-     * Exception raised by a tool when it needs additional human input.
-     */
-    public static class RequiresHumanInput extends RuntimeException {
-        private final String prompt;
-        private final Map<String, Object> inputSchema;
-
-        public RequiresHumanInput(String prompt, Map<String, Object> inputSchema) {
-            super(prompt);
-            this.prompt = prompt;
-            this.inputSchema = inputSchema;
-        }
-
-        public String prompt() { return prompt; }
-        public Map<String, Object> inputSchema() { return inputSchema; }
-    }
 }

@@ -80,8 +80,8 @@ public class ToolRunner implements AutoCloseable {
     private volatile AgentLoopConfig.AfterToolCallHook afterToolCall;
 
     // Human-in-the-loop gate — allows tools to pause for user input.
-    // Set via updateHumanInputGate() when the config has a gate configured.
-    private volatile HumanInputGate humanInputGate;
+    // Injected once at construction time; immutable for the runner's lifetime.
+    private final HumanInputGate humanInputGate;
 
     /**
      * Create a ToolRunner from a ToolConfig sub-config (preferred).
@@ -89,6 +89,18 @@ public class ToolRunner implements AutoCloseable {
     public ToolRunner(ToolRegistry registry, AgentLoopConfig.ToolConfig toolConfig,
                       AgentLoopConfig.BeforeToolCallHook beforeToolCall,
                       AgentLoopConfig.AfterToolCallHook afterToolCall) {
+        this(registry, toolConfig, beforeToolCall, afterToolCall, null);
+    }
+
+    /**
+     * Create a ToolRunner with HITL (Human-in-the-Loop) support.
+     *
+     * @param humanInputGate gate for pausing/resuming on human input (nullable)
+     */
+    public ToolRunner(ToolRegistry registry, AgentLoopConfig.ToolConfig toolConfig,
+                      AgentLoopConfig.BeforeToolCallHook beforeToolCall,
+                      AgentLoopConfig.AfterToolCallHook afterToolCall,
+                      HumanInputGate humanInputGate) {
         this.registry = registry;
         this.defaultTimeout = toolConfig != null ? toolConfig.timeout() : null;
         this.toolResultMaxChars = toolConfig != null ? toolConfig.resultMaxChars() : 4000;
@@ -96,6 +108,7 @@ public class ToolRunner implements AutoCloseable {
         this.parallelSemaphore = new Semaphore(maxParallel);
         this.beforeToolCall = beforeToolCall;
         this.afterToolCall = afterToolCall;
+        this.humanInputGate = humanInputGate;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
@@ -107,15 +120,6 @@ public class ToolRunner implements AutoCloseable {
                             AgentLoopConfig.AfterToolCallHook afterToolCall) {
         this.beforeToolCall = beforeToolCall;
         this.afterToolCall = afterToolCall;
-    }
-
-    /**
-     * Set the human-input gate for HITL (Human-in-the-Loop) support.
-     * When set, tools that throw {@link HumanInputGate.RequiresHumanInput} will
-     * pause execution, emit a HumanInputRequired event, and resume when input arrives.
-     */
-    public void updateHumanInputGate(HumanInputGate gate) {
-        this.humanInputGate = gate;
     }
 
     /**
@@ -329,6 +333,17 @@ public class ToolRunner implements AutoCloseable {
             PreparedToolCall prepared,
             AtomicBoolean signal,
             Consumer<ToolResult> onUpdate) {
+        return executePreparedToolCall(prepared, signal, onUpdate, null);
+    }
+
+    /**
+     * Stage 2: Execute — run the tool with optional timeout and user input.
+     */
+    private RawToolResult executePreparedToolCall(
+            PreparedToolCall prepared,
+            AtomicBoolean signal,
+            Consumer<ToolResult> onUpdate,
+            Map<String, Object> userInput) {
 
         Tool tool = prepared.tool();
         ToolCallContent tc = prepared.toolCall();
@@ -337,7 +352,7 @@ public class ToolRunner implements AutoCloseable {
         // Create terminate signal channel for the tool to use
         AtomicBoolean terminateSignal = new AtomicBoolean(false);
         Map<String, Object> ctxMetadata = prepared.metadata() != null ? prepared.metadata() : Map.of();
-        ToolContext ctx = new ToolContext(signal, onUpdate, ctxMetadata, terminateSignal);
+        ToolContext ctx = new ToolContext(signal, onUpdate, ctxMetadata, terminateSignal, userInput);
 
         ToolResult result;
         boolean isError;
@@ -347,8 +362,6 @@ public class ToolRunner implements AutoCloseable {
             try {
                 result = executeWithTimeout(tool, tc.id(), args, ctx, effectiveTimeout);
                 isError = false;
-            } catch (HumanInputGate.RequiresHumanInput e) {
-                throw e;  // Propagate to runSingleTool for HITL handling
             } catch (TimeoutException e) {
                 result = new ToolResult("Tool '" + tc.name() + "' timed out after "
                         + Math.round(effectiveTimeout) + "s");
@@ -361,8 +374,6 @@ public class ToolRunner implements AutoCloseable {
             try {
                 result = tool.execute(tc.id(), args, ctx);
                 isError = false;
-            } catch (HumanInputGate.RequiresHumanInput e) {
-                throw e;  // Propagate to runSingleTool for HITL handling
             } catch (Exception e) {
                 result = new ToolResult(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
                 isError = true;
@@ -410,7 +421,7 @@ public class ToolRunner implements AutoCloseable {
 
     /**
      * Run the full three-stage pipeline for a single tool call.
-     * Handles HumanInputRequired (HITL) by emitting event, blocking on gate, and re-executing.
+     * Handles HITL (Human-in-the-Loop) by checking ToolResult.requiresInput().
      */
     private ToolCallResult runSingleTool(
             ToolCallContent tc,
@@ -432,30 +443,33 @@ public class ToolRunner implements AutoCloseable {
         PreparedToolCall prepared = prepareToolCall(tc);
         if (prepared.isBlocked()) return prepared.blockedResult();
 
-        // Stage 2: Execute (with HITL handling)
-        try {
-            RawToolResult rawResult = executePreparedToolCall(prepared, signal, onUpdate);
-            // Stage 3: Finalize
-            return finalizeToolCall(prepared, rawResult);
-        } catch (HumanInputGate.RequiresHumanInput e) {
-            return handleHumanInput(tc, prepared, signal, onUpdate, onEvent, e);
+        // Stage 2: Execute
+        RawToolResult rawResult = executePreparedToolCall(prepared, signal, onUpdate);
+
+        // Check HITL: if the tool returned requiresInput, pause and wait for user
+        if (rawResult.result().requiresInput()) {
+            return handleHumanInput(prepared, signal, onUpdate, onEvent, rawResult.result());
         }
+
+        // Stage 3: Finalize
+        return finalizeToolCall(prepared, rawResult);
     }
 
     /**
-     * Handle RequiresHumanInput: emit event, block on gate, re-execute with provided input.
+     * Handle HITL: emit event, block on gate, re-execute with user input via ToolContext.
      */
     private ToolCallResult handleHumanInput(
-            ToolCallContent tc,
             PreparedToolCall prepared,
             AtomicBoolean signal,
             Consumer<ToolResult> onUpdate,
             Consumer<AgentEvent> onEvent,
-            HumanInputGate.RequiresHumanInput e) {
+            ToolResult requiresInputResult) {
 
         HumanInputGate gate = this.humanInputGate;
+        ToolCallContent tc = prepared.toolCall();
+
         if (gate == null) {
-            log.warn("RequiresHumanInput thrown but no HumanInputGate configured");
+            log.warn("Tool returned requiresInput but no HumanInputGate configured");
             return new ToolCallResult(tc.id(), tc.name(),
                     new ToolResult("Human input required but no input channel configured"), true, false);
         }
@@ -463,25 +477,19 @@ public class ToolRunner implements AutoCloseable {
         // Emit HumanInputRequired event
         if (onEvent != null) {
             onEvent.accept(new AgentEvent.HumanInputRequired(
-                    tc.id(), e.prompt(), e.inputSchema()));
+                    tc.id(), requiresInputResult.inputPrompt(), requiresInputResult.inputSchema()));
         }
 
         // Block until input arrives (virtual thread friendly)
         try {
-            java.util.concurrent.CompletableFuture<Map<String, Object>> future = gate.requireInput(tc.id());
-            Map<String, Object> input = future.get();
+            CompletableFuture<Map<String, Object>> future = gate.requireInput(tc.id());
+            Map<String, Object> userInput = future.get();
             log.debug("Human input received for tool call {}", tc.id());
 
-            // Merge user input into arguments and re-execute
-            Map<String, Object> mergedArgs = new java.util.LinkedHashMap<>(prepared.arguments());
-            mergedArgs.putAll(input);
-            mergedArgs.put("_user_input", input);  // Signal for HumanInputTool re-execution path
-
-            PreparedToolCall retryPrepared = new PreparedToolCall(
-                    prepared.tool(), tc, mergedArgs, prepared.effectiveTimeout(), prepared.metadata(), null);
-            RawToolResult rawResult = executePreparedToolCall(retryPrepared, signal, onUpdate);
-            return finalizeToolCall(retryPrepared, rawResult);
-        } catch (java.util.concurrent.CancellationException ce) {
+            // Re-execute only Stage 2 with user input injected into ToolContext
+            RawToolResult rawResult = executePreparedToolCall(prepared, signal, onUpdate, userInput);
+            return finalizeToolCall(prepared, rawResult);
+        } catch (CancellationException ce) {
             return new ToolCallResult(tc.id(), tc.name(),
                     new ToolResult("Human input request was cancelled"), true, false);
         } catch (InterruptedException ie) {

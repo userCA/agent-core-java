@@ -14,9 +14,10 @@ import java.util.Map;
  *
  * <p>When called by the LLM, this tool:
  * <ol>
- *   <li>Registers a pending input request with {@link io.agentcore.model.HumanInputGate}</li>
- *   <li>Blocks (virtual thread) until the external caller provides input</li>
- *   <li>The result text contains the user's provided values</li>
+ *   <li>Returns {@link ToolResult#requiresHumanInput} to pause execution</li>
+ *   <li>The agent loop emits a HumanInputRequired event and blocks on the gate</li>
+ *   <li>When user input arrives, the tool is re-executed with
+ *       {@link ToolContext#userInput()} populated, and returns the user's values</li>
  * </ol>
  */
 public class HumanInputTool implements Tool {
@@ -47,24 +48,21 @@ public class HumanInputTool implements Tool {
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
+        // HITL re-execution path: user already responded via HumanInputGate
+        if (ctx.userInput() != null) {
+            return new ToolResult(formatValues(ctx.userInput()));
+        }
+
         String prompt = (String) params.get("prompt");
         if (prompt == null || prompt.isBlank()) {
             return ToolResult.error("missing_param", "'prompt' parameter is required");
         }
 
-        // Check if user input was already provided (HITL re-execution path)
-        @SuppressWarnings("unchecked")
-        Map<String, Object> userInput = (Map<String, Object>) params.get("_user_input");
-        if (userInput != null) {
-            return new ToolResult(formatValues(userInput));
-        }
-
         @SuppressWarnings("unchecked")
         Map<String, Object> inputSchema = (Map<String, Object>) params.get("input_schema");
 
-        // Throw RequiresHumanInput — caught by ToolRunner which emits
-        // HumanInputRequired event, blocks on gate, and re-executes with input.
-        throw new HumanInputGate.RequiresHumanInput(prompt, inputSchema);
+        // Return requiresInput — ToolRunner checks this and handles HITL flow
+        return ToolResult.requiresHumanInput(prompt, inputSchema);
     }
 
     private static String formatValues(Map<String, Object> values) {

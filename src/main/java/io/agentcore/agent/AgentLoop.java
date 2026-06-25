@@ -13,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import io.agentcore.model.Message;
 import io.agentcore.model.AgentEvent;
-import io.agentcore.model.HumanInputGate;
 
 /**
  * Core agent loop — drives the LLM streaming → tool execution → repeat cycle.
@@ -60,7 +59,8 @@ public class AgentLoop {
     public AgentLoop(AgentLoopConfig config, AgentContext context) {
         this(config, context, config.toolRegistry() != null
                 ? new ToolRunner(config.toolRegistry(), config.toolConfig(),
-                        config.beforeToolCall(), config.afterToolCall())
+                        config.beforeToolCall(), config.afterToolCall(),
+                        config.humanInputGate())
                 : null);
     }
 
@@ -345,11 +345,6 @@ public class AgentLoop {
         
         if (!assistant.hasToolCalls() || toolRunner == null) {
             return new ToolRunner.ToolBatchResult(List.of(), false);
-        }
-
-        // Sync human-input gate from config for HITL support
-        if (config.humanInputGate() != null) {
-            toolRunner.updateHumanInputGate(config.humanInputGate());
         }
 
         log.debug("Executing {} tool calls in {} mode", 

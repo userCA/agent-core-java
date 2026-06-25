@@ -418,11 +418,12 @@ class CoreModelTest {
         }
 
         @Test
-        void requiresHumanInputException() {
-            var ex = new HumanInputGate.RequiresHumanInput(
+        void requiresHumanInputResult() {
+            var result = io.agentcore.model.ToolResult.requiresHumanInput(
                 "Enter your name", Map.of("type", "string"));
-            assertEquals("Enter your name", ex.prompt());
-            assertEquals("string", ex.inputSchema().get("type"));
+            assertTrue(result.requiresInput());
+            assertEquals("Enter your name", result.inputPrompt());
+            assertEquals("string", result.inputSchema().get("type"));
         }
     }
 
