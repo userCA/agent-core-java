@@ -1,4 +1,4 @@
-package io.agentcore.tools;
+package io.agentcore.extensions;
 
 import io.agentcore.model.Content;
 import io.agentcore.model.Content.TextContent;
@@ -130,27 +130,33 @@ public class SelfHealingExtension implements Extension {
 
     // ── Detection helpers ──
 
-    String detectMissingModule(String text) {
+    public String detectMissingModule(String text) {
         Matcher m = MISSING_MODULE_RE.matcher(text);
         return m.find() ? m.group(1) : null;
     }
 
-    boolean isMemoryError(String text) {
+    public boolean isMemoryError(String text) {
         return MEMORY_ERROR_RE.matcher(text).find();
     }
 
-    boolean isTimeout(String text) {
+    public boolean isTimeout(String text) {
         return text.toLowerCase().contains("timed out");
     }
 
-    String detectMissingFile(String text) {
+    public String detectMissingFile(String text) {
         Matcher m = FILE_NOT_FOUND_RE.matcher(text);
         return m.find() ? m.group(1) : null;
     }
 
     // ── Fix helpers ──
 
+    private static final Pattern SAFE_MODULE_RE = Pattern.compile("[a-zA-Z0-9_.\\-]+");
+
     private String installModule(String module) {
+        if (!SAFE_MODULE_RE.matcher(module).matches()) {
+            log.warn("Refusing to install module with unsafe name: '{}'", module);
+            return null;
+        }
         try {
             var result = bashOps.execute(
                     "pip install " + module, null, 60.0, null, null, null
@@ -180,12 +186,6 @@ public class SelfHealingExtension implements Extension {
 
     private String extractResultText(ToolResult result) {
         if (result == null) return "";
-        StringBuilder sb = new StringBuilder();
-        for (Content c : result.content()) {
-            if (c instanceof TextContent tc) {
-                sb.append(tc.text());
-            }
-        }
-        return sb.toString();
+        return Content.joinAllTextRaw(result.content());
     }
 }

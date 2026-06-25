@@ -1,2 +1,2 @@
-io.agentcore.tools.SandboxPolicyExtension
-io.agentcore.tools.SelfHealingExtension
+io.agentcore.extensions.SandboxPolicyExtension
+io.agentcore.extensions.SelfHealingExtension

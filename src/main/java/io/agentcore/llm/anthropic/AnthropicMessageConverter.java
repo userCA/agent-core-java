@@ -67,10 +67,7 @@ public class AnthropicMessageConverter implements Function<List<Message>, List<M
                 }
                 case Message.AssistantMessage am -> {
                     List<Map<String, Object>> blocks = new ArrayList<>();
-                    String text = am.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .collect(Collectors.joining());
+                    String text = Content.joinAllTextRaw(am.content());
                     if (!text.isEmpty()) {
                         blocks.add(new LinkedHashMap<>(Map.of("type", "text", "text", text)));
                     }
@@ -93,10 +90,7 @@ public class AnthropicMessageConverter implements Function<List<Message>, List<M
                     out.add(msg);
                 }
                 case Message.ToolResultMessage trm -> {
-                    String text = trm.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .collect(Collectors.joining());
+                    String text = Content.joinAllTextRaw(trm.content());
                     if (text.length() > toolResultMaxChars) {
                         text = text.substring(0, toolResultMaxChars)
                                 + "\n...[truncated, " + text.length() + " chars total]";

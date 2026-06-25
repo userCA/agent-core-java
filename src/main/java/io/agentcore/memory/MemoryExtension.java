@@ -49,16 +49,11 @@ public class MemoryExtension implements Extension {
             Message msg = me.message();
             if (!(msg instanceof UserMessage um)) return;
 
-            List<String> textParts = new ArrayList<>();
-            for (Content c : um.content()) {
-                if (c instanceof Content.TextContent tc) {
-                    textParts.add(tc.text());
-                }
-            }
-            if (textParts.isEmpty()) return;
+            String text = Content.joinAllText(um.content());
+            if (text.isEmpty()) return;
 
             synchronized (pending) {
-                pending.add(String.join("\n", textParts));
+                pending.add(text);
                 if (pending.size() > MAX_PENDING) {
                     pending.removeFirst();
                 }
@@ -66,14 +61,21 @@ public class MemoryExtension implements Extension {
         } else if (event instanceof TurnEnd) {
             if (sessionId == null || pending.isEmpty()) return;
 
-            for (String text : pending) {
+            // Snapshot under lock to avoid ConcurrentModificationException
+            List<String> snapshot;
+            synchronized (pending) {
+                if (pending.isEmpty()) return;
+                snapshot = new ArrayList<>(pending);
+                pending.clear();
+            }
+
+            for (String text : snapshot) {
                 try {
                     store.remember(sessionId, text, null);
                 } catch (Exception e) {
                     log.warn("memory remember failed for session {}: {}", sessionId, e.getMessage());
                 }
             }
-            pending.clear();
         }
     }
 }

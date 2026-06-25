@@ -87,16 +87,16 @@ public class Main {
 
     private static void runServer(AgentConfig config) throws Exception {
         Agent agent = config.createAgent();
-        log.info("Agent created with provider={}, model={}", config.getProvider(), config.getModel());
+        log.info("Agent created with provider={}, model={}", config.provider(), config.model());
 
         AgentHttpServer server = AgentHttpServer.builder()
-                .port(config.getHttpPort())
+                .port(config.httpPort())
                 .agentFactory(() -> config.createAgent())
-                .contextWindow(config.getContextWindow())
+                .contextWindow(config.contextWindow())
                 .build();
 
         server.start();
-        log.info("HTTP SSE server started on http://localhost:{}", config.getHttpPort());
+        log.info("HTTP SSE server started on http://localhost:{}", config.httpPort());
         log.info("Endpoints:");
         log.info("  POST /api/chat       — send a message, receive SSE stream");
         log.info("  POST /api/abort      — abort a running session");

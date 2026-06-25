@@ -140,19 +140,44 @@ public final class AgentConfig {
         this.extra = builder.extra != null ? Map.copyOf(builder.extra) : Map.of();
     }
 
-    // ── Getters ───────────────────────────────────────────────
+    // ── Getters (record-style) ───────────────────────────────
 
-    public String getProvider() { return provider; }
-    public String getModel() { return model; }
-    public String getApiKey() { return apiKey; }
-    public String getBaseUrl() { return baseUrl; }
-    public String getSystemPrompt() { return systemPrompt; }
-    public int getMaxTokens() { return maxTokens; }
-    public int getContextWindow() { return contextWindow; }
-    public double getTemperature() { return temperature; }
-    public int getHttpPort() { return httpPort; }
-    public int getTimeoutSeconds() { return timeoutSeconds; }
-    public Map<String, String> getExtra() { return extra; }
+    public String provider() { return provider; }
+    public String model() { return model; }
+    public String apiKey() { return apiKey; }
+    public String baseUrl() { return baseUrl; }
+    public String systemPrompt() { return systemPrompt; }
+    public int maxTokens() { return maxTokens; }
+    public int contextWindow() { return contextWindow; }
+    public double temperature() { return temperature; }
+    public int httpPort() { return httpPort; }
+    public int timeoutSeconds() { return timeoutSeconds; }
+    public Map<String, String> extra() { return extra; }
+
+    // ── Getters (JavaBean-style, deprecated) ──────────────────
+
+    /** @deprecated Use {@link #provider()} instead. */
+    @Deprecated public String getProvider() { return provider; }
+    /** @deprecated Use {@link #model()} instead. */
+    @Deprecated public String getModel() { return model; }
+    /** @deprecated Use {@link #apiKey()} instead. */
+    @Deprecated public String getApiKey() { return apiKey; }
+    /** @deprecated Use {@link #baseUrl()} instead. */
+    @Deprecated public String getBaseUrl() { return baseUrl; }
+    /** @deprecated Use {@link #systemPrompt()} instead. */
+    @Deprecated public String getSystemPrompt() { return systemPrompt; }
+    /** @deprecated Use {@link #maxTokens()} instead. */
+    @Deprecated public int getMaxTokens() { return maxTokens; }
+    /** @deprecated Use {@link #contextWindow()} instead. */
+    @Deprecated public int getContextWindow() { return contextWindow; }
+    /** @deprecated Use {@link #temperature()} instead. */
+    @Deprecated public double getTemperature() { return temperature; }
+    /** @deprecated Use {@link #httpPort()} instead. */
+    @Deprecated public int getHttpPort() { return httpPort; }
+    /** @deprecated Use {@link #timeoutSeconds()} instead. */
+    @Deprecated public int getTimeoutSeconds() { return timeoutSeconds; }
+    /** @deprecated Use {@link #extra()} instead. */
+    @Deprecated public Map<String, String> getExtra() { return extra; }
 
     /**
      * Check if this is an OpenAI-compatible provider (uses OpenAI API format).

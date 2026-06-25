@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import io.agentcore.model.Message;
-import io.agentcore.model.AgentEvent;
 
 /**
  * Mutable runtime context for an Agent — holds working state for the agent loop.
@@ -23,6 +22,9 @@ public final class AgentContext {
 
     private volatile String systemPrompt;
     private final List<Message> messages;
+
+    // COW snapshot cache — invalidated on mutations, reused across reads within the same turn
+    private volatile List<Message> snapshotCache;
 
     // Streaming state
     private final AtomicBoolean streaming = new AtomicBoolean(false);
@@ -64,8 +66,12 @@ public final class AgentContext {
      * @return an unmodifiable copy of the message list
      */
     public List<Message> messagesSnapshot() {
+        List<Message> cached = snapshotCache;
+        if (cached != null) return cached;
         synchronized (messages) {
-            return List.copyOf(messages);
+            cached = List.copyOf(messages);
+            snapshotCache = cached;
+            return cached;
         }
     }
     public boolean isStreaming() { return streaming.get(); }
@@ -99,6 +105,7 @@ public final class AgentContext {
     public void addMessage(Message msg) {
         synchronized (messages) {
             messages.add(msg);
+            snapshotCache = null;
         }
     }
 
@@ -109,6 +116,7 @@ public final class AgentContext {
     public void addMessages(List<? extends Message> msgs) {
         synchronized (messages) {
             messages.addAll(msgs);
+            snapshotCache = null;
         }
     }
 
@@ -119,6 +127,7 @@ public final class AgentContext {
         synchronized (messages) {
             messages.clear();
             messages.addAll(newMessages);
+            snapshotCache = null;
         }
     }
 
@@ -128,6 +137,7 @@ public final class AgentContext {
     public void resetState() {
         synchronized (messages) {
             messages.clear();
+            snapshotCache = null;
         }
         streaming.set(false);
         errorMessage = null;

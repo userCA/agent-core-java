@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpExchange;
 import io.agentcore.session.compaction.Compactor;
 import io.agentcore.agent.Agent;
 import io.agentcore.model.AgentEvent;
+import io.agentcore.model.Content;
 import io.agentcore.agent.AgentLoopConfig;
 import io.agentcore.model.Message;
 import io.agentcore.extensions.Extension;
@@ -398,10 +399,7 @@ public class AgentHttpServer implements AutoCloseable {
                 data.put("toolName", tee.toolName());
                 data.put("isError", tee.isError());
                 if (tee.result() != null) {
-                    data.put("result", tee.result().content().stream()
-                            .filter(c -> c instanceof io.agentcore.model.Content.TextContent)
-                            .map(c -> ((io.agentcore.model.Content.TextContent) c).text())
-                            .reduce("", String::concat));
+                    data.put("result", Content.joinAllTextRaw(tee.result().content()));
                 }
             }
             case AgentEvent.TurnEnd te -> {

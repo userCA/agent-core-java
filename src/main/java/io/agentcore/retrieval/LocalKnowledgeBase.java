@@ -1,7 +1,6 @@
 package io.agentcore.retrieval;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.agentcore.llm.ProviderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +26,7 @@ import java.util.stream.Stream;
 public class LocalKnowledgeBase implements Retriever {
 
     private static final Logger log = LoggerFactory.getLogger(LocalKnowledgeBase.class);
-    private static final ObjectMapper MAPPER = ProviderUtils.mapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final Pattern SENT_SPLIT = Pattern.compile("(?<=[。！？.!?\\n])\\s*");
     public static final int DEFAULT_CHUNK_SIZE = 500;

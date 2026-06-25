@@ -15,6 +15,7 @@ import io.agentcore.model.Message;
 import io.agentcore.model.Content;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.ToolResult;
+import io.agentcore.model.ThinkingLevel;
 import io.agentcore.agent.Agent;
 import io.agentcore.agent.AgentContext;
 import io.agentcore.agent.AgentLoop;
@@ -22,7 +23,7 @@ import io.agentcore.agent.AgentLoopConfig;
 import io.agentcore.agent.StreamAccumulator;
 import io.agentcore.agent.ToolRunner;
 import io.agentcore.agent.PendingMessageQueue;
-import io.agentcore.agent.HumanInputGate;
+import io.agentcore.model.HumanInputGate;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
@@ -497,7 +498,7 @@ class CoreModelTest {
                 .build();
 
             assertEquals(model, config.model());
-            assertEquals("high", config.thinkingLevel());
+            assertEquals(ThinkingLevel.HIGH, config.thinkingLevel());
             // Sub-config getters (preferred)
             assertEquals(5, config.retryConfig().maxRetries());
             assertEquals(60.0, config.toolConfig().timeout());

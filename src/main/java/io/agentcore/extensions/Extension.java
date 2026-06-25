@@ -19,6 +19,15 @@ public interface Extension {
     String name();
 
     /**
+     * Execution priority. Lower values run first.
+     *
+     * <p>For example, a security policy extension should run before
+     * a logging extension to ensure commands are validated first.
+     * Default is 0; use negative values for higher priority.
+     */
+    default int order() { return 0; }
+
+    /**
      * Called before the agent loop starts. Can return a typed result:
      * <ul>
      *   <li>{@link BeforeAgentStartResult.ModifySystemPrompt} — replace system prompt</li>

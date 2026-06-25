@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import io.agentcore.model.Message;
 import io.agentcore.model.AgentEvent;
-import io.agentcore.model.Content;
+import io.agentcore.model.HumanInputGate;
 
 /**
  * Core agent loop — drives the LLM streaming → tool execution → repeat cycle.
@@ -39,7 +39,7 @@ public class AgentLoop {
         this(config, context, toolRunner,
                 new StreamAccumulator(
                         config.streamFn(), config.model(),
-                        config.thinkingLevel(), config.temperature(), config.maxTokens()));
+                        config.thinkingLevel().value(), config.temperature(), config.maxTokens()));
     }
 
     /**
@@ -277,6 +277,11 @@ public class AgentLoop {
                 llmMessages = decision.updatedMessages();
                 if (decision.delaySeconds() > 0) {
                     sleepWithInterruptCheck(decision.delaySeconds(), signal);
+                    // If sleep was interrupted, propagate abort immediately
+                    if (isAborted(signal)) {
+                        log.debug("Retry loop aborted due to interrupt signal");
+                        return assistant;
+                    }
                 }
                 continue;
             }

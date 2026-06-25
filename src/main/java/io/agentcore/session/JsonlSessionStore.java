@@ -11,6 +11,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -28,6 +29,9 @@ public class JsonlSessionStore implements SessionStore {
             .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
 
     private final Path directory;
+
+    /** Long-lived buffered writers keyed by session ID. Flushed on close() or explicitly. */
+    private final ConcurrentHashMap<String, BufferedWriter> writers = new ConcurrentHashMap<>();
 
     public JsonlSessionStore(String directory) throws IOException {
         this.directory = Path.of(directory);
@@ -74,18 +78,52 @@ public class JsonlSessionStore implements SessionStore {
         try {
             Map<String, Object> entryMap = entryToMap(entry);
             String line = MAPPER.writeValueAsString(entryMap) + "\n";
-            Path path = sessionPath(sessionId);
-            try (OutputStream out = new BufferedOutputStream(
-                    new FileOutputStream(path.toFile(), true))) {
-                out.write(line.getBytes(StandardCharsets.UTF_8));
+            BufferedWriter writer = getOrCreateWriter(sessionId);
+            synchronized (writer) {
+                writer.write(line);
             }
         } catch (IOException e) {
             throw new SessionStoreException("Failed to append entry to session " + sessionId, e);
         }
     }
 
+    /**
+     * Flush the buffered writer for a specific session.
+     * Call this after important events (e.g. AgentEnd) to ensure data durability.
+     */
+    public void flush(String sessionId) {
+        BufferedWriter writer = writers.get(sessionId);
+        if (writer != null) {
+            synchronized (writer) {
+                try {
+                    writer.flush();
+                } catch (IOException e) {
+                    log.warn("Failed to flush session writer for {}", sessionId, e);
+                }
+            }
+        }
+    }
+
+    private BufferedWriter getOrCreateWriter(String sessionId) throws IOException {
+        BufferedWriter w = writers.get(sessionId);
+        if (w != null) return w;
+        Path path = sessionPath(sessionId);
+        BufferedWriter newWriter = new BufferedWriter(
+                new OutputStreamWriter(
+                        new FileOutputStream(path.toFile(), true), StandardCharsets.UTF_8));
+        BufferedWriter existing = writers.putIfAbsent(sessionId, newWriter);
+        if (existing != null) {
+            newWriter.close();
+            return existing;
+        }
+        return newWriter;
+    }
+
     @Override
     public SessionSnapshot loadSession(String sessionId) {
+        // Ensure all buffered data is written before reading
+        flush(sessionId);
+
         Path path = sessionPath(sessionId);
         if (!Files.exists(path)) {
             throw new IllegalArgumentException("Session " + sessionId + " not found");
@@ -182,6 +220,13 @@ public class JsonlSessionStore implements SessionStore {
     @Override
     public boolean deleteSession(String sessionId) {
         try {
+            // Close writer before deleting file
+            BufferedWriter writer = writers.remove(sessionId);
+            if (writer != null) {
+                synchronized (writer) {
+                    writer.close();
+                }
+            }
             return Files.deleteIfExists(sessionPath(sessionId));
         } catch (IOException e) {
             throw new SessionStoreException("Failed to delete session " + sessionId, e);
@@ -190,7 +235,16 @@ public class JsonlSessionStore implements SessionStore {
 
     @Override
     public void close() {
-        // No-op for file store
+        for (Map.Entry<String, BufferedWriter> e : writers.entrySet()) {
+            try {
+                synchronized (e.getValue()) {
+                    e.getValue().close();
+                }
+            } catch (IOException ex) {
+                log.debug("Failed to close writer for session {}", e.getKey(), ex);
+            }
+        }
+        writers.clear();
     }
 
     // ── Helpers ──────────────────────────────────────────────

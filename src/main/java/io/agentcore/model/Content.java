@@ -3,6 +3,7 @@ package io.agentcore.model;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,6 +23,57 @@ import java.util.Map;
     @JsonSubTypes.Type(value = Content.ToolCallContent.class, name = "tool_call"),
 })
 public sealed interface Content {
+
+    /**
+     * Extract the first text content from a list of content blocks.
+     *
+     * @param content content blocks (may be null)
+     * @return the first text found, or empty string if none
+     */
+    static String extractText(List<Content> content) {
+        if (content == null) return "";
+        for (Content c : content) {
+            if (c instanceof TextContent tc) {
+                return tc.text();
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Join all text content blocks from a list.
+     *
+     * @param content content blocks (may be null)
+     * @return all text concatenated, or empty string if none
+     */
+    static String joinAllText(List<Content> content) {
+        if (content == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Content c : content) {
+            if (c instanceof TextContent tc) {
+                if (!sb.isEmpty()) sb.append('\n');
+                sb.append(tc.text());
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Join all text content blocks without any separator.
+     *
+     * @param content content blocks (may be null)
+     * @return all text concatenated directly, or empty string if none
+     */
+    static String joinAllTextRaw(List<Content> content) {
+        if (content == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Content c : content) {
+            if (c instanceof TextContent tc) {
+                sb.append(tc.text());
+            }
+        }
+        return sb.toString();
+    }
 
     /**
      * Plain text content block.

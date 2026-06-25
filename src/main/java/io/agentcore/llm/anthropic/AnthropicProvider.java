@@ -115,7 +115,7 @@ public class AnthropicProvider implements ModelProvider {
         Map<String, Object> payload = buildPayload(model, anthropicMsgs, system, tools,
                 thinkingLevel, temperature, maxTokens);
 
-        LinkedBlockingQueue<StreamEvent> queue = new LinkedBlockingQueue<>();
+        LinkedBlockingQueue<StreamEvent> queue = new LinkedBlockingQueue<>(10_000);
         AtomicBoolean done = new AtomicBoolean(false);
 
         Thread.ofVirtual().name("anthropic-sse-" + System.nanoTime()).start(() -> {
@@ -223,6 +223,7 @@ public class AnthropicProvider implements ModelProvider {
 
         Map<String, Map<String, Object>> toolBuffers = new LinkedHashMap<>();
         Set<String> startedTools = new HashSet<>();
+        Set<String> emittedToolCallEnds = new HashSet<>();
         Map<Integer, String> indexToTool = new LinkedHashMap<>();
         // Buffer message_end info to emit AFTER tool call ends (correct event ordering)
         String[] pendingEnd = new String[2]; // [stopReason, outputTokens]
@@ -261,7 +262,7 @@ public class AnthropicProvider implements ModelProvider {
                             Map<String, Object> buf = new LinkedHashMap<>();
                             buf.put("id", tid);
                             buf.put("name", name);
-                            buf.put("args", "");
+                            buf.put("args", new StringBuilder());
                             toolBuffers.put(tid, buf);
                             indexToTool.put(idx, tid);
                             if (!startedTools.contains(tid)) {
@@ -285,7 +286,7 @@ public class AnthropicProvider implements ModelProvider {
                                 if (tid != null && toolBuffers.containsKey(tid)) {
                                     String partial = (String) delta.getOrDefault("partial_json", "");
                                     Map<String, Object> buf = toolBuffers.get(tid);
-                                    buf.put("args", (String) buf.get("args") + partial);
+                                    ((StringBuilder) buf.get("args")).append(partial);
                                 }
                             }
                         }
@@ -307,9 +308,10 @@ public class AnthropicProvider implements ModelProvider {
                         for (Map<String, Object> buf : toolBuffers.values()) {
                             String tid = (String) buf.get("id");
                             String name = (String) buf.get("name");
-                            if (tid != null && name != null) {
-                                Map<String, Object> args = ProviderUtils.parseJsonMap((String) buf.get("args"));
+                            if (tid != null && name != null && !emittedToolCallEnds.contains(tid)) {
+                                Map<String, Object> args = ProviderUtils.parseJsonMap(buf.get("args").toString());
                                 queue.offer(new StreamToolCallEnd(tid, args));
+                                emittedToolCallEnds.add(tid);
                             }
                         }
                         if (pendingEnd[0] != null) {
@@ -319,6 +321,18 @@ public class AnthropicProvider implements ModelProvider {
                                     Integer.parseInt(pendingEnd[1])));
                         }
                     }
+                }
+            }
+        } finally {
+            // Flush unfinished tool call ends if stream broke before message_stop
+            // (e.g. abort signal, network error, unexpected EOF)
+            for (Map<String, Object> buf : toolBuffers.values()) {
+                String tid = (String) buf.get("id");
+                String name = (String) buf.get("name");
+                if (tid != null && name != null && !emittedToolCallEnds.contains(tid)) {
+                    Map<String, Object> args = ProviderUtils.parseJsonMap((String) buf.get("args"));
+                    queue.offer(new StreamToolCallEnd(tid, args));
+                    emittedToolCallEnds.add(tid);
                 }
             }
         }

@@ -21,11 +21,15 @@ import io.agentcore.tools.ToolDefinition;
  *
  * <p>Features:
  * <ul>
- *   <li>Dangerous command blocking (rm -rf /, fork bombs, etc.)</li>
+ *   <li>Dangerous command blocking (rm -rf /, fork bombs, etc.) as defense-in-depth</li>
  *   <li>Output truncation to prevent context overflow</li>
  *   <li>Quota-enforced timeouts</li>
  *   <li>Signal-based cancellation via {@link ToolContext}</li>
  * </ul>
+ *
+ * <p><b>Security:</b> Inline destructive-command check serves as a fallback.
+ * For richer policy (quota injection, etc.), register
+ * {@link io.agentcore.extensions.SandboxPolicyExtension} via the Extension SPI.
  */
 public class BashTool implements Tool {
 
@@ -62,6 +66,8 @@ public class BashTool implements Tool {
             return ToolResult.error("missing_param", e.getMessage());
         }
 
+        // Defense-in-depth: block dangerous commands even when SandboxPolicyExtension
+        // is not registered. If the extension IS active, it blocks before this point.
         if (SecurityUtils.isDestructive(command)) {
             return ToolResult.error("blocked",
                     "Command blocked: appears to be a dangerous operation "

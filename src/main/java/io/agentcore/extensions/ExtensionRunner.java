@@ -22,7 +22,14 @@ public final class ExtensionRunner {
     private final List<Extension> extensions;
 
     public ExtensionRunner(List<Extension> extensions) {
-        this.extensions = extensions != null ? List.copyOf(extensions) : List.of();
+        if (extensions == null || extensions.isEmpty()) {
+            this.extensions = List.of();
+        } else {
+            // Sort by order() — lower values run first (higher priority)
+            this.extensions = extensions.stream()
+                    .sorted(java.util.Comparator.comparingInt(Extension::order))
+                    .toList();
+        }
     }
 
     public boolean hasExtensions() {

@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 import java.util.concurrent.StructuredTaskScope;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.Content;
+import io.agentcore.model.HumanInputGate;
 import io.agentcore.model.Message;
 
 /**
@@ -248,6 +249,7 @@ public class ToolRunner implements AutoCloseable {
             ToolCallContent toolCall,
             Map<String, Object> arguments,
             Double effectiveTimeout,
+            Map<String, Object> metadata,
             ToolCallResult blockedResult  // non-null if the call was blocked by before-hook
     ) {
         boolean isBlocked() { return blockedResult != null; }
@@ -268,12 +270,13 @@ public class ToolRunner implements AutoCloseable {
     private PreparedToolCall prepareToolCall(ToolCallContent tc) {
         Tool tool = registry.get(tc.name());
         if (tool == null) {
-            return new PreparedToolCall(null, tc, null, null,
+            return new PreparedToolCall(null, tc, null, null, null,
                     new ToolCallResult(tc.id(), tc.name(),
                             new ToolResult("Tool '" + tc.name() + "' not found."), true, false));
         }
 
         Map<String, Object> args = tc.arguments();
+        Map<String, Object> metadata = null;
 
         // prepareArguments hook on the tool itself
         try {
@@ -291,7 +294,7 @@ public class ToolRunner implements AutoCloseable {
                 if (hookResult != null) {
                     switch (hookResult) {
                         case ToolCallHookResult.Block b -> {
-                            return new PreparedToolCall(null, tc, null, null,
+                            return new PreparedToolCall(null, tc, null, null, null,
                                     new ToolCallResult(tc.id(), tc.name(),
                                             new ToolResult(b.reason()), true, false));
                         }
@@ -299,9 +302,12 @@ public class ToolRunner implements AutoCloseable {
                             if (p.mutatedArguments() != null) {
                                 args = p.mutatedArguments();
                             }
+                            if (p.metadata() != null) {
+                                metadata = p.metadata();
+                            }
                         }
-                        case ToolCallHookResult.InjectMetadata _ -> {
-                            // metadata injection handled at extension level
+                        case ToolCallHookResult.InjectMetadata im -> {
+                            metadata = im.metadata();
                         }
                     }
                 }
@@ -313,7 +319,7 @@ public class ToolRunner implements AutoCloseable {
         Double effectiveTimeout = tool.definition().timeoutSeconds();
         if (effectiveTimeout == null) effectiveTimeout = defaultTimeout;
 
-        return new PreparedToolCall(tool, tc, args, effectiveTimeout, null);
+        return new PreparedToolCall(tool, tc, args, effectiveTimeout, metadata, null);
     }
 
     /**
@@ -330,7 +336,8 @@ public class ToolRunner implements AutoCloseable {
 
         // Create terminate signal channel for the tool to use
         AtomicBoolean terminateSignal = new AtomicBoolean(false);
-        ToolContext ctx = new ToolContext(signal, onUpdate, Map.of(), terminateSignal);
+        Map<String, Object> ctxMetadata = prepared.metadata() != null ? prepared.metadata() : Map.of();
+        ToolContext ctx = new ToolContext(signal, onUpdate, ctxMetadata, terminateSignal);
 
         ToolResult result;
         boolean isError;
@@ -471,7 +478,7 @@ public class ToolRunner implements AutoCloseable {
             mergedArgs.put("_user_input", input);  // Signal for HumanInputTool re-execution path
 
             PreparedToolCall retryPrepared = new PreparedToolCall(
-                    prepared.tool(), tc, mergedArgs, prepared.effectiveTimeout(), null);
+                    prepared.tool(), tc, mergedArgs, prepared.effectiveTimeout(), prepared.metadata(), null);
             RawToolResult rawResult = executePreparedToolCall(retryPrepared, signal, onUpdate);
             return finalizeToolCall(retryPrepared, rawResult);
         } catch (java.util.concurrent.CancellationException ce) {

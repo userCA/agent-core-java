@@ -1,6 +1,6 @@
 package io.agentcore.tools;
 
-import io.agentcore.agent.HumanInputGate;
+import io.agentcore.model.HumanInputGate;
 import io.agentcore.tools.Tool;
 import io.agentcore.tools.ToolContext;
 import io.agentcore.tools.ToolDefinition;
@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * <p>When called by the LLM, this tool:
  * <ol>
- *   <li>Registers a pending input request with {@link io.agentcore.agent.HumanInputGate}</li>
+ *   <li>Registers a pending input request with {@link io.agentcore.model.HumanInputGate}</li>
  *   <li>Blocks (virtual thread) until the external caller provides input</li>
  *   <li>The result text contains the user's provided values</li>
  * </ol>

@@ -2,6 +2,7 @@ package io.agentcore.tools.builtin;
 
 import java.util.List;
 import java.util.Map;
+import io.agentcore.model.HumanInputGate;
 import io.agentcore.model.ToolResult;
 import io.agentcore.tools.ParamSchema;
 import io.agentcore.tools.Tool;
@@ -11,8 +12,9 @@ import io.agentcore.tools.ToolDefinition;
 /**
  * Human-in-the-loop confirmation tool.
  *
- * <p>When executed, throws {@link ConfirmSuspendedException} which causes the
- * agent loop to suspend execution and wait for user confirmation.
+ * <p>When executed, throws {@link HumanInputGate.RequiresHumanInput} which causes
+ * the agent loop to suspend execution via the {@link HumanInputGate} mechanism,
+ * emit a {@code HumanInputRequired} event, and resume when user input arrives.
  */
 public class ConfirmTool implements Tool {
 
@@ -37,31 +39,25 @@ public class ConfirmTool implements Tool {
 
     @Override
     public ToolResult execute(String toolCallId, Map<String, Object> params, ToolContext ctx) throws Exception {
+        // HITL re-execution path: user already responded via HumanInputGate
+        @SuppressWarnings("unchecked")
+        Map<String, Object> userInput = (Map<String, Object>) params.get("_user_input");
+        if (userInput != null) {
+            String answer = userInput.containsKey("answer")
+                    ? String.valueOf(userInput.get("answer"))
+                    : "confirmed";
+            return new ToolResult("User confirmed: " + answer);
+        }
+
         Object promptObj = params.get("prompt");
         if (promptObj == null || (promptObj instanceof String s && s.isBlank())) {
             return ToolResult.error("missing_param", "'prompt' parameter is required");
         }
         String prompt = String.valueOf(promptObj);
 
-        // Suspend tool execution — the agent loop will catch this and
-        // emit a HumanInputRequest event, pausing until the user responds.
-        throw new ConfirmSuspendedException(prompt);
-    }
-
-    /**
-     * Exception thrown to signal that the agent loop should suspend
-     * and wait for user confirmation.
-     */
-    public static class ConfirmSuspendedException extends Exception {
-        private final String prompt;
-
-        public ConfirmSuspendedException(String prompt) {
-            super("Confirmation required: " + prompt);
-            this.prompt = prompt;
-        }
-
-        public String prompt() {
-            return prompt;
-        }
+        // Suspend tool execution via the standard HITL mechanism.
+        // ToolRunner catches RequiresHumanInput, emits HumanInputRequired event,
+        // blocks on HumanInputGate until user responds, then re-executes with merged input.
+        throw new HumanInputGate.RequiresHumanInput(prompt, Map.of());
     }
 }

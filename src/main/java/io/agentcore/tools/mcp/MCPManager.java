@@ -5,6 +5,7 @@ import io.agentcore.tools.ToolRegistry;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +29,8 @@ public class MCPManager {
     private static final Logger log = LoggerFactory.getLogger(MCPManager.class);
 
     private final List<MCPServerConfig> configs;
-    private final List<MCPConnection> connections = new ArrayList<>();
-    private final List<MCPToolAdapter> adapters = new ArrayList<>();
+    private final List<MCPConnection> connections = new CopyOnWriteArrayList<>();
+    private final List<MCPToolAdapter> adapters = new CopyOnWriteArrayList<>();
 
     public MCPManager(List<MCPServerConfig> configs) {
         this.configs = configs != null ? new ArrayList<>(configs) : new ArrayList<>();

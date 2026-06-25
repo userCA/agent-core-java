@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import io.agentcore.model.Message;
-import io.agentcore.model.Content;
+import io.agentcore.model.HumanInputGate;
+import io.agentcore.model.ThinkingLevel;
 
 /**
  * Configuration snapshot passed into the agent loop.
@@ -61,7 +62,7 @@ public final class AgentLoopConfig {
     private final ToolConfig toolConfig;
 
     // ── Optional fields ────────────────────────────────────────
-    private final String thinkingLevel;
+    private final ThinkingLevel thinkingLevel;
     private final Double temperature;
     private final Integer maxTokens;
     private final ToolRegistry toolRegistry;
@@ -83,7 +84,7 @@ public final class AgentLoopConfig {
         this.toolConfig = new ToolConfig(b.toolTimeout, b.toolResultMaxChars,
                 b.toolExecution != null ? b.toolExecution : ToolExecutionMode.PARALLEL,
                 b.maxParallelTools);
-        this.thinkingLevel = b.thinkingLevel != null ? b.thinkingLevel : "off";
+        this.thinkingLevel = b.thinkingLevel != null ? b.thinkingLevel : ThinkingLevel.OFF;
         this.temperature = b.temperature;
         this.maxTokens = b.maxTokens;
         this.toolRegistry = b.toolRegistry;
@@ -127,19 +128,6 @@ public final class AgentLoopConfig {
     }
 
     /**
-     * Resolve auth credentials for a provider.
-     * @deprecated Use {@link Function}{@code <String, ProviderAuth>} directly.
-     */
-    @Deprecated
-    @FunctionalInterface
-    public interface AuthResolver extends Function<String, ProviderAuth> {
-        ProviderAuth resolve(String providerName);
-
-        @Override
-        default ProviderAuth apply(String providerName) { return resolve(providerName); }
-    }
-
-    /**
      * Before-tool-call hook using typed context and result.
      */
     @FunctionalInterface
@@ -153,19 +141,6 @@ public final class AgentLoopConfig {
     @FunctionalInterface
     public interface AfterToolCallHook {
         AfterToolCallHookResult apply(AfterToolCallContext context);
-    }
-
-    /**
-     * Drain pending steering/follow-up messages.
-     * @deprecated Use {@link Supplier}{@code <List<Message>>} directly.
-     */
-    @Deprecated
-    @FunctionalInterface
-    public interface MessageDrainer extends Supplier<List<Message>> {
-        List<Message> drain();
-
-        @Override
-        default List<Message> get() { return drain(); }
     }
 
     /**
@@ -239,7 +214,7 @@ public final class AgentLoopConfig {
         private StreamFunction streamFn;
         private ConvertToLlm convertToLlm;
         private Function<String, ProviderAuth> authResolver;
-        private String thinkingLevel = "off";
+        private ThinkingLevel thinkingLevel = ThinkingLevel.OFF;
         private ToolExecutionMode toolExecution = ToolExecutionMode.PARALLEL;
         private Double temperature;
         private Integer maxTokens;
@@ -263,7 +238,8 @@ public final class AgentLoopConfig {
         public Builder streamFn(StreamFunction v) { this.streamFn = v; return this; }
         public Builder convertToLlm(ConvertToLlm v) { this.convertToLlm = v; return this; }
         public Builder authResolver(Function<String, ProviderAuth> v) { this.authResolver = v; return this; }
-        public Builder thinkingLevel(String v) { this.thinkingLevel = v; return this; }
+        public Builder thinkingLevel(String v) { this.thinkingLevel = ThinkingLevel.fromValue(v); return this; }
+        public Builder thinkingLevel(ThinkingLevel v) { this.thinkingLevel = v; return this; }
         public Builder toolExecution(ToolExecutionMode v) { this.toolExecution = v; return this; }
         public Builder temperature(Double v) { this.temperature = v; return this; }
         public Builder maxTokens(Integer v) { this.maxTokens = v; return this; }
@@ -325,7 +301,7 @@ public final class AgentLoopConfig {
     public StreamFunction streamFn() { return streamFn; }
     public ConvertToLlm convertToLlm() { return convertToLlm; }
     public Function<String, ProviderAuth> authResolver() { return authResolver; }
-    public String thinkingLevel() { return thinkingLevel; }
+    public ThinkingLevel thinkingLevel() { return thinkingLevel; }
     public Double temperature() { return temperature; }
     public Integer maxTokens() { return maxTokens; }
     public ToolRegistry toolRegistry() { return toolRegistry; }

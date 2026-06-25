@@ -47,6 +47,7 @@ public class ToolRegistry {
      */
     public boolean unregister(String name) {
         Tool removed = tools.remove(name);
+        if (removed == null) return false;
 
         if (removed instanceof ToolLifecycle lifecycle) {
             try {
@@ -56,7 +57,16 @@ public class ToolRegistry {
             }
         }
 
-        return removed != null;
+        // Release resources for AutoCloseable tools (e.g. HttpClient in HttpTool)
+        if (removed instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                log.warn("Tool '{}' close() failed", name, e);
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -110,11 +120,20 @@ public class ToolRegistry {
      */
     public void shutdown() {
         for (var entry : tools.entrySet()) {
-            if (entry.getValue() instanceof ToolLifecycle lifecycle) {
+            Tool tool = entry.getValue();
+            String toolName = entry.getKey();
+            if (tool instanceof ToolLifecycle lifecycle) {
                 try {
                     lifecycle.stop();
                 } catch (Exception e) {
-                    log.warn("Tool '{}' lifecycle stop() failed during shutdown", entry.getKey(), e);
+                    log.warn("Tool '{}' lifecycle stop() failed during shutdown", toolName, e);
+                }
+            }
+            if (tool instanceof AutoCloseable closeable) {
+                try {
+                    closeable.close();
+                } catch (Exception e) {
+                    log.warn("Tool '{}' close() failed during shutdown", toolName, e);
                 }
             }
         }

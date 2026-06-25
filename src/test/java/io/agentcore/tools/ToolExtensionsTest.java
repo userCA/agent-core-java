@@ -1,5 +1,7 @@
 package io.agentcore.tools;
 
+import io.agentcore.extensions.SandboxPolicyExtension;
+import io.agentcore.extensions.SelfHealingExtension;
 import io.agentcore.model.Content.TextContent;
 import io.agentcore.tools.builtin.ReadTool;
 import io.agentcore.model.Content.ToolCallContent;

@@ -85,7 +85,7 @@ public class OpenAIProvider implements ModelProvider {
                 thinkingLevel, temperature, maxTokens);
 
         // Use a queue to bridge SSE lines from HTTP thread to the consumer iterator
-        LinkedBlockingQueue<StreamEvent> queue = new LinkedBlockingQueue<>();
+        LinkedBlockingQueue<StreamEvent> queue = new LinkedBlockingQueue<>(10_000);
         AtomicBoolean done = new AtomicBoolean(false);
 
         Thread.ofVirtual().name("openai-sse-" + System.nanoTime()).start(() -> {
@@ -242,7 +242,7 @@ public class OpenAIProvider implements ModelProvider {
                             Map<String, Object> m = new LinkedHashMap<>();
                             m.put("id", null);
                             m.put("name", null);
-                            m.put("args", "");
+                            m.put("args", new StringBuilder());
                             return m;
                         });
                         Object id = tc.get("id");
@@ -254,7 +254,7 @@ public class OpenAIProvider implements ModelProvider {
                             if (name != null) slot.put("name", name.toString());
                             Object args = fn.get("arguments");
                             if (args != null) {
-                                slot.put("args", (String) slot.get("args") + args);
+                                ((StringBuilder) slot.get("args")).append(args);
                             }
                         }
                         String slotId = (String) slot.get("id");
@@ -277,7 +277,7 @@ public class OpenAIProvider implements ModelProvider {
                             log.debug("Skipping incomplete tool call slot: id={}, name={}", slotId, slotName);
                             continue;
                         }
-                        Map<String, Object> args = ProviderUtils.parseJsonMap((String) slot.get("args"));
+                        Map<String, Object> args = ProviderUtils.parseJsonMap(slot.get("args").toString());
                         queue.offer(new StreamToolCallEnd(slotId, args));
                     }
                     @SuppressWarnings("unchecked")

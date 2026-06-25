@@ -39,10 +39,7 @@ public final class MessageConverter implements Function<List<Message>, List<Map<
                 case Message.AssistantMessage am -> {
                     Map<String, Object> msg = new LinkedHashMap<>();
                     msg.put("role", "assistant");
-                    String text = am.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .collect(Collectors.joining());
+                    String text = Content.joinAllTextRaw(am.content());
                     msg.put("content", text);
 
                     List<Content.ToolCallContent> toolCalls = am.toolCalls();
@@ -64,10 +61,7 @@ public final class MessageConverter implements Function<List<Message>, List<Map<
                     out.add(msg);
                 }
                 case Message.ToolResultMessage trm -> {
-                    String text = trm.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .collect(Collectors.joining());
+                    String text = Content.joinAllTextRaw(trm.content());
                     // No truncation here — ToolRunner.truncateContent() handles it at storage time
                     Map<String, Object> msg = new LinkedHashMap<>();
                     msg.put("role", "tool");

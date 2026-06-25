@@ -354,10 +354,7 @@ public class AgentCli implements AutoCloseable {
                 String status = tee.isError() ? RED + "✗" + RESET : GREEN + "✓" + RESET;
                 String preview = "";
                 if (tee.result() != null) {
-                    preview = tee.result().content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .reduce("", String::concat);
+                    preview = Content.joinAllTextRaw(tee.result().content());
                     if (preview.length() > 120) {
                         preview = preview.substring(0, 117) + "...";
                     }
@@ -388,8 +385,8 @@ public class AgentCli implements AutoCloseable {
         out.println(BOLD + "║" + CYAN + "    agent-core-java  ·  Interactive CLI" + RESET + BOLD + "    ║" + RESET);
         out.println(BOLD + "╚══════════════════════════════════════════╝" + RESET);
         out.println();
-        out.println(DIM + "  Provider: " + config.getProvider() +
-                "  |  Model: " + config.getModel() + RESET);
+        out.println(DIM + "  Provider: " + config.provider() +
+                "  |  Model: " + config.model() + RESET);
         out.println(DIM + "  Tools: " +
                 (toolRegistry != null ? toolRegistry.toDefinitions().size() + " registered" : "disabled") +
                 "  |  Type " + BOLD + "/help" + RESET + DIM + " for commands" + RESET);
@@ -429,13 +426,13 @@ public class AgentCli implements AutoCloseable {
 
     private void printConfig() {
         out.println(BOLD + "\nConfiguration:" + RESET);
-        out.println("  Provider:       " + config.getProvider());
-        out.println("  Model:          " + config.getModel());
-        out.println("  Base URL:       " + config.getBaseUrl());
-        out.println("  Max Tokens:     " + config.getMaxTokens());
-        out.println("  Context Window: " + config.getContextWindow());
-        out.println("  Temperature:    " + config.getTemperature());
-        out.println("  Timeout:        " + config.getTimeoutSeconds() + "s");
+        out.println("  Provider:       " + config.provider());
+        out.println("  Model:          " + config.model());
+        out.println("  Base URL:       " + config.baseUrl());
+        out.println("  Max Tokens:     " + config.maxTokens());
+        out.println("  Context Window: " + config.contextWindow());
+        out.println("  Temperature:    " + config.temperature());
+        out.println("  Timeout:        " + config.timeoutSeconds() + "s");
         out.println("  System Prompt:  " + agent.context().systemPrompt());
         out.println("  Thinking:       " + (showThinking ? "visible" : "hidden"));
     }
@@ -469,17 +466,11 @@ public class AgentCli implements AutoCloseable {
         for (Message msg : display) {
             switch (msg) {
                 case Message.UserMessage um -> {
-                    String text = um.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .reduce("", String::concat);
+                    String text = Content.joinAllTextRaw(um.content());
                     out.println(BLUE + "  👤 You: " + RESET + truncate(text, 300));
                 }
                 case Message.AssistantMessage am -> {
-                    String text = am.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .reduce("", String::concat);
+                    String text = Content.joinAllTextRaw(am.content());
                     text = stripThinking(text);
                     if (!text.isEmpty()) {
                         out.println(GREEN + "  🤖 Agent: " + RESET + truncate(text, 300));
@@ -536,8 +527,8 @@ public class AgentCli implements AutoCloseable {
             // Write metadata header
             Map<String, Object> meta = new LinkedHashMap<>();
             meta.put("type", "session_meta");
-            meta.put("provider", config.getProvider());
-            meta.put("model", config.getModel());
+            meta.put("provider", config.provider());
+            meta.put("model", config.model());
             meta.put("timestamp", Instant.now().toString());
             meta.put("message_count", msgs.size());
             writer.write(JSON.writeValueAsString(meta));
@@ -549,16 +540,10 @@ public class AgentCli implements AutoCloseable {
                 entry.put("type", "message");
                 if (msg instanceof Message.UserMessage um) {
                     entry.put("role", "user");
-                    entry.put("content", um.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .reduce("", String::concat));
+                    entry.put("content", Content.joinAllTextRaw(um.content()));
                 } else if (msg instanceof Message.AssistantMessage am) {
                     entry.put("role", "assistant");
-                    entry.put("content", stripThinking(am.content().stream()
-                            .filter(c -> c instanceof Content.TextContent)
-                            .map(c -> ((Content.TextContent) c).text())
-                            .reduce("", String::concat)));
+                    entry.put("content", stripThinking(Content.joinAllTextRaw(am.content())));
                     if (am.usage().totalTokensWithCache() > 0) {
                         entry.put("input_tokens", am.usage().inputTokens());
                         entry.put("output_tokens", am.usage().outputTokens());

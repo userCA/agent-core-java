@@ -1,9 +1,8 @@
-package io.agentcore.agent;
+package io.agentcore.model;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import io.agentcore.model.Message;
 
 /**
  * Synchronisation primitive that lets the agent loop pause for human input.

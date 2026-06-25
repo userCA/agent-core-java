@@ -1,4 +1,4 @@
-package io.agentcore.tools;
+package io.agentcore.extensions;
 
 import io.agentcore.model.Content.ToolCallContent;
 import io.agentcore.extensions.Extension;
@@ -60,6 +60,12 @@ public class SandboxPolicyExtension implements Extension {
     }
 
     @Override
+    public int order() {
+        // Security policies must run before other extensions (e.g. SelfHealing)
+        return -100;
+    }
+
+    @Override
     public ToolCallHookResult beforeToolCall(ToolCallContext context) {
         ToolCallContent toolCall = context.toolCall();
         if (!"bash".equals(toolCall.name())) return null;
@@ -89,7 +95,7 @@ public class SandboxPolicyExtension implements Extension {
     /**
      * Select the appropriate quota profile based on command content.
      */
-    SandboxQuota pickQuota(String command) {
+    public SandboxQuota pickQuota(String command) {
         // Check for install commands first
         for (Pattern pattern : INSTALL_PATTERNS) {
             if (pattern.matcher(command).find()) {

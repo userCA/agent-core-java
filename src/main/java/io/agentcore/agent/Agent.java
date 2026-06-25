@@ -1,5 +1,6 @@
 package io.agentcore.agent;
 
+import io.agentcore.model.Content;
 import io.agentcore.model.Content.TextContent;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
@@ -17,6 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import io.agentcore.model.AgentEvent;
+import io.agentcore.model.HumanInputGate;
 import io.agentcore.model.Message;
 
 /**
@@ -130,10 +132,7 @@ public class Agent implements AutoCloseable {
     public List<Message> prompt(Message message, Consumer<AgentEvent> onEvent,
                                 AgentLoopConfig.CompactCallback compactCallback) {
         runBeforeAgentStartHooks(message instanceof UserMessage um
-                ? um.content().stream()
-                    .filter(c -> c instanceof TextContent)
-                    .map(c -> ((TextContent) c).text())
-                    .findFirst().orElse("")
+                ? Content.extractText(um.content())
                 : "");
         return runLoop(List.of(message), onEvent, compactCallback);
     }
@@ -142,14 +141,14 @@ public class Agent implements AutoCloseable {
         return continueLoop(onEvent, null);
     }
 
-    @SuppressWarnings("deprecation") // single atomic ops on synchronizedList are safe
     public List<Message> continueLoop(Consumer<AgentEvent> onEvent,
                                       AgentLoopConfig.CompactCallback compactCallback) {
         // Validate preconditions (mirrors pi-mono agentLoopContinue)
-        if (context.messages().isEmpty()) {
+        List<Message> snapshot = context.messagesSnapshot();
+        if (snapshot.isEmpty()) {
             throw new IllegalStateException("Cannot continue: no messages in context");
         }
-        Message last = context.messages().getLast();
+        Message last = snapshot.getLast();
         if (last instanceof AssistantMessage) {
             throw new IllegalStateException("Cannot continue from message role: assistant");
         }
@@ -484,13 +483,13 @@ public class Agent implements AutoCloseable {
                 if (acc == null) {
                     acc = new StreamAccumulator(
                             config.streamFn(), config.model(),
-                            config.thinkingLevel(), config.temperature(), config.maxTokens());
+                            config.thinkingLevel().value(), config.temperature(), config.maxTokens());
                     sharedStreamAccumulator = acc;
                 }
             }
         }
         // Sync config for this run
-        acc.updateConfig(config.model(), config.thinkingLevel(), config.temperature());
+        acc.updateConfig(config.model(), config.thinkingLevel().value(), config.temperature());
         return acc;
     }
 
