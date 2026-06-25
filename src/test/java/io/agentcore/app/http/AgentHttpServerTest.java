@@ -56,7 +56,7 @@ class AgentHttpServerTest {
         AgentLoopConfig config = AgentLoopConfig.builder()
                 .model(model)
                 .streamFn(AgentHttpServerTest::mockStream)
-                .convertToLlm(new MessageConverter()::convert)
+                .messageAssembler(new MessageConverter()::convert)
                 .authResolver(p -> new ProviderAuth("mock-key"))
                 .build();
 

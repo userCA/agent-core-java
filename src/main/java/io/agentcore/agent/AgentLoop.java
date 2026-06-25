@@ -232,7 +232,7 @@ public class AgentLoop {
     }
 
     private List<Map<String, Object>> prepareLlmMessages(AtomicBoolean signal) {
-        return config.convertToLlm().convert(context.messagesSnapshot());
+        return config.messageAssembler().assemble(context.messagesSnapshot());
     }
 
     private AssistantMessage executeLlmWithRetry(

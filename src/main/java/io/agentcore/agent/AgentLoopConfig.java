@@ -54,7 +54,7 @@ public final class AgentLoopConfig {
     // ── Required fields ────────────────────────────────────────
     private final ModelInfo model;
     private final StreamFunction streamFn;
-    private final ConvertToLlm convertToLlm;
+    private final MessageAssembler messageAssembler;
     private final Function<String, ProviderAuth> authResolver;
 
     // ── Sub-configs (grouped by concern) ───────────────────────
@@ -78,7 +78,7 @@ public final class AgentLoopConfig {
     private AgentLoopConfig(Builder b) {
         this.model = b.model;
         this.streamFn = b.streamFn;
-        this.convertToLlm = b.convertToLlm;
+        this.messageAssembler = b.messageAssembler;
         this.authResolver = b.authResolver;
         this.retryConfig = new RetryConfig(b.maxRetries, b.retryBaseDelay, b.retryMaxDelay);
         this.toolConfig = new ToolConfig(b.toolTimeout, b.toolResultMaxChars,
@@ -120,11 +120,12 @@ public final class AgentLoopConfig {
     }
 
     /**
-     * Convert internal messages to LLM-specific format.
+     * Assemble context messages into LLM-ready format.
+     * Agent-layer responsibility: combines context enrichment + provider format conversion.
      */
     @FunctionalInterface
-    public interface ConvertToLlm {
-        List<Map<String,Object>> convert(List<Message> messages);
+    public interface MessageAssembler {
+        List<Map<String, Object>> assemble(List<Message> messages);
     }
 
     /**
@@ -185,7 +186,7 @@ public final class AgentLoopConfig {
         Builder b = new Builder();
         b.model = this.model;
         b.streamFn = this.streamFn;
-        b.convertToLlm = this.convertToLlm;
+        b.messageAssembler = this.messageAssembler;
         b.authResolver = this.authResolver;
         b.thinkingLevel = this.thinkingLevel;
         b.toolExecution = this.toolConfig.execution();
@@ -212,7 +213,7 @@ public final class AgentLoopConfig {
     public static final class Builder {
         private ModelInfo model;
         private StreamFunction streamFn;
-        private ConvertToLlm convertToLlm;
+        private MessageAssembler messageAssembler;
         private Function<String, ProviderAuth> authResolver;
         private ThinkingLevel thinkingLevel = ThinkingLevel.OFF;
         private ToolExecutionMode toolExecution = ToolExecutionMode.PARALLEL;
@@ -236,7 +237,7 @@ public final class AgentLoopConfig {
 
         public Builder model(ModelInfo v) { this.model = v; return this; }
         public Builder streamFn(StreamFunction v) { this.streamFn = v; return this; }
-        public Builder convertToLlm(ConvertToLlm v) { this.convertToLlm = v; return this; }
+        public Builder messageAssembler(MessageAssembler v) { this.messageAssembler = v; return this; }
         public Builder authResolver(Function<String, ProviderAuth> v) { this.authResolver = v; return this; }
         public Builder thinkingLevel(String v) { this.thinkingLevel = ThinkingLevel.fromValue(v); return this; }
         public Builder thinkingLevel(ThinkingLevel v) { this.thinkingLevel = v; return this; }
@@ -283,7 +284,7 @@ public final class AgentLoopConfig {
         public AgentLoopConfig build() {
             if (model == null) throw new IllegalStateException("model is required");
             if (streamFn == null) throw new IllegalStateException("streamFn is required");
-            if (convertToLlm == null) throw new IllegalStateException("convertToLlm is required");
+            if (messageAssembler == null) throw new IllegalStateException("messageAssembler is required");
             if (authResolver == null) throw new IllegalStateException("authResolver is required");
             if (maxRetries < 0) throw new IllegalStateException("maxRetries must be >= 0, got " + maxRetries);
             if (maxTurns != null && maxTurns <= 0) throw new IllegalStateException("maxTurns must be > 0, got " + maxTurns);
@@ -299,7 +300,7 @@ public final class AgentLoopConfig {
 
     public ModelInfo model() { return model; }
     public StreamFunction streamFn() { return streamFn; }
-    public ConvertToLlm convertToLlm() { return convertToLlm; }
+    public MessageAssembler messageAssembler() { return messageAssembler; }
     public Function<String, ProviderAuth> authResolver() { return authResolver; }
     public ThinkingLevel thinkingLevel() { return thinkingLevel; }
     public Double temperature() { return temperature; }

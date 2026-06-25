@@ -46,6 +46,9 @@ public class Agent implements AutoCloseable {
     // Cached base config with hooks — reused across runs
     private volatile AgentLoopConfig cachedBaseConfig;
 
+    // Message assembler — wraps provider converter with Agent-layer enrichment
+    private final AgentLoopConfig.MessageAssembler messageAssembler;
+
     private final ToolCallTracker toolCallTracker = new ToolCallTracker();
 
     // Shared ToolRunner with pooled ExecutorService (lazy-initialized)
@@ -89,6 +92,7 @@ public class Agent implements AutoCloseable {
                 extensions != null ? extensions : List.of());
         this.steeringQueue = new PendingMessageQueue(steeringMode);
         this.followUpQueue = new PendingMessageQueue(followUpMode);
+        this.messageAssembler = config.messageAssembler();
     }
 
     // ── Subscribe ──────────────────────────────────────────
@@ -319,13 +323,13 @@ public class Agent implements AutoCloseable {
             ToolRegistry toolRegistry,
             String systemPrompt) {
 
-        // Use polymorphic converter selection — each provider supplies its own
-        AgentLoopConfig.ConvertToLlm converter = provider.createMessageConverter()::apply;
+        // Provider-level message converter → wrapped as MessageAssembler at Agent layer
+        AgentLoopConfig.MessageAssembler assembler = provider.createMessageConverter()::apply;
 
         AgentLoopConfig config = AgentLoopConfig.builder()
                 .model(model)
                 .streamFn(provider::stream)
-                .convertToLlm(converter)
+                .messageAssembler(assembler)
                 .authResolver(authSource::resolve)
                 .toolRegistry(toolRegistry)
                 .build();
@@ -438,6 +442,9 @@ public class Agent implements AutoCloseable {
      */
     private AgentLoopConfig buildBaseConfigWithHooks() {
         AgentLoopConfig.Builder b = baseConfig.toBuilder();
+
+        // Wrap assembler with Agent-layer enrichment (future: memory injection, context enhancement)
+        b.messageAssembler(messages -> messageAssembler.assemble(messages));
 
         // Wire extension runner hooks (typed)
         if (extensionRunner.hasExtensions()) {

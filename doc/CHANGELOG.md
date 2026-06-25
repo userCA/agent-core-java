@@ -1,0 +1,16 @@
+# Changelog
+
+## 2026-06-25 23:35 — refactor: replace ConvertToLlm with MessageAssembler
+
+**问题/需求**: AgentLoop 内部直接调用 `convertToLlm().convert()` 完成消息组装，耦合了"消息准备"与"核心循环"两个职责，违背"核心做薄、外层做厚"的设计原则。
+
+**根因/方案**: 引入 `MessageAssembler` 函数接口替代 `ConvertToLlm`，将消息组装职责上移至 Agent 层。AgentLoop 仅依赖抽象回调获取已组装的 LLM 消息，Agent 层在 `buildBaseConfigWithHooks()` 中组合 provider 格式转换与未来扩展点（记忆注入、上下文增强）。
+
+**改动范围**:
+- `AgentLoopConfig`: 删除 `ConvertToLlm` 接口，新增 `MessageAssembler` 接口
+- `AgentLoop`: `prepareLlmMessages()` 改用 `messageAssembler().assemble()`
+- `Agent`: 新增 `messageAssembler` 字段，`buildBaseConfigWithHooks()` 中包装为扩展点
+- `AgentConfig`: `createLoopConfig()` 改用 `messageAssembler`
+- 测试文件: 3 个文件机械替换
+
+**影响面**: AgentLoop 不再感知 provider 级消息转换逻辑，消息组装职责完全由 Agent 层管理。

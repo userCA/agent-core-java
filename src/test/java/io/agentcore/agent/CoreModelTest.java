@@ -491,7 +491,7 @@ class CoreModelTest {
             var config = AgentLoopConfig.builder()
                 .model(model)
                 .streamFn((m, msgs, tools, sp, tl, temp, mt, sig, auth) -> List.<StreamEvent>of().iterator())
-                .convertToLlm(msgs -> List.of())
+                .messageAssembler(msgs -> List.of())
                 .authResolver(name -> new ProviderAuth("test-key"))
                 .thinkingLevel("high")
                 .maxRetries(5)
@@ -512,13 +512,13 @@ class CoreModelTest {
 
             AgentLoopConfig.StreamFunction streamFn =
                     (m, msgs, tools, sp, tl, temp, mt, sig, auth) -> List.<StreamEvent>of().iterator();
-            AgentLoopConfig.ConvertToLlm convertFn = msgs -> List.of();
+            AgentLoopConfig.MessageAssembler convertFn = msgs -> List.of();
             java.util.function.Function<String, ProviderAuth> authFn = name -> new ProviderAuth("key");
 
             var original = AgentLoopConfig.builder()
                     .model(model1)
                     .streamFn(streamFn)
-                    .convertToLlm(convertFn)
+                    .messageAssembler(convertFn)
                     .authResolver(authFn)
                     .thinkingLevel("medium")
                     .temperature(0.7)
@@ -546,7 +546,7 @@ class CoreModelTest {
 
             // Functional references preserved (same instance)
             assertSame(original.streamFn(), rebuilt.streamFn());
-            assertSame(original.convertToLlm(), rebuilt.convertToLlm());
+            assertSame(original.messageAssembler(), rebuilt.messageAssembler());
             assertSame(original.authResolver(), rebuilt.authResolver());
 
             // Verify mutation via toBuilder works

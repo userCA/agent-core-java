@@ -273,12 +273,12 @@ public final class AgentConfig {
         ModelInfo modelInfo = createModel();
         AuthSource authSource = createAuthSource();
 
-        AgentLoopConfig.ConvertToLlm converter = providerInstance.createMessageConverter()::apply;
+        AgentLoopConfig.MessageAssembler assembler = providerInstance.createMessageConverter()::apply;
 
         return AgentLoopConfig.builder()
                 .model(modelInfo)
                 .streamFn(providerInstance::stream)
-                .convertToLlm(converter)
+                .messageAssembler(assembler)
                 .authResolver(authSource::resolve)
                 .toolRegistry(toolRegistry)
                 .build();
