@@ -11,6 +11,7 @@ interface GitDiffBlockProps {
   filename?: string;
   stats?: { add: number; del: number };
   lines?: DiffLine[];
+  bare?: boolean;
 }
 
 const GitDiffBlock: React.FC<GitDiffBlockProps> = ({
@@ -28,9 +29,10 @@ const GitDiffBlock: React.FC<GitDiffBlockProps> = ({
     { type: 'add', oldNum: '', newNum: '150', content: '        return new AuthResult(token);' },
     { type: 'neutral', oldNum: '...', newNum: '...', content: '...' },
   ],
+  bare = false,
 }) => {
   return (
-    <div className="streaming-card animate-slide-down p-0 overflow-hidden">
+    <div className={bare ? 'border-[1.5px] border-ink rounded-[12px] overflow-hidden' : 'streaming-card animate-slide-down p-0 overflow-hidden'}>
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-cream-warm border-b-[1.5px] border-ink">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d2b1f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

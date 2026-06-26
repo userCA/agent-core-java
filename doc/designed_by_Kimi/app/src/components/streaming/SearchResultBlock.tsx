@@ -11,6 +11,7 @@ interface SearchResultBlockProps {
   title?: string;
   count?: string;
   results?: SearchResult[];
+  bare?: boolean;
 }
 
 const SearchResultBlock: React.FC<SearchResultBlockProps> = ({
@@ -36,34 +37,46 @@ const SearchResultBlock: React.FC<SearchResultBlockProps> = ({
       highlights: ['JwtUtil'],
     },
   ],
+  bare = false,
 }) => {
   const highlightText = (text: string, highlights: string[] = []) => {
     if (highlights.length === 0) return text;
-    let result = text;
-    highlights.forEach(h => {
-      result = result.replace(h, `<span class="diff-highlight">${h}</span>`);
-    });
-    return <span dangerouslySetInnerHTML={{ __html: result }} />;
+    const parts: React.ReactNode[] = [];
+    const pattern = highlights.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const re = new RegExp(`(${pattern})`, 'g');
+    let match: RegExpExecArray | null;
+    let last = 0;
+    while ((match = re.exec(text)) !== null) {
+      if (match.index > last) parts.push(text.slice(last, match.index));
+      parts.push(<span key={match.index} className="diff-highlight">{match[0]}</span>);
+      last = match.index + match[0].length;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return <>{parts}</>;
   };
 
   return (
-    <div className="streaming-card animate-slide-down">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2.5">
-        <div
-          className="w-6 h-6 rounded-md flex items-center justify-center"
-          style={{ background: '#f5ecd0', border: '1.5px solid #3d2b1f' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d2b1f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-        </div>
-        <span className="text-[13px] font-bold text-ink font-display">{title}</span>
-        <span className="ml-auto text-[10px] font-comic text-ink-muted px-2 py-0.5 bg-cream-warm border border-ink rounded-pill">{count}</span>
-      </div>
+    <div className={bare ? '' : 'streaming-card animate-slide-down'}>
+      {!bare && (
+        <>
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-2.5">
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center"
+              style={{ background: '#f5ecd0', border: '1.5px solid #3d2b1f' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d2b1f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <span className="text-[13px] font-bold text-ink font-display">{title}</span>
+            <span className="ml-auto text-[10px] font-comic text-ink-muted px-2 py-0.5 bg-cream-warm border border-ink rounded-pill">{count}</span>
+          </div>
 
-      {/* Divider */}
-      <div className="mb-2.5 border-t-[1.5px] border-dashed border-ink-faint" />
+          {/* Divider */}
+          <div className="mb-2.5 border-t-[1.5px] border-dashed border-ink-faint" />
+        </>
+      )}
 
       {/* Results */}
       <div className="space-y-1.5">

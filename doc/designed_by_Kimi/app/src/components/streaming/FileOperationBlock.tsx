@@ -9,6 +9,7 @@ interface FileOp {
 
 interface FileOperationBlockProps {
   operations?: FileOp[];
+  bare?: boolean;
 }
 
 const fileOpConfig = {
@@ -63,25 +64,30 @@ const FileOperationBlock: React.FC<FileOperationBlockProps> = ({
     { type: 'update', path: 'src/auth/AuthProvider.java', meta: 'Added null check', status: 'success' },
     { type: 'create', path: 'src/auth/AuthResult.java', meta: '245 B', status: 'pending' },
   ],
+  bare = false,
 }) => {
   return (
-    <div className="streaming-card animate-slide-down">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2.5">
-        <div
-          className="w-6 h-6 rounded-md flex items-center justify-center"
-          style={{ background: '#f5ecd0', border: '1.5px solid #3d2b1f' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d2b1f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
-          </svg>
-        </div>
-        <span className="text-[13px] font-bold text-ink font-display">文件操作</span>
-        <span className="ml-auto text-[10px] font-comic text-ink-muted px-2 py-0.5 bg-cream-warm border border-ink rounded-pill">{operations.length} 个操作</span>
-      </div>
+    <div className={bare ? '' : 'streaming-card animate-slide-down'}>
+      {!bare && (
+        <>
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-2.5">
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center"
+              style={{ background: '#f5ecd0', border: '1.5px solid #3d2b1f' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d2b1f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
+              </svg>
+            </div>
+            <span className="text-[13px] font-bold text-ink font-display">文件操作</span>
+            <span className="ml-auto text-[10px] font-comic text-ink-muted px-2 py-0.5 bg-cream-warm border border-ink rounded-pill">{operations.length} 个操作</span>
+          </div>
 
-      {/* Divider */}
-      <div className="mb-2.5 border-t-[1.5px] border-dashed border-ink-faint" />
+          {/* Divider */}
+          <div className="mb-2.5 border-t-[1.5px] border-dashed border-ink-faint" />
+        </>
+      )}
 
       {/* Operations */}
       <div className="space-y-0">
