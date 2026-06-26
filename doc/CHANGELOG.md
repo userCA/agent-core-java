@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-26 12:26 — refactor: AgentLoop 双层循环简化为单层循环
+
+**问题/需求**: AgentLoop 使用嵌套双层循环（内层处理工具调用 + steering，外层处理 follow-up），状态变量在层间传递（`pendingMessages`、`hasMoreToolCalls`、`TurnOutcome`），4 处重复 `AgentEnd` 发射，控制流复杂度高。
+
+**方案**: 采用单层 `while(true)` + `continue`/`break` 控制流（与 Python 参考实现对齐）：
+- `run()`: 消除内层循环和 `pendingMessages` 变量，steering/follow-up 在主循环中顺序检查
+- `executeTurn()`: 移除 `pendingMessages` 参数，steering 注入职责上移至主循环
+- `TurnOutcome` → `TurnResult`：语义更清晰
+- 统一退出路径：所有退出走 `break` → 单一 `AgentEnd` 发射点
+
+**改动范围**: `AgentLoop.java`，净减 19 行。
+
+**影响面**: 纯控制流重构，无功能变化。所有测试通过。
+
 ## 2026-06-26 10:25 — refactor: agentcore 命名规范审计批量修复
 
 **问题/需求**: agentcore 核心框架中存在多处命名不规范问题，包括 `get` 前缀的 Supplier 字段、Boolean 字段缺少 `is`/`should` 前缀、Hook 方法缺少 `on` 前缀、语义不明的字段名、动词式接口名等。

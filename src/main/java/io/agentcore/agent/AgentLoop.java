@@ -17,11 +17,12 @@ import io.agentcore.model.AgentEvent;
 /**
  * Core agent loop — drives the LLM streaming → tool execution → repeat cycle.
  *
- * <p>Uses a dual-layer loop structure:
- * <ul>
- *   <li>Outer loop: handles follow-up messages after agent would stop</li>
- *   <li>Inner loop: processes tool calls and steering messages</li>
- * </ul>
+ * <p>Uses a flat single-loop structure with {@code continue}/{@code break} for flow control:
+ * <pre>
+ *   LLM call → tool execution → termination checks →
+ *   has tool results → continue |
+ *   no tool results → check steering → check follow-ups → break
+ * </pre>
  *
  * Designed to run on virtual threads (blocking I/O is expected).
  */
@@ -78,51 +79,43 @@ public class AgentLoop {
         // Add new messages to context and emit them
         addMessagesToContext(newMessages, onEvent);
 
-        // Track ALL new messages produced in this run (user + assistant + tool results)
+        // Track ALL messages produced in this run (user + assistant + tool results)
         List<Message> producedMessages = new ArrayList<>();
         if (newMessages != null) producedMessages.addAll(newMessages);
 
         int turnCount = 0;
-        List<Message> pendingMessages = drainMessages(config.steeringMessageSupplier());
 
-        // Outer loop: continues when follow-up messages arrive after agent would stop
         while (true) {
-            boolean hasMoreToolCalls = true;
-
-            // Inner loop: process tool calls and steering messages
-            while (hasMoreToolCalls || !pendingMessages.isEmpty()) {
-                if (isAborted(signal)) {
-                    log.debug("Agent loop aborted by signal");
-                    onEvent.accept(new AgentEnd(producedMessages));
-                    return;
-                }
-                if (config.maxTurns() != null && turnCount >= config.maxTurns()) {
-                    log.debug("Max turns ({}) reached", config.maxTurns());
-                    onEvent.accept(new AgentEnd(producedMessages));
-                    return;
-                }
-
-                // Execute one turn — returns outcome with continue/moreToolCalls flags
-                TurnOutcome outcome = executeTurn(
-                        signal, onEvent, producedMessages, pendingMessages, turnCount);
-                turnCount++;
-
-                if (!outcome.shouldContinue()) {
-                    onEvent.accept(new AgentEnd(producedMessages));
-                    return;
-                }
-
-                hasMoreToolCalls = outcome.hasMoreToolCalls();
-
-                // Check for steering messages for next turn
-                pendingMessages = drainMessages(config.steeringMessageSupplier());
+            if (isAborted(signal)) {
+                log.debug("Agent loop aborted by signal");
+                break;
+            }
+            if (config.maxTurns() != null && turnCount >= config.maxTurns()) {
+                log.debug("Max turns ({}) reached", config.maxTurns());
+                break;
             }
 
-            // Outer loop: check for follow-up messages after agent would stop
+            // Execute one turn: LLM call → tool execution → termination checks
+            TurnResult result = executeTurn(signal, onEvent, producedMessages, turnCount);
+            turnCount++;
+
+            if (!result.shouldContinue) break;
+            if (result.hasMoreToolCalls) continue;
+
+            // No tool calls — check steering messages
+            List<Message> steering = drainMessages(config.steeringMessageSupplier());
+            if (!steering.isEmpty()) {
+                addMessagesToContext(steering, onEvent);
+                producedMessages.addAll(steering);
+                continue;
+            }
+
+            // No steering — check follow-up messages
             List<Message> followUps = drainMessages(config.followUpMessageSupplier());
             if (!followUps.isEmpty()) {
-                log.debug("Follow-up messages injected, continuing outer loop");
-                pendingMessages = followUps;
+                log.debug("Follow-up messages injected, continuing");
+                addMessagesToContext(followUps, onEvent);
+                producedMessages.addAll(followUps);
                 continue;
             }
 
@@ -136,32 +129,23 @@ public class AgentLoop {
     // ── Turn execution ─────────────────────────────────────────
 
     /**
-     * Outcome of a single turn, returned by executeTurn().
-     * Eliminates side-channel state via instance fields.
+     * Result of a single turn, returned by executeTurn().
      */
-    private record TurnOutcome(boolean shouldContinue, boolean hasMoreToolCalls) {}
+    private record TurnResult(boolean shouldContinue, boolean hasMoreToolCalls) {}
 
     /**
      * Execute a single turn: LLM call → tool execution → termination checks.
      *
-     * @return TurnOutcome indicating whether to continue and if more tool calls exist
+     * @return TurnResult indicating whether to continue and if more tool calls exist
      */
-    private TurnOutcome executeTurn(
+    private TurnResult executeTurn(
             AtomicBoolean signal,
             Consumer<AgentEvent> onEvent,
             List<Message> producedMessages,
-            List<Message> pendingMessages,
             int turnCount) {
 
         onEvent.accept(new TurnStart());
         log.debug("Turn {} starting", turnCount + 1);
-
-        // Inject pending steering messages before assistant response
-        if (!pendingMessages.isEmpty()) {
-            addMessagesToContext(pendingMessages, onEvent);
-            producedMessages.addAll(pendingMessages);
-            pendingMessages.clear();
-        }
 
         // Prepare LLM call context
         List<Map<String, Object>> llmMessages = config.messageAssembler().assemble(context.messagesSnapshot());
@@ -188,32 +172,29 @@ public class AgentLoop {
         List<Message> toolResultsAsMessages = (List<Message>) (List<? extends Message>) toolResults;
         onEvent.accept(new TurnEnd(assistant, toolResultsAsMessages));
 
-        // Check termination: error or abort
+        // Termination: error or abort
         if (assistant.stopReason() == StopReason.ERROR
                 || assistant.stopReason() == StopReason.ABORTED) {
             log.debug("Loop terminating due to stop reason: {}", assistant.stopReason());
-            return new TurnOutcome(false, false);
+            return new TurnResult(false, false);
         }
 
+        // shouldStopAfterTurn: business-level termination
         AgentLoopConfig.TurnContext turnContext = new AgentLoopConfig.TurnContext(
                 assistant, toolResults, context.messagesSnapshot(), producedMessages);
-
-        // shouldStopAfterTurn: business-level termination
         if (config.shouldStopAfterTurn() != null
                 && config.shouldStopAfterTurn().apply(turnContext)) {
             log.debug("Loop stopped by shouldStopAfterTurn callback");
-            return new TurnOutcome(false, false);
+            return new TurnResult(false, false);
         }
-
-        boolean hasMoreToolCalls = !toolResults.isEmpty();
 
         // Tool batch termination: if all tools request terminate, stop
         if (toolBatch.shouldTerminate()) {
             log.debug("Loop terminating due to tool batch terminate flag");
-            return new TurnOutcome(false, false);
+            return new TurnResult(false, false);
         }
 
-        return new TurnOutcome(true, hasMoreToolCalls);
+        return new TurnResult(true, !toolResults.isEmpty());
     }
 
     // ── Helper Methods ─────────────────────────────────────────
