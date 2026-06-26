@@ -1,6 +1,5 @@
 package io.agentcore.agent;
 
-import io.agentcore.model.Content;
 import io.agentcore.model.Content.TextContent;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
@@ -14,8 +13,6 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import io.agentcore.model.AgentEvent;
 import io.agentcore.model.HumanInputGate;
@@ -51,25 +48,13 @@ public class Agent implements AutoCloseable {
 
     private final ToolCallTracker toolCallTracker = new ToolCallTracker();
 
-    // Shared ToolRunner with pooled ExecutorService (lazy-initialized)
-    private volatile ToolRunner sharedToolRunner;
-
-    // Shared StreamAccumulator (lazy-initialized, config updated per run)
-    private volatile StreamAccumulator sharedStreamAccumulator;
+    private final AgentResources resources = new AgentResources();
 
     // Concurrency guard: prevents simultaneous prompt/continue calls
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public Agent(AgentLoopConfig config) {
-        this(config, new AgentContext(), List.of());
-    }
-
     public Agent(AgentLoopConfig config, AgentContext context) {
-        this(config, context, List.of());
-    }
-
-    public Agent(AgentLoopConfig config, AgentContext context, List<Extension> extensions) {
-        this(config, context, extensions,
+        this(config, context, List.of(),
                 PendingMessageQueue.DrainMode.ONE_AT_A_TIME,
                 PendingMessageQueue.DrainMode.ONE_AT_A_TIME);
     }
@@ -119,32 +104,6 @@ public class Agent implements AutoCloseable {
         return runLoop(List.of(userMsg), onEvent, compactCallback);
     }
 
-    /**
-     * Send a pre-built message (e.g. multi-modal with images) and run the agent loop.
-     *
-     * @param message  the message to send (typically a UserMessage with rich content)
-     * @param onEvent  event consumer (nullable)
-     * @return assistant messages produced during this run
-     */
-    public List<Message> prompt(Message message, Consumer<AgentEvent> onEvent) {
-        return prompt(message, onEvent, null);
-    }
-
-    /**
-     * Send a pre-built message with optional compaction callback.
-     */
-    public List<Message> prompt(Message message, Consumer<AgentEvent> onEvent,
-                                AgentLoopConfig.ContextCompactor compactCallback) {
-        runBeforeAgentStartHooks(message instanceof UserMessage um
-                ? Content.extractText(um.content())
-                : "");
-        return runLoop(List.of(message), onEvent, compactCallback);
-    }
-
-    public List<Message> continueLoop(Consumer<AgentEvent> onEvent) {
-        return continueLoop(onEvent, null);
-    }
-
     public List<Message> continueLoop(Consumer<AgentEvent> onEvent,
                                       AgentLoopConfig.ContextCompactor compactCallback) {
         // Validate preconditions (mirrors pi-mono agentLoopContinue)
@@ -161,57 +120,6 @@ public class Agent implements AutoCloseable {
 
     public void abort() {
         abortSignal.set(true);
-    }
-
-    // ── Async variants (virtual-thread backed) ──────────────────
-
-    private static final java.util.concurrent.ExecutorService VIRTUAL_EXECUTOR =
-            Executors.newVirtualThreadPerTaskExecutor();
-
-    /**
-     * Async version of {@link #prompt(String, Consumer)}.
-     * Runs the agent loop on a virtual thread.
-     */
-    public CompletableFuture<List<Message>> promptAsync(String text, Consumer<AgentEvent> onEvent) {
-        return promptAsync(text, onEvent, null);
-    }
-
-    /**
-     * Async version of {@link #prompt(String, Consumer, AgentLoopConfig.ContextCompactor)}.
-     */
-    public CompletableFuture<List<Message>> promptAsync(String text, Consumer<AgentEvent> onEvent,
-                                                         AgentLoopConfig.ContextCompactor compactCallback) {
-        return CompletableFuture.supplyAsync(() -> prompt(text, onEvent, compactCallback), VIRTUAL_EXECUTOR);
-    }
-
-    /**
-     * Async version of {@link #prompt(Message, Consumer)}.
-     */
-    public CompletableFuture<List<Message>> promptAsync(Message message, Consumer<AgentEvent> onEvent) {
-        return promptAsync(message, onEvent, null);
-    }
-
-    /**
-     * Async version of {@link #prompt(Message, Consumer, AgentLoopConfig.ContextCompactor)}.
-     */
-    public CompletableFuture<List<Message>> promptAsync(Message message, Consumer<AgentEvent> onEvent,
-                                                         AgentLoopConfig.ContextCompactor compactCallback) {
-        return CompletableFuture.supplyAsync(() -> prompt(message, onEvent, compactCallback), VIRTUAL_EXECUTOR);
-    }
-
-    /**
-     * Async version of {@link #continueLoop(Consumer)}.
-     */
-    public CompletableFuture<List<Message>> continueLoopAsync(Consumer<AgentEvent> onEvent) {
-        return continueLoopAsync(onEvent, null);
-    }
-
-    /**
-     * Async version of {@link #continueLoop(Consumer, AgentLoopConfig.ContextCompactor)}.
-     */
-    public CompletableFuture<List<Message>> continueLoopAsync(Consumer<AgentEvent> onEvent,
-                                                               AgentLoopConfig.ContextCompactor compactCallback) {
-        return CompletableFuture.supplyAsync(() -> continueLoop(onEvent, compactCallback), VIRTUAL_EXECUTOR);
     }
 
     /**
@@ -233,10 +141,18 @@ public class Agent implements AutoCloseable {
 
     // ── Runtime message injection ──────────────────────────
 
+    /**
+     * Enqueue a steering message to be injected before the next LLM call.
+     * Used for mid-conversation guidance, course correction, or follow-up questions.
+     */
     public void steer(Message message) {
         steeringQueue.enqueue(message);
     }
 
+    /**
+     * Enqueue a follow-up message to be processed after the current turn completes.
+     * Used for queuing the next user question while the agent is still running.
+     */
     public void followUp(Message message) {
         followUpQueue.enqueue(message);
     }
@@ -311,7 +227,7 @@ public class Agent implements AutoCloseable {
     public void close() {
         if (!closed.compareAndSet(false, true)) return;
         reset();
-        closeToolRunner();
+        resources.close();
     }
 
     // ── Factory ────────────────────────────────────────────
@@ -342,6 +258,7 @@ public class Agent implements AutoCloseable {
 
     /**
      * Common loop execution logic shared by prompt() and continueLoop().
+     * Orchestrates the harness layer: state reset → event pipeline → loop preparation → execution.
      */
     private List<Message> runLoop(List<Message> newMessages,
                                   Consumer<AgentEvent> onEvent,
@@ -351,15 +268,34 @@ public class Agent implements AutoCloseable {
             throw new IllegalStateException(
                     "Agent is already processing a prompt. Use steer() or followUp() to queue messages.");
         }
+        try {
+            resetRunState();
+            AtomicBoolean agentEndEmitted = new AtomicBoolean(false);
+            Consumer<AgentEvent> guardedEmitter = buildEventPipeline(onEvent, agentEndEmitted);
+            AgentLoop loop = prepareLoop(compactCallback);
+            return executeLoop(loop, newMessages, guardedEmitter, agentEndEmitted);
+        } finally {
+            finalizeRun();
+        }
+    }
 
+    /**
+     * Reset per-run state: abort signal, error message, and streaming flag.
+     */
+    private void resetRunState() {
         abortSignal.set(false);
         context.setErrorMessage(null);
         context.tryStartStreaming();
+    }
 
-        // Guard against duplicate AgentEnd emission
-        AtomicBoolean agentEndEmitted = new AtomicBoolean(false);
+    /**
+     * Build the event dispatch pipeline with AgentEnd deduplication guard.
+     * The guardedEmitter wraps the raw emitter and suppresses duplicate AgentEnd events.
+     */
+    private Consumer<AgentEvent> buildEventPipeline(Consumer<AgentEvent> onEvent,
+                                                     AtomicBoolean agentEndEmitted) {
         Consumer<AgentEvent> emitter = eventDispatcher.createEmitter(onEvent);
-        Consumer<AgentEvent> guardedEmitter = evt -> {
+        return evt -> {
             if (evt instanceof AgentEvent.AgentEnd) {
                 if (!agentEndEmitted.compareAndSet(false, true)) {
                     log.warn("Duplicate AgentEnd event suppressed");
@@ -368,16 +304,30 @@ public class Agent implements AutoCloseable {
             }
             emitter.accept(evt);
         };
+    }
 
+    /**
+     * Prepare the AgentLoop: build config with hooks, acquire resources, sync tool hooks.
+     */
+    private AgentLoop prepareLoop(AgentLoopConfig.ContextCompactor compactCallback) {
         AgentLoopConfig config = buildConfigWithHooks(compactCallback);
-        ToolRunner runner = getOrCreateToolRunner(config);
+        ToolRunner runner = resources.getOrCreateToolRunner(config);
         // Always sync hooks — ToolRunner is shared, but config/hooks may change per run
         if (runner != null) {
             runner.updateHooks(config.beforeToolCall(), config.afterToolCall());
         }
-        StreamAccumulator accumulator = getOrCreateStreamAccumulator(config);
-        AgentLoop loop = new AgentLoop(config, context, runner, accumulator);
+        StreamAccumulator accumulator = resources.getOrCreateStreamAccumulator(config);
+        return new AgentLoop(config, context, runner, accumulator);
+    }
 
+    /**
+     * Execute the agent loop with failure handling.
+     * On success, returns assistant messages from AgentEnd.
+     * On failure, synthesizes an error event sequence (MessageStart→MessageEnd→TurnEnd→AgentEnd).
+     */
+    private List<Message> executeLoop(AgentLoop loop, List<Message> newMessages,
+                                       Consumer<AgentEvent> guardedEmitter,
+                                       AtomicBoolean agentEndEmitted) {
         AtomicReference<List<Message>> producedMessages = new AtomicReference<>(List.of());
         try {
             loop.run(newMessages, abortSignal, evt -> {
@@ -388,30 +338,42 @@ public class Agent implements AutoCloseable {
                 }
             });
         } catch (Exception e) {
-            // Synthesize failure event sequence only if AgentEnd was not yet emitted
-            context.setErrorMessage(e.getMessage());
-            if (!agentEndEmitted.get()) {
-                AssistantMessage failMsg = AssistantMessage.builder()
-                        .stopReason(StopReason.ERROR)
-                        .errorMessage(e.getMessage())
-                        .provider(baseConfig.model().provider())
-                        .model(baseConfig.model().id())
-                        .timestamp(Message.nowEpochSeconds())
-                        .build();
-                guardedEmitter.accept(new AgentEvent.MessageStart(failMsg));
-                guardedEmitter.accept(new AgentEvent.MessageEnd(failMsg));
-                guardedEmitter.accept(new AgentEvent.TurnEnd(failMsg, List.of()));
-                guardedEmitter.accept(new AgentEvent.AgentEnd(List.of(failMsg)));
-            }
-        } finally {
-            context.stopStreaming();
-            toolCallTracker.clear();
-            running.set(false);
+            handleRunFailure(e, guardedEmitter, agentEndEmitted);
         }
-
         return producedMessages.get().stream()
                 .filter(m -> m instanceof AssistantMessage)
                 .toList();
+    }
+
+    /**
+     * Synthesize a failure event sequence when the loop throws an exception.
+     * Only emits if AgentEnd has not yet been sent (guarded by agentEndEmitted).
+     */
+    private void handleRunFailure(Exception e, Consumer<AgentEvent> guardedEmitter,
+                                   AtomicBoolean agentEndEmitted) {
+        context.setErrorMessage(e.getMessage());
+        if (!agentEndEmitted.get()) {
+            AssistantMessage failMsg = AssistantMessage.builder()
+                    .stopReason(StopReason.ERROR)
+                    .errorMessage(e.getMessage())
+                    .provider(baseConfig.model().provider())
+                    .model(baseConfig.model().id())
+                    .timestamp(Message.nowEpochSeconds())
+                    .build();
+            guardedEmitter.accept(new AgentEvent.MessageStart(failMsg));
+            guardedEmitter.accept(new AgentEvent.MessageEnd(failMsg));
+            guardedEmitter.accept(new AgentEvent.TurnEnd(failMsg, List.of()));
+            guardedEmitter.accept(new AgentEvent.AgentEnd(List.of(failMsg)));
+        }
+    }
+
+    /**
+     * Finalize a run: stop streaming, clear tool tracker, release concurrency guard.
+     */
+    private void finalizeRun() {
+        context.stopStreaming();
+        toolCallTracker.clear();
+        running.set(false);
     }
 
     /**
@@ -458,77 +420,4 @@ public class Agent implements AutoCloseable {
         return b.build();
     }
 
-    /**
-     * Get or lazily create the shared ToolRunner.
-     * Reuses the ExecutorService across calls for efficiency.
-     */
-    private ToolRunner getOrCreateToolRunner(AgentLoopConfig config) {
-        if (config.toolRegistry() == null) return null;
-        ToolRunner runner = sharedToolRunner;
-        if (runner == null) {
-            synchronized (this) {
-                runner = sharedToolRunner;
-                if (runner == null) {
-                    runner = new ToolRunner(config.toolRegistry(), config.toolConfig(),
-                            config.beforeToolCall(), config.afterToolCall(),
-                            config.humanInputGate());
-                    sharedToolRunner = runner;
-                }
-            }
-        }
-        return runner;
-    }
-
-    /**
-     * Get or lazily create the shared StreamAccumulator.
-     * Config parameters are updated per run via updateConfig().
-     */
-    private StreamAccumulator getOrCreateStreamAccumulator(AgentLoopConfig config) {
-        StreamAccumulator acc = sharedStreamAccumulator;
-        if (acc == null) {
-            synchronized (this) {
-                acc = sharedStreamAccumulator;
-                if (acc == null) {
-                    acc = new StreamAccumulator(
-                            config.streamFn(), config.model(),
-                            config.thinkingLevel().value(), config.temperature(), config.maxTokens());
-                    sharedStreamAccumulator = acc;
-                }
-            }
-        }
-        // Sync config for this run
-        acc.updateConfig(config.model(), config.thinkingLevel().value(), config.temperature());
-        return acc;
-    }
-
-    // No synchronized needed: close() guards via AtomicBoolean, ensuring single invocation.
-    // sharedToolRunner is volatile, so the null-write is visible to any concurrent reader.
-    private void closeToolRunner() {
-        ToolRunner runner = sharedToolRunner;
-        if (runner != null) {
-            sharedToolRunner = null;
-            runner.close();
-        }
-    }
-
-    // ── Inner classes ───────────────────────────────────────
-
-    /**
-     * Tracks pending tool calls via agent events.
-     * Separates tool-call state tracking from event dispatch logic (SRP).
-     */
-    private static final class ToolCallTracker {
-        private final Set<String> pending = Collections.synchronizedSet(new LinkedHashSet<>());
-
-        void onEvent(AgentEvent evt) {
-            if (evt instanceof AgentEvent.ToolExecutionStart tes) {
-                pending.add(tes.toolCallId());
-            } else if (evt instanceof AgentEvent.ToolExecutionEnd tee) {
-                pending.remove(tee.toolCallId());
-            }
-        }
-
-        Set<String> snapshot() { return Set.copyOf(pending); }
-        void clear() { pending.clear(); }
-    }
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-06-26 14:30 — refactor: Agent.java Harness 层重构
+
+**问题/需求**: Agent.java（535 行）混合了 config 构建、hook 装配、队列管理、ToolRunner/StreamAccumulator 生命周期、12 个 prompt 重载等职责，不符合「Harness 厚编排层、Loop 薄循环」原则。经全量 grep 验证，~17 个公共方法零外部调用者。
+
+**方案**: 删除死代码 + 内部重构：
+- **删除死代码**：移除 2 个构造函数重载、6 个 async 方法、2 个 Message 类型 prompt 重载，共删除 ~10 个零调用者方法
+- **保留队列管理公共 API**（steer/followUp 等 8 个方法）供未来对话场景承接追加提问
+- **提取 ToolCallTracker** 为独立 package-private 类
+- **提取 AgentResources** 管理 ToolRunner/StreamAccumulator 懒创建与销毁，隔离资源生命周期
+- **重构 runLoop()** 拆分为 6 个职责清晰的私有方法：`resetRunState`→`buildEventPipeline`→`prepareLoop`→`executeLoop`→`handleRunFailure`→`finalizeRun`
+
+**改动范围**: `Agent.java` 从 535 行减至 423 行，公共 API 从 ~30 个精简到 ~20 个。新增 `AgentResources.java`、`ToolCallTracker.java`。
+
+**影响面**: 纯内部重构，所有现有调用者零修改。全量测试通过。
+
 ## 2026-06-26 12:26 — refactor: AgentLoop 双层循环简化为单层循环
 
 **问题/需求**: AgentLoop 使用嵌套双层循环（内层处理工具调用 + steering，外层处理 follow-up），状态变量在层间传递（`pendingMessages`、`hasMoreToolCalls`、`TurnOutcome`），4 处重复 `AgentEnd` 发射，控制流复杂度高。
