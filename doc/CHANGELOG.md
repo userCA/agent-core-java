@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-26 14:45 — refactor: 前端工程独立目录迁移
+
+**问题/需求**: 前端 React 工程位于 `doc/designed_by_Kimi/app/`，位置不合理（doc 应放文档而非完整工程），命名以工具名命名不表达内容含义。
+
+**方案**: 迁移为独立前端工程：
+- `doc/designed_by_Kimi/app/` → `frontend/`
+- 删除 `doc/designed_by_Kimi/` 旧目录
+- `package.json` name 从 `my-app` 修正为 `agent-core-chat`
+- 移除 `kimi-plugin-inspect-react` 依赖
+- `index.html` title 更新为 `Agent Core Chat — 咪兔`
+- 根目录 `.gitignore` 添加 `frontend/node_modules/`、`frontend/dist/` 规则
+- 设计系统文档随工程一起迁移，无硬编码路径无需修改
+
+**改动范围**: 目录迁移 + `.gitignore`、`package.json`、`index.html`、`info.md` 更新。
+
+**影响面**: 纯目录结构调整，无功能变化。前端工程独立运行，与 Java 后端解耦。
+
+⚡ 影响范围：`frontend/`、`.gitignore`
+
 ## 2026-06-26 14:30 — refactor: Agent.java Harness 层重构
 
 **问题/需求**: Agent.java（535 行）混合了 config 构建、hook 装配、队列管理、ToolRunner/StreamAccumulator 生命周期、12 个 prompt 重载等职责，不符合「Harness 厚编排层、Loop 薄循环」原则。经全量 grep 验证，~17 个公共方法零外部调用者。
