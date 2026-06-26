@@ -5,6 +5,8 @@ import io.agentcore.extensions.HookTypes.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +21,7 @@ public final class ExtensionRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ExtensionRunner.class);
 
-    private final List<Extension> extensions;
+    private volatile List<Extension> extensions;
 
     public ExtensionRunner(List<Extension> extensions) {
         if (extensions == null || extensions.isEmpty()) {
@@ -27,13 +29,52 @@ public final class ExtensionRunner {
         } else {
             // Sort by order() — lower values run first (higher priority)
             this.extensions = extensions.stream()
-                    .sorted(java.util.Comparator.comparingInt(Extension::order))
+                    .sorted(Comparator.comparingInt(Extension::order))
                     .toList();
         }
     }
 
     public boolean hasExtensions() {
         return !extensions.isEmpty();
+    }
+
+    /**
+     * Return a snapshot of current extensions (unmodifiable).
+     */
+    public List<Extension> extensions() {
+        return this.extensions;
+    }
+
+    // ── Runtime mutation (synchronized for write safety) ─────
+    // Hook methods (onBeforeToolCall, etc.) are NOT synchronized — they only
+    // read the volatile reference and iterate an immutable List, so parallel
+    // tool executions are not serialized.
+
+    /**
+     * Add a single extension at runtime.
+     */
+    public synchronized void addExtension(Extension ext) {
+        addExtensions(List.of(ext));
+    }
+
+    /**
+     * Add multiple extensions at runtime, re-sorting by order().
+     */
+    public synchronized void addExtensions(List<Extension> additional) {
+        if (additional == null || additional.isEmpty()) return;
+        List<Extension> merged = new ArrayList<>(this.extensions);
+        merged.addAll(additional);
+        merged.sort(Comparator.comparingInt(Extension::order));
+        this.extensions = List.copyOf(merged);
+    }
+
+    /**
+     * Remove an extension at runtime (by identity).
+     */
+    public synchronized void removeExtension(Extension ext) {
+        List<Extension> filtered = new ArrayList<>(this.extensions);
+        filtered.remove(ext);
+        this.extensions = List.copyOf(filtered);
     }
 
     /**

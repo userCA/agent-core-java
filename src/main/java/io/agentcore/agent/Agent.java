@@ -3,8 +3,10 @@ package io.agentcore.agent;
 import io.agentcore.model.Content.TextContent;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
+import io.agentcore.extensions.ExtensionLoader;
 import io.agentcore.extensions.ExtensionRunner;
 import io.agentcore.extensions.HookTypes.BeforeAgentStartResult;
+import io.agentcore.extensions.SelfHealingExtension;
 import io.agentcore.llm.*;
 import io.agentcore.tools.ToolRegistry;
 import org.slf4j.Logger;
@@ -32,16 +34,12 @@ public class Agent implements AutoCloseable {
     private final AgentLoopConfig baseConfig;
     private final AgentContext context;
     private final AtomicBoolean abortSignal = new AtomicBoolean(false);
-    private final AgentEventDispatcher eventDispatcher = new AgentEventDispatcher();
 
-    // Extension-based hook system (unified)
+    // Extension-based hook system (unified — all lifecycle hooks + event observation)
     private final ExtensionRunner extensionRunner;
 
     private final PendingMessageQueue steeringQueue;
     private final PendingMessageQueue followUpQueue;
-
-    // Cached base config with hooks — reused across runs
-    private volatile AgentLoopConfig cachedBaseConfig;
 
     // Message assembler — wraps provider converter with Agent-layer enrichment
     private final AgentLoopConfig.MessageAssembler messageAssembler;
@@ -82,8 +80,33 @@ public class Agent implements AutoCloseable {
 
     // ── Subscribe ──────────────────────────────────────────
 
+    /**
+     * Register an event subscriber by wrapping it as an anonymous Extension.
+     * The subscriber participates in the unified onEvent hook pipeline with
+     * lowest priority (Integer.MAX_VALUE = runs last).
+     *
+     * @return a cancellation runnable that removes the subscriber
+     */
     public Runnable subscribe(Consumer<AgentEvent> listener) {
-        return eventDispatcher.subscribe(listener);
+        Extension sub = new Extension() {
+            @Override public String name() {
+                return "subscriber-" + System.identityHashCode(this);
+            }
+            @Override public int order() { return Integer.MAX_VALUE; }
+            @Override public void onEvent(AgentEvent event) {
+                listener.accept(event);
+            }
+        };
+        extensionRunner.addExtension(sub);
+        return () -> extensionRunner.removeExtension(sub);
+    }
+
+    /**
+     * Register additional extensions at runtime (e.g. from AgentSession).
+     * Rebuilds config on next run to pick up new hooks.
+     */
+    public void addExtensions(List<Extension> additional) {
+        extensionRunner.addExtensions(additional);
     }
 
     // ── Prompt / Continue / Abort ──────────────────────────
@@ -205,7 +228,7 @@ public class Agent implements AutoCloseable {
 
     /**
      * Reset state for a new conversation, preserving ToolRunner for reuse.
-     * Clears messages, queues, signals, and pending tool calls.
+     * Clears messages, queues, signals, pending tool calls, and extension state.
      */
     public void reset() {
         context.resetState();
@@ -214,6 +237,10 @@ public class Agent implements AutoCloseable {
         toolCallTracker.clear();
         steeringQueue.clear();
         followUpQueue.clear();
+        // Clear stateful extension data
+        for (var ext : extensionRunner.extensions()) {
+            if (ext instanceof SelfHealingExtension she) she.clearState();
+        }
         // ToolRunner intentionally NOT closed — reused by subsequent prompt calls
     }
 
@@ -251,7 +278,11 @@ public class Agent implements AutoCloseable {
                 .build();
 
         AgentContext context = new AgentContext(systemPrompt, new ArrayList<>());
-        return new Agent(config, context);
+        // Load SPI extensions automatically
+        List<Extension> extensions = ExtensionLoader.load();
+        return new Agent(config, context, extensions,
+                PendingMessageQueue.DrainMode.ONE_AT_A_TIME,
+                PendingMessageQueue.DrainMode.ONE_AT_A_TIME);
     }
 
     // ── Internal ───────────────────────────────────────────
@@ -259,6 +290,10 @@ public class Agent implements AutoCloseable {
     /**
      * Common loop execution logic shared by prompt() and continueLoop().
      * Orchestrates the harness layer: state reset → event pipeline → loop preparation → execution.
+     *
+     * The per-call onEvent consumer is wrapped as an ephemeral Extension and registered
+     * to the ExtensionRunner for the duration of this run. All events are dispatched
+     * through extensionRunner.onEvent() — the single unified dispatch point.
      */
     private List<Message> runLoop(List<Message> newMessages,
                                   Consumer<AgentEvent> onEvent,
@@ -268,13 +303,20 @@ public class Agent implements AutoCloseable {
             throw new IllegalStateException(
                     "Agent is already processing a prompt. Use steer() or followUp() to queue messages.");
         }
+        // Per-call consumer as ephemeral extension (lowest order = runs first)
+        Extension callExt = wrapAsExtension(onEvent);
+        extensionRunner.addExtension(callExt);
         try {
             resetRunState();
-            AtomicBoolean agentEndEmitted = new AtomicBoolean(false);
-            Consumer<AgentEvent> guardedEmitter = buildEventPipeline(onEvent, agentEndEmitted);
-            AgentLoop loop = prepareLoop(compactCallback);
-            return executeLoop(loop, newMessages, guardedEmitter, agentEndEmitted);
+            String originalSysPrompt = context.systemPrompt();
+            try {
+                AgentLoop loop = prepareLoop(compactCallback);
+                return executeLoop(loop, newMessages);
+            } finally {
+                context.setSystemPrompt(originalSysPrompt);
+            }
         } finally {
+            extensionRunner.removeExtension(callExt);
             finalizeRun();
         }
     }
@@ -289,20 +331,16 @@ public class Agent implements AutoCloseable {
     }
 
     /**
-     * Build the event dispatch pipeline with AgentEnd deduplication guard.
-     * The guardedEmitter wraps the raw emitter and suppresses duplicate AgentEnd events.
+     * Wrap a per-call Consumer as an ephemeral Extension for the unified event pipeline.
+     * Runs with lowest order (Integer.MIN_VALUE) to execute before other extensions.
      */
-    private Consumer<AgentEvent> buildEventPipeline(Consumer<AgentEvent> onEvent,
-                                                     AtomicBoolean agentEndEmitted) {
-        Consumer<AgentEvent> emitter = eventDispatcher.createEmitter(onEvent);
-        return evt -> {
-            if (evt instanceof AgentEvent.AgentEnd) {
-                if (!agentEndEmitted.compareAndSet(false, true)) {
-                    log.warn("Duplicate AgentEnd event suppressed");
-                    return;
-                }
+    private Extension wrapAsExtension(Consumer<AgentEvent> consumer) {
+        return new Extension() {
+            @Override public String name() { return "call-scope"; }
+            @Override public int order() { return Integer.MIN_VALUE; }
+            @Override public void onEvent(AgentEvent event) {
+                if (consumer != null) consumer.accept(event);
             }
-            emitter.accept(evt);
         };
     }
 
@@ -322,23 +360,24 @@ public class Agent implements AutoCloseable {
 
     /**
      * Execute the agent loop with failure handling.
+     * All events are dispatched through extensionRunner.onEvent() — the single unified dispatch point.
      * On success, returns assistant messages from AgentEnd.
      * On failure, synthesizes an error event sequence (MessageStart→MessageEnd→TurnEnd→AgentEnd).
      */
-    private List<Message> executeLoop(AgentLoop loop, List<Message> newMessages,
-                                       Consumer<AgentEvent> guardedEmitter,
-                                       AtomicBoolean agentEndEmitted) {
+    private List<Message> executeLoop(AgentLoop loop, List<Message> newMessages) {
         AtomicReference<List<Message>> producedMessages = new AtomicReference<>(List.of());
+        AtomicBoolean agentEndEmitted = new AtomicBoolean(false);
         try {
             loop.run(newMessages, abortSignal, evt -> {
                 toolCallTracker.onEvent(evt);
-                guardedEmitter.accept(evt);
+                extensionRunner.onEvent(evt);  // unified event dispatch
                 if (evt instanceof AgentEvent.AgentEnd ae) {
                     producedMessages.set(ae.messages());
+                    agentEndEmitted.set(true);
                 }
             });
         } catch (Exception e) {
-            handleRunFailure(e, guardedEmitter, agentEndEmitted);
+            handleRunFailure(e, agentEndEmitted);
         }
         return producedMessages.get().stream()
                 .filter(m -> m instanceof AssistantMessage)
@@ -348,9 +387,9 @@ public class Agent implements AutoCloseable {
     /**
      * Synthesize a failure event sequence when the loop throws an exception.
      * Only emits if AgentEnd has not yet been sent (guarded by agentEndEmitted).
+     * Events are dispatched through extensionRunner.onEvent() for unified observation.
      */
-    private void handleRunFailure(Exception e, Consumer<AgentEvent> guardedEmitter,
-                                   AtomicBoolean agentEndEmitted) {
+    private void handleRunFailure(Exception e, AtomicBoolean agentEndEmitted) {
         context.setErrorMessage(e.getMessage());
         if (!agentEndEmitted.get()) {
             AssistantMessage failMsg = AssistantMessage.builder()
@@ -360,10 +399,10 @@ public class Agent implements AutoCloseable {
                     .model(baseConfig.model().id())
                     .timestamp(Message.nowEpochSeconds())
                     .build();
-            guardedEmitter.accept(new AgentEvent.MessageStart(failMsg));
-            guardedEmitter.accept(new AgentEvent.MessageEnd(failMsg));
-            guardedEmitter.accept(new AgentEvent.TurnEnd(failMsg, List.of()));
-            guardedEmitter.accept(new AgentEvent.AgentEnd(List.of(failMsg)));
+            extensionRunner.onEvent(new AgentEvent.MessageStart(failMsg));
+            extensionRunner.onEvent(new AgentEvent.MessageEnd(failMsg));
+            extensionRunner.onEvent(new AgentEvent.TurnEnd(failMsg, List.of()));
+            extensionRunner.onEvent(new AgentEvent.AgentEnd(List.of(failMsg)));
         }
     }
 
@@ -389,18 +428,15 @@ public class Agent implements AutoCloseable {
     }
 
     private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.ContextCompactor compactCallback) {
-        if (cachedBaseConfig == null) {
-            cachedBaseConfig = buildBaseConfigWithHooks();
-        }
-
+        AgentLoopConfig base = buildBaseConfigWithHooks();
         return compactCallback != null
-                ? cachedBaseConfig.withCompactCallback(compactCallback)
-                : cachedBaseConfig;
+                ? base.withCompactCallback(compactCallback)
+                : base;
     }
 
     /**
-     * Build the base config with all static hooks (extensions + ad-hoc transforms).
-     * Cached and reused across runs to avoid full config reconstruction.
+     * Build the base config with all hooks (extensions + queue suppliers).
+     * Rebuilt on each run to pick up dynamically added extensions.
      */
     private AgentLoopConfig buildBaseConfigWithHooks() {
         AgentLoopConfig.Builder b = baseConfig.toBuilder();

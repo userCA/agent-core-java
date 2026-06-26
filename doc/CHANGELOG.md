@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-26 — refactor: 重构Agent事件分发与Extension加载机制
+
+**问题/需求**: AgentEventDispatcher作为独立类职责不清，Extension加载逻辑散落在Runner中，缺乏独立加载器。
+
+**方案**:
+- 移除`AgentEventDispatcher`，事件分发逻辑内聚到Agent层
+- 新增`ExtensionLoader`，扩展加载职责独立
+- 重构`ExtensionRunner`，简化扩展执行流程
+- 适配`SelfHealingExtension`、`ObservabilityExtension`
+- 调整`AgentSession`会话管理逻辑
+- 设计文档整理至`doc/design/`目录
+- 新增对话原型页面（claude/cursor/minimax风格）
+- `.gitignore`增加`.qoder/`排除规则
+
+**改动范围**: `Agent.java`、`ExtensionRunner.java`、`ExtensionLoader.java`（新增）、`SelfHealingExtension.java`、`ObservabilityExtension.java`、`AgentSession.java`、对应测试文件、`doc/design/`、`doc/prototype/`
+
+**影响面**: Agent层事件分发更内聚，Extension体系更清晰，无外部API破坏性变更。
+
+⚡ 影响范围：`agent`、`extensions`、`session`、`observability`
+
 ## 2026-06-26 14:45 — refactor: 前端工程独立目录迁移
 
 **问题/需求**: 前端 React 工程位于 `doc/designed_by_Kimi/app/`，位置不合理（doc 应放文档而非完整工程），命名以工具名命名不表达内容含义。

@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Agent Journal — Cursor style</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        canvas:   { DEFAULT: '#f7f7f4', soft: '#fafaf7' },
+                        surface:  { card: '#ffffff', strong: '#e6e5e0' },
+                        hairline: { DEFAULT: '#e6e5e0', soft: '#efeee8', strong: '#cfcdc4' },
+                        ink:      { DEFAULT: '#26251e', body: '#5a5852', muted: '#6b6860', faint: '#706d63' },
+                        primary:  { DEFAULT: '#f54e00', active: '#d04200' },
+                        timeline: {
+                            thinking: '#dfa88f',
+                            grep:     '#9fc9a2',
+                            read:     '#9fbbe0',
+                            edit:     '#c0a8dd',
+                            done:     '#c08532',
+                        },
+                        ok:  '#1f8a65',
+                        err: '#cf2d56',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SF Mono', 'Menlo', 'monospace'],
+                    },
+                    borderRadius: {
+                        'xs': '4px', 'sm': '6px', 'md': '8px', 'lg': '12px', 'xl': '16px', 'pill': '9999px',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #e6e5e0;
+            color: #26251e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: -0.011em;
+        }
+
+        /* Editorial display: weight 400, negative tracking */
+        .display { font-weight: 400; letter-spacing: -0.022em; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .label-up { font-size: 11px; font-weight: 600; letter-spacing: 0.088em; text-transform: uppercase; }
+
+        /* Phone frame — hairline only, no offset shadow */
+        .phone-frame {
+            width: 390px;
+            height: 844px;
+            max-height: 98vh;
+            background: #f7f7f4;
+            border-radius: 28px;
+            border: 1px solid #cfcdc4;
+            box-shadow: 0 24px 70px rgba(38,37,30,0.16);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        @media (max-width: 420px) {
+            .phone-frame {
+                width: 100vw; height: 100vh; max-height: 100vh;
+                border-radius: 0; box-shadow: none; border: none;
+            }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(38,37,30,0.14); border-radius: 4px; }
+
+        /* Animations */
+        @keyframes slideUp   { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideDown { from { transform: translateY(-6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes popIn     { 0% { transform: scale(0.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes typing    { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-3px); opacity: 1; } }
+        .anim-slide-up   { animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1) forwards; }
+        .anim-slide-down { animation: slideDown 0.24s ease-out forwards; }
+        .anim-pop-in     { animation: popIn 0.2s ease-out forwards; }
+        .typing-dot      { animation: typing 1.2s ease-in-out infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        @media (prefers-reduced-motion: reduce) {
+            .anim-slide-up, .anim-slide-down, .anim-pop-in, .typing-dot { animation: none; }
+        }
+
+        /* Surfaces */
+        .card     { background: #ffffff; border: 1px solid #e6e5e0; border-radius: 12px; }
+        .hr       { border-top: 1px solid #e6e5e0; }
+        .hr-dash  { border-top: 1px dashed #cfcdc4; }
+
+        /* Message bubbles */
+        .msg-user { background: #26251e; color: #f7f7f4; border-radius: 12px 12px 4px 12px; }
+        .msg-ai   { background: #ffffff; color: #26251e; border: 1px solid #e6e5e0; border-radius: 12px 12px 12px 4px; }
+
+        /* AI avatar — sized up-front to avoid layout-shift flash before paint */
+        .ai-avatar { width: 28px; height: 28px; flex-shrink: 0; margin-top: 2px; border-radius: 8px; background: #26251e; }
+
+        /* Buttons */
+        .btn-primary {
+            background: #f54e00; color: #fff; border-radius: 8px;
+            transition: background-color 0.15s ease;
+        }
+        .btn-primary:hover:not(:disabled)  { background: #d04200; }
+        .btn-primary:active:not(:disabled) { background: #d04200; }
+        .btn-primary:disabled { background: #cfcdc4; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: #ffffff; color: #26251e; border: 1px solid #cfcdc4; border-radius: 8px;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .btn-secondary:hover  { background: #fafaf7; border-color: #807d72; }
+        .btn-secondary:active { background: #f7f7f4; }
+
+        .input-base {
+            background: #ffffff; border: 1px solid #cfcdc4; border-radius: 8px;
+            transition: border-color 0.15s ease;
+        }
+        .input-base:focus { outline: none; border-color: #26251e; }
+
+        button:focus-visible, input:focus-visible, textarea:focus-visible {
+            outline: 2px solid #f54e00; outline-offset: 2px;
+        }
+
+        /* Pills */
+        .pill { border-radius: 9999px; }
+        .badge { background: #e6e5e0; color: #26251e; border-radius: 9999px; }
+
+        /* Sheets / overlay */
+        .overlay { transition: opacity 0.2s ease; background: rgba(38,37,30,0.28); }
+        .overlay.hidden-overlay { opacity: 0; pointer-events: none; }
+        .sheet { transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); border-top: 1px solid #cfcdc4; }
+        .sheet.hidden-sheet { transform: translateY(100%); }
+
+        /* Screens */
+        .screen {
+            position: absolute; inset: 0; overflow: hidden;
+            display: flex; flex-direction: column;
+            transition: transform 0.28s cubic-bezier(0.32,0.72,0,1), opacity 0.2s ease-out;
+        }
+        .screen-left  { transform: translateX(-12%); opacity: 0; pointer-events: none; }
+        .screen-right { transform: translateX(12%); opacity: 0; pointer-events: none; }
+        .screen-active { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+        /* ===== Agent reasoning timeline (Cursor signature) ===== */
+        .trace {
+            background: #ffffff; border: 1px solid #e6e5e0; border-radius: 12px; overflow: hidden;
+        }
+        .trace-head {
+            width: 100%; display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; cursor: pointer; text-align: left;
+            background: #fafaf7; border-bottom: 1px solid #efeee8;
+            transition: background-color 0.15s ease;
+        }
+        .trace-head:hover { background: #f3f2ec; }
+        .trace.collapsed .trace-head { border-bottom-color: transparent; }
+        .trace.collapsed .trace-rail { display: none; }
+        .trace-rail { padding: 12px 14px; }
+        .thead-ic { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .thead-label { flex: 1; font-size: 13px; font-weight: 600; color: #26251e; }
+
+        .t-step { position: relative; padding-left: 26px; }
+        .t-step + .t-step { margin-top: 4px; }
+        .t-step::before {
+            content: ''; position: absolute; left: 7px; top: 18px; bottom: -4px;
+            border-left: 1px dashed #cfcdc4;
+        }
+        .t-step:last-child::before { display: none; }
+        .t-node {
+            position: absolute; left: 0; top: 2px;
+            width: 15px; height: 15px; border-radius: 50%;
+            border: 1px solid rgba(38,37,30,0.18);
+            display: flex; align-items: center; justify-content: center; z-index: 1;
+        }
+        .t-node.thinking { background: #dfa88f; }
+        .t-node.grep     { background: #9fc9a2; }
+        .t-node.read     { background: #9fbbe0; }
+        .t-node.edit     { background: #c0a8dd; }
+        .t-node.done     { background: #c08532; }
+        .t-node.running  { background: #ffffff; }
+        .t-node svg { width: 9px; height: 9px; }
+
+        .t-head {
+            width: 100%; display: flex; align-items: center; gap: 8px;
+            padding: 1px 2px; cursor: pointer; text-align: left;
+            border-radius: 6px; transition: background-color 0.15s ease;
+        }
+        .t-head:hover { background: #fafaf7; }
+        /* stage pill */
+        .stage-pill {
+            display: inline-flex; align-items: center; padding: 2px 8px;
+            border-radius: 9999px; font-size: 10px; font-weight: 600;
+            letter-spacing: 0.08em; text-transform: uppercase; color: #26251e;
+            flex-shrink: 0; white-space: nowrap;
+        }
+        .stage-pill.thinking { background: #dfa88f; }
+        .stage-pill.grep     { background: #9fc9a2; }
+        .stage-pill.read     { background: #9fbbe0; }
+        .stage-pill.edit     { background: #c0a8dd; }
+        .stage-pill.done     { background: #c08532; color: #26251e; }
+
+        .t-sub { font-size: 12.5px; color: #807d72; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .t-chev { width: 13px; height: 13px; color: #a09c92; transition: transform 0.2s ease; flex-shrink: 0; }
+        .t-step.open > .t-head .t-chev { transform: rotate(90deg); }
+        .trace-head .t-chev { transform: rotate(90deg); }
+        .trace.collapsed .trace-head .t-chev { transform: rotate(0deg); }
+
+        .t-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.32,0.72,0,1); }
+        .t-step.open > .t-body { grid-template-rows: 1fr; }
+        .t-body-inner { overflow: hidden; min-height: 0; font-size: 13px; line-height: 1.6; color: #5a5852; padding: 6px 4px 8px 0; white-space: pre-wrap; word-break: break-word; }
+
+        /* code = JetBrains Mono on canvas-soft IDE pane */
+        .t-code {
+            background: #fafaf7; color: #26251e; border: 1px solid #e6e5e0; border-radius: 8px;
+            padding: 10px 12px; margin-top: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+        }
+        .t-cursor {
+            display: inline-block; width: 6px; height: 13px; background: #807d72;
+            margin-left: 1px; vertical-align: -1px; animation: cursorBlink 1s steps(2) infinite;
+        }
+        @keyframes cursorBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        .t-spin { border: 1.5px solid rgba(38,37,30,0.2); border-top-color: #26251e; border-radius: 50%; animation: tSpin 0.7s linear infinite; }
+        @keyframes tSpin { to { transform: rotate(360deg); } }
+        .t-result { margin-top: 8px; }
+        @media (prefers-reduced-motion: reduce) {
+            .t-spin, .t-cursor { animation: none; }
+            .t-body { transition: none; }
+        }
+
+        /* progress track (agent panel) — neutral, NOT timeline pastels */
+        .track { background: #e6e5e0; border-radius: 9999px; overflow: hidden; }
+        .track-fill { background: #26251e; border-radius: 9999px; height: 100%; }
+    </style>
+</head>
+<body>
+    <div class="phone-frame" id="phoneFrame">
+        <!-- ==================== CHAT SCREEN ==================== -->
+        <div class="screen screen-active" id="chatScreen">
+            <!-- Header -->
+            <header class="flex items-center justify-between px-4 pt-[max(2.75rem,env(safe-area-inset-top))] pb-3 bg-canvas/95 backdrop-blur-sm z-20" style="border-bottom:1px solid #e6e5e0;">
+                <button onclick="goToHistory()" class="w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors" aria-label="历史记录">
+                    <i data-lucide="panel-left" class="w-[18px] h-[18px] text-ink-body"></i>
+                </button>
+                <div class="flex flex-col items-center">
+                    <h1 class="display text-[19px] text-ink leading-none">Agent Journal</h1>
+                    <span class="text-[11px] text-ink-muted flex items-center gap-1.5 mt-1">
+                        <span class="w-1.5 h-1.5 rounded-full" style="background:#1f8a65"></span>
+                        已连接
+                    </span>
+                </div>
+                <button onclick="toggleAgentPanel()" class="w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors" aria-label="Agent 面板">
+                    <i data-lucide="sliders-horizontal" class="w-[18px] h-[18px] text-ink-body"></i>
+                </button>
+            </header>
+
+            <!-- Messages -->
+            <div class="flex-1 overflow-y-auto custom-scroll px-4 py-4 space-y-4" id="messagesArea">
+                <div class="flex items-center justify-center gap-3 py-1">
+                    <div class="h-px flex-1 hr-dash"></div>
+                    <span class="label-up text-ink-muted">今天</span>
+                    <div class="h-px flex-1 hr-dash"></div>
+                </div>
+
+                <!-- AI welcome -->
+                <div class="flex gap-2.5 anim-slide-down">
+                    <div class="ai-avatar"></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="msg-ai inline-block px-3.5 py-2.5 max-w-[88%] text-[14px] leading-relaxed">
+                            早，今天要在日志里记录点什么？
+                        </div>
+                        <span class="text-[10px] text-ink-faint mt-1 ml-1 block mono">8:32 AM</span>
+                    </div>
+                </div>
+
+                <!-- User -->
+                <div class="flex gap-2.5 justify-end anim-slide-up">
+                    <div class="flex-1 flex flex-col items-end">
+                        <div class="msg-user inline-block px-3.5 py-2.5 max-w-[88%] text-[14px] leading-relaxed">
+                            我想重构认证模块，帮我搜一下相关代码？
+                        </div>
+                        <span class="text-[10px] text-ink-faint mt-1 mr-1 mono">8:33 AM</span>
+                    </div>
+                </div>
+
+                <!-- Typing -->
+                <div class="flex gap-2.5" id="typingIndicator" style="display:none;">
+                    <div class="ai-avatar"></div>
+                    <div class="msg-ai px-3.5 py-3">
+                        <div class="flex gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted typing-dot"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted typing-dot"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suggestion pills -->
+            <div class="px-4 pb-1 bg-canvas" id="suggestionPills">
+                <div class="flex gap-2 overflow-x-auto pb-2 custom-scroll" style="scrollbar-width:none;">
+                    <button onclick="sendQuickMessage('搜索认证代码')" class="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12px] whitespace-nowrap">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-ink-muted"></i><span>搜索认证</span>
+                    </button>
+                    <button onclick="sendQuickMessage('git diff 对比')" class="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12px] whitespace-nowrap">
+                        <i data-lucide="git-compare" class="w-3.5 h-3.5 text-ink-muted"></i><span>代码对比</span>
+                    </button>
+                    <button onclick="sendQuickMessage('运行测试')" class="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12px] whitespace-nowrap">
+                        <i data-lucide="play" class="w-3.5 h-3.5 text-ink-muted"></i><span>运行测试</span>
+                    </button>
+                    <button onclick="sendQuickMessage('重构这段代码')" class="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12px] whitespace-nowrap">
+                        <i data-lucide="wand-2" class="w-3.5 h-3.5 text-ink-muted"></i><span>重构</span>
+                    </button>
+                    <button onclick="sendQuickMessage('调试这个错误')" class="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12px] whitespace-nowrap">
+                        <i data-lucide="bug" class="w-3.5 h-3.5 text-ink-muted"></i><span>调试</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Input -->
+            <div class="px-4 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-2 bg-canvas" style="border-top:1px solid #e6e5e0;">
+                <div class="flex items-end gap-2">
+                    <button onclick="toggleToolDrawer()" class="w-10 h-10 btn-secondary flex items-center justify-center flex-shrink-0" aria-label="工具">
+                        <i data-lucide="plus" class="w-[18px] h-[18px] text-ink-body"></i>
+                    </button>
+                    <div class="flex-1 relative">
+                        <textarea id="messageInput" rows="1" placeholder="向 Agent 描述任务…"
+                            class="w-full px-3.5 py-2.5 input-base text-[14px] text-ink placeholder:text-ink-faint resize-none leading-relaxed"
+                            style="min-height:40px;max-height:120px;"
+                            oninput="autoResize(this)" onkeydown="handleEnter(event)"></textarea>
+                    </div>
+                    <button onclick="onPrimaryButton()" id="sendBtn" class="w-10 h-10 btn-primary flex items-center justify-center flex-shrink-0" aria-label="发送">
+                        <i data-lucide="arrow-up" class="w-[18px] h-[18px]"></i>
+                    </button>
+                </div>
+
+                <!-- Agent status chip -->
+                <div class="flex justify-center mt-3">
+                    <button onclick="toggleAgentPanel()" class="flex items-center gap-2 pl-2 pr-3 py-1 btn-secondary pill" aria-label="Agent 状态">
+                        <span class="w-5 h-5 rounded-full flex items-center justify-center bg-ink">
+                            <i data-lucide="sparkles" class="w-3 h-3" style="color:#f7f7f4"></i>
+                        </span>
+                        <span class="text-[11px] text-ink-body font-medium">Composer · 待命中</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== HISTORY SCREEN ==================== -->
+        <div class="screen screen-left" id="historyScreen">
+            <header class="flex items-center justify-between px-4 pt-[max(2.75rem,env(safe-area-inset-top))] pb-3 bg-canvas/95 backdrop-blur-sm z-20" style="border-bottom:1px solid #e6e5e0;">
+                <button onclick="goToChat()" class="w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors" aria-label="返回">
+                    <i data-lucide="arrow-left" class="w-[18px] h-[18px] text-ink-body"></i>
+                </button>
+                <h1 class="display text-[19px] text-ink">日志记录</h1>
+                <button onclick="newConversation()" class="w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors" aria-label="新建">
+                    <i data-lucide="plus" class="w-[18px] h-[18px] text-ink-body"></i>
+                </button>
+            </header>
+
+            <div class="flex-1 overflow-y-auto custom-scroll px-4 py-4 space-y-3">
+                <div class="relative mb-3">
+                    <i data-lucide="search" class="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" oninput="filterHistory(this.value)" placeholder="搜索记录…" class="w-full pl-9 pr-4 py-2.5 input-base text-[13px] text-ink placeholder:text-ink-faint">
+                </div>
+
+                <div class="hist-month flex items-center gap-3 py-1">
+                    <span class="label-up text-ink-muted">2026 年 6 月</span>
+                    <div class="h-px flex-1 hr-dash"></div>
+                </div>
+
+                <button onclick="goToChat()" class="journal-card card w-full text-left p-4 hover:bg-canvas-soft transition-colors">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="label-up text-ink-muted">今天</span>
+                        <span class="text-[11px] text-ink-faint mono">8:33 AM</span>
+                    </div>
+                    <h3 class="display text-[16px] text-ink mb-1">Auth 模块重构</h3>
+                    <p class="text-[12.5px] text-ink-body leading-relaxed line-clamp-2">在代码库中搜索认证相关代码，定位 AuthProvider.java 与 TokenManager.java，讨论了重构策略。</p>
+                    <div class="flex items-center gap-2 mt-3">
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">6 条消息</span>
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">2 个工具</span>
+                    </div>
+                </button>
+
+                <button onclick="goToChat()" class="journal-card card w-full text-left p-4 hover:bg-canvas-soft transition-colors">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="label-up text-ink-muted">昨天</span>
+                        <span class="text-[11px] text-ink-faint mono">4:15 PM</span>
+                    </div>
+                    <h3 class="display text-[16px] text-ink mb-1">数据库结构评审</h3>
+                    <p class="text-[12.5px] text-ink-body leading-relaxed line-clamp-2">评审新的用户表结构，建议为 email 与 created_at 加索引，并校验迁移脚本。</p>
+                    <div class="flex items-center gap-2 mt-3">
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">12 条消息</span>
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">3 个工具</span>
+                    </div>
+                </button>
+
+                <button onclick="goToChat()" class="journal-card card w-full text-left p-4 hover:bg-canvas-soft transition-colors">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="label-up text-ink-muted">6 月 22 日</span>
+                        <span class="text-[11px] text-ink-faint mono">10:42 AM</span>
+                    </div>
+                    <h3 class="display text-[16px] text-ink mb-1">API 接口设计</h3>
+                    <p class="text-[12.5px] text-ink-body leading-relaxed line-clamp-2">为计费模块设计 REST 接口，讨论分页策略与错误处理模式。</p>
+                    <div class="flex items-center gap-2 mt-3">
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">8 条消息</span>
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">1 个工具</span>
+                    </div>
+                </button>
+
+                <div class="hist-month flex items-center gap-3 py-1 mt-2">
+                    <span class="label-up text-ink-muted">2026 年 5 月</span>
+                    <div class="h-px flex-1 hr-dash"></div>
+                </div>
+
+                <button onclick="goToChat()" class="journal-card card w-full text-left p-4 hover:bg-canvas-soft transition-colors">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="label-up text-ink-muted">5 月 30 日</span>
+                        <span class="text-[11px] text-ink-faint mono">2:20 PM</span>
+                    </div>
+                    <h3 class="display text-[16px] text-ink mb-1">性能优化</h3>
+                    <p class="text-[12.5px] text-ink-body leading-relaxed line-clamp-2">分析数据看板的慢查询，建议引入缓存层并重写查询语句。</p>
+                    <div class="flex items-center gap-2 mt-3">
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">15 条消息</span>
+                        <span class="badge label-up px-2 py-0.5 text-[10px]" style="letter-spacing:.04em">4 个工具</span>
+                    </div>
+                </button>
+
+                <div id="historyEmpty" class="hidden text-center py-10 text-[13px] text-ink-muted">没有匹配的记录</div>
+                <div class="h-4"></div>
+            </div>
+        </div>
+
+        <!-- ==================== TOOL DRAWER ==================== -->
+        <div class="overlay hidden-overlay absolute inset-0 z-30" id="toolOverlay" onclick="toggleToolDrawer()"></div>
+        <div class="sheet hidden-sheet absolute bottom-0 left-0 right-0 bg-canvas rounded-t-xl z-40 max-h-[70%] flex flex-col" id="toolDrawer">
+            <div class="flex justify-center pt-3 pb-1.5" onclick="toggleToolDrawer()">
+                <div class="w-9 h-1 rounded-full" style="background:#cfcdc4;"></div>
+            </div>
+            <div class="px-5 pb-3 flex items-center justify-between">
+                <h2 class="display text-[18px] text-ink">工具</h2>
+                <button onclick="toggleToolDrawer()" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors" aria-label="关闭">
+                    <i data-lucide="x" class="w-4 h-4 text-ink-muted"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll px-5 pb-7">
+                <div class="grid grid-cols-3 gap-2.5" id="toolGrid"></div>
+            </div>
+        </div>
+
+        <!-- ==================== AGENT PANEL ==================== -->
+        <div class="overlay hidden-overlay absolute inset-0 z-30" id="agentOverlay" onclick="toggleAgentPanel()"></div>
+        <div class="sheet hidden-sheet absolute bottom-0 left-0 right-0 bg-canvas rounded-t-xl z-40 max-h-[64%] flex flex-col" id="agentPanel">
+            <div class="flex justify-center pt-3 pb-1.5" onclick="toggleAgentPanel()">
+                <div class="w-9 h-1 rounded-full" style="background:#cfcdc4;"></div>
+            </div>
+            <div class="px-5 pb-4 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-lg flex items-center justify-center bg-ink">
+                    <i data-lucide="sparkles" class="w-5 h-5" style="color:#f7f7f4"></i>
+                </div>
+                <div>
+                    <h2 class="display text-[18px] text-ink leading-tight">Composer</h2>
+                    <p class="text-[12px] text-ink-muted">你的编程 Agent</p>
+                </div>
+                <button onclick="toggleAgentPanel()" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-strong/60 transition-colors ml-auto" aria-label="关闭">
+                    <i data-lucide="x" class="w-4 h-4 text-ink-muted"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto custom-scroll px-5 pb-7 space-y-3" id="agentBody">
+                <!-- Status -->
+                <div class="card p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i data-lucide="activity" class="w-4 h-4 text-ink-muted"></i>
+                        <span class="label-up text-ink-muted">上下文负载</span>
+                        <span class="text-[12px] text-ink-body ml-auto mono">62%</span>
+                    </div>
+                    <div class="h-1.5 track"><div class="track-fill" style="width:62%"></div></div>
+                </div>
+
+                <!-- Today stats -->
+                <div class="card p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-ink-muted"></i>
+                        <span class="label-up text-ink-muted">今天</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="text-center">
+                            <div class="display text-[22px] text-ink leading-none">6</div>
+                            <div class="text-[10px] text-ink-muted mt-1">对话</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="display text-[22px] text-ink leading-none">12</div>
+                            <div class="text-[10px] text-ink-muted mt-1">消息</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="display text-[22px] text-ink leading-none">3</div>
+                            <div class="text-[10px] text-ink-muted mt-1">工具调用</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="card p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i data-lucide="lightbulb" class="w-4 h-4 text-ink-muted"></i>
+                        <span class="label-up text-ink-muted">Agent 观察</span>
+                    </div>
+                    <div class="space-y-2.5">
+                        <div class="flex items-start gap-2">
+                            <span class="w-1 h-1 rounded-full mt-2 flex-shrink-0" style="background:#807d72"></span>
+                            <p class="text-[12.5px] text-ink-body leading-relaxed">你今天集中在认证模块，需要我持续追踪相关的代码模式吗？</p>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="w-1 h-1 rounded-full mt-2 flex-shrink-0" style="background:#807d72"></span>
+                            <p class="text-[12.5px] text-ink-body leading-relaxed">重构后建议补充单元测试，当前 auth 套件覆盖率 87%。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="agentAction('resume')" class="flex-1 py-2.5 btn-secondary text-[12px] font-medium">继续上一轮</button>
+                    <button onclick="agentAction('summary')" class="flex-1 py-2.5 btn-secondary text-[12px] font-medium">总结会话</button>
+                    <button onclick="agentAction('export')" class="flex-1 py-2.5 btn-secondary text-[12px] font-medium">导出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // AI avatar markup (ink rounded square w/ cursor glyph)
+        const AI_AVATAR = '<div class="ai-avatar"></div>';
+        function paintAvatars() {
+            document.querySelectorAll('.ai-avatar').forEach(a => {
+                if (a.dataset.done) return;
+                a.dataset.done = '1';
+                a.className = 'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5';
+                a.style.background = '#26251e';
+                a.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#f7f7f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>';
+            });
+        }
+        paintAvatars();
+
+        // ===== Tool grid =====
+        const TOOLS = [
+            ['搜索', 'search', '搜索认证代码'],
+            ['代码对比', 'git-compare', 'git diff 对比'],
+            ['运行测试', 'play', '运行测试'],
+            ['重构', 'wand-2', '重构这段代码'],
+            ['调试', 'bug', '调试这个错误'],
+            ['文档', 'file-text', '生成文档'],
+            ['解释', 'message-square', '解释这段代码'],
+            ['生成测试', 'shield-check', '生成测试'],
+            ['评审', 'eye', '评审代码'],
+        ];
+        (function renderTools() {
+            const g = document.getElementById('toolGrid');
+            g.innerHTML = TOOLS.map(([label, ic, msg]) =>
+                `<button onclick="sendQuickMessage('${msg}')" class="flex flex-col items-center gap-2 p-3.5 card hover:bg-canvas-soft transition-colors">
+                    <span class="w-9 h-9 rounded-md flex items-center justify-center bg-canvas-soft border border-hairline">
+                        <i data-lucide="${ic}" class="w-[18px] h-[18px] text-ink-body"></i>
+                    </span>
+                    <span class="text-[12px] font-medium text-ink">${label}</span>
+                </button>`
+            ).join('');
+            lucide.createIcons();
+        })();
+
+        // ===== Navigation =====
+        function goToHistory() {
+            chatScreen.classList.replace('screen-active','screen-right');
+            historyScreen.classList.replace('screen-left','screen-active');
+        }
+        function goToChat() {
+            historyScreen.classList.replace('screen-active','screen-left');
+            chatScreen.classList.replace('screen-right','screen-active');
+        }
+        const chatScreen = document.getElementById('chatScreen');
+        const historyScreen = document.getElementById('historyScreen');
+
+        function newConversation() {
+            goToChat();
+            const msgs = document.getElementById('messagesArea');
+            msgs.innerHTML = `
+                <div class="flex items-center justify-center gap-3 py-1">
+                    <div class="h-px flex-1 hr-dash"></div>
+                    <span class="label-up text-ink-muted">新会话</span>
+                    <div class="h-px flex-1 hr-dash"></div>
+                </div>
+                <div class="flex gap-2.5 anim-slide-down">
+                    ${AI_AVATAR}
+                    <div class="flex-1 min-w-0">
+                        <div class="msg-ai inline-block px-3.5 py-2.5 max-w-[88%] text-[14px] leading-relaxed">新会话已就绪，今天处理什么任务？</div>
+                    </div>
+                </div>`;
+            paintAvatars();
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        // ===== Sheets =====
+        function toggleSheet(sheetId, overlayId) {
+            const sheet = document.getElementById(sheetId);
+            const overlay = document.getElementById(overlayId);
+            const hidden = sheet.classList.contains('hidden-sheet');
+            sheet.classList.toggle('hidden-sheet', !hidden);
+            overlay.classList.toggle('hidden-overlay', !hidden);
+        }
+        function toggleToolDrawer() { toggleSheet('toolDrawer','toolOverlay'); }
+        function toggleAgentPanel() { toggleSheet('agentPanel','agentOverlay'); }
+
+        function agentAction(type) {
+            const map = { resume: '已恢复上一轮上下文。', summary: '会话摘要已生成。', export: '会话已导出为 Markdown。' };
+            const body = document.getElementById('agentBody');
+            const old = body.querySelector('.agent-toast'); if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = 'agent-toast anim-pop-in card p-3 flex items-center gap-2';
+            toast.style.borderColor = '#cfcdc4';
+            toast.innerHTML = `<i data-lucide="check" class="w-4 h-4" style="color:#1f8a65"></i><p class="text-[12.5px] text-ink font-medium">${map[type]}</p>`;
+            body.insertBefore(toast, body.firstChild);
+            lucide.createIcons();
+            setTimeout(() => { toast.style.transition='opacity .4s ease'; toast.style.opacity='0'; setTimeout(()=>toast.remove(),400); }, 1800);
+        }
+
+        // ===== Messaging =====
+        function autoResize(t) { t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
+        function handleEnter(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); onPrimaryButton(); } }
+
+        // The send button doubles as a stop control while the agent is streaming.
+        function setSendButton(stop) {
+            const b = document.getElementById('sendBtn');
+            if (!b) return;
+            if (stop) {
+                b.setAttribute('aria-label','停止生成');
+                b.innerHTML = '<span style="width:11px;height:11px;background:#fff;border-radius:2px;display:block"></span>';
+            } else {
+                b.setAttribute('aria-label','发送');
+                b.innerHTML = '<i data-lucide="arrow-up" class="w-[18px] h-[18px]"></i>';
+                lucide.createIcons();
+            }
+        }
+        function onPrimaryButton() {
+            if (streaming) { cancelRequested = true; return; }
+            sendMessage();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+            addUserMessage(text);
+            input.value=''; input.style.height='auto';
+            agentTrace(buildScript(text), { animate: true });
+        }
+        function sendQuickMessage(text) {
+            const drawer = document.getElementById('toolDrawer');
+            if (drawer && !drawer.classList.contains('hidden-sheet')) toggleToolDrawer();
+            addUserMessage(text);
+            agentTrace(buildScript(text), { animate: true });
+        }
+
+        function addUserMessage(text) {
+            const msgs = document.getElementById('messagesArea');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2.5 justify-end anim-slide-up';
+            div.innerHTML = `
+                <div class="flex-1 flex flex-col items-end">
+                    <div class="msg-user inline-block px-3.5 py-2.5 max-w-[88%] text-[14px] leading-relaxed">${escapeHtml(text)}</div>
+                    <span class="text-[10px] text-ink-faint mt-1 mr-1 mono">${nowTime()}</span>
+                </div>`;
+            msgs.appendChild(div);
+            forceScroll();
+        }
+
+        // ===== Streaming helpers =====
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        function el(html) { const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+        function nowTime() { return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}); }
+
+        // Smart autoscroll: follow the stream only while the user sits near the bottom.
+        let autoScroll = true;
+        let streaming = false;
+        let cancelRequested = false;
+        function scrollMsgs() { const m=document.getElementById('messagesArea'); if (autoScroll) m.scrollTop=m.scrollHeight; }
+        function forceScroll() { autoScroll = true; const m=document.getElementById('messagesArea'); m.scrollTop=m.scrollHeight; }
+        function checkSvg(px) { return '<svg style="width:'+px+'px;height:'+px+'px" viewBox="0 0 24 24" fill="none" stroke="#26251e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+
+        async function streamText(span, text, speed) {
+            speed = speed || 14;
+            if (reduceMotion || cancelRequested) { span.textContent = text; return; }
+            const cur = document.createElement('span'); cur.className='t-cursor'; span.after(cur);
+            for (let i=0;i<text.length;i++){
+                if (cancelRequested) { span.textContent = text; break; }
+                span.textContent+=text[i]; if(i%3===0) scrollMsgs();
+                await sleep(text[i]==='\n'?speed+40:speed);
+            }
+            cur.remove();
+        }
+
+        const STAGE_LABEL = { thinking:'THINKING', grep:'GREP', read:'READ', edit:'EDIT', done:'DONE' };
+
+        async function agentTrace(script, opts) {
+            const animate = !opts || opts.animate !== false;
+            const msgs = document.getElementById('messagesArea');
+            const time = nowTime();
+            if (animate) { streaming = true; cancelRequested = false; forceScroll(); setSendButton(true); }
+
+            const row = el('<div class="flex gap-2.5 anim-slide-down"></div>');
+            row.innerHTML = AI_AVATAR + '<div class="flex-1 min-w-0"></div>';
+            const wrap = row.lastElementChild;
+
+            const trace = el('<div class="trace mb-1.5 max-w-[92%]"></div>');
+            trace.innerHTML =
+                '<button type="button" class="trace-head" aria-expanded="true">'
+                + '<span class="thead-ic"></span>'
+                + '<span class="thead-label">思考中…</span>'
+                + '<svg class="t-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+                + '</button><div class="trace-rail"></div>';
+            const headIc = trace.querySelector('.thead-ic');
+            const headLabel = trace.querySelector('.thead-label');
+            const rail = trace.querySelector('.trace-rail');
+            trace.querySelector('.trace-head').addEventListener('click', () => {
+                const c = trace.classList.toggle('collapsed');
+                trace.querySelector('.trace-head').setAttribute('aria-expanded', String(!c));
+            });
+            wrap.appendChild(trace);
+
+            const typing = document.getElementById('typingIndicator');
+            if (typing && typing.parentNode === msgs) msgs.insertBefore(row, typing); else msgs.appendChild(row);
+            paintAvatars();
+            scrollMsgs();
+
+            headIc.innerHTML = animate ? '<span class="t-spin" style="width:13px;height:13px;display:block"></span>' : checkSvg(13);
+
+            for (let i=0;i<script.steps.length;i++) {
+                const s = script.steps[i];
+                const step = el('<div class="t-step open"></div>');
+                step.innerHTML =
+                    '<span class="t-node '+s.stage+' running"></span>'
+                    + '<button type="button" class="t-head">'
+                    + '<span class="stage-pill '+s.stage+'">'+(STAGE_LABEL[s.stage]||s.stage)+'</span>'
+                    + '<span class="t-sub"></span>'
+                    + '<svg class="t-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>'
+                    + '<div class="t-body"><div class="t-body-inner"></div></div>';
+                const node = step.querySelector('.t-node');
+                const sub = step.querySelector('.t-sub');
+                const bodyInner = step.querySelector('.t-body-inner');
+                step.querySelector('.t-head').addEventListener('click', () => step.classList.toggle('open'));
+                rail.appendChild(step);
+
+                if (animate && !cancelRequested) {
+                    node.innerHTML = '<span class="t-spin" style="width:9px;height:9px;display:block"></span>';
+                    sub.textContent = s.sub;
+                    headLabel.textContent = s.title + ' · 进行中';
+                    scrollMsgs();
+                    const t = document.createElement('span'); bodyInner.appendChild(t);
+                    await streamText(t, s.body, 12);
+                    if (s.code) { const c=el('<div class="t-code"></div>'); bodyInner.appendChild(c); const cs=document.createElement('span'); c.appendChild(cs); await streamText(cs, s.code, 6); }
+                    if (!cancelRequested) await sleep(260);
+                    node.className='t-node done'; node.innerHTML=checkSvg(9);
+                    sub.textContent = s.done;
+                    step.classList.remove('open');
+                    if (!cancelRequested) await sleep(140);
+                } else {
+                    node.className='t-node done'; node.innerHTML=checkSvg(9);
+                    sub.textContent = s.done;
+                    bodyInner.textContent = s.body;
+                    if (s.code) { const c=el('<div class="t-code"></div>'); c.textContent=s.code; bodyInner.appendChild(c); }
+                    step.classList.remove('open');
+                }
+            }
+
+            headLabel.textContent = '推理完成 · ' + script.steps.length + ' 步';
+            headIc.innerHTML = checkSvg(13);
+            trace.classList.add('collapsed');
+            trace.querySelector('.trace-head').setAttribute('aria-expanded','false');
+
+            const ansWrap = el('<div></div>');
+            const bubble = el('<div class="msg-ai inline-block px-3.5 py-2.5 max-w-[92%] text-[14px] leading-relaxed"></div>');
+            const p = document.createElement('span'); bubble.appendChild(p);
+            ansWrap.appendChild(bubble);
+            ansWrap.insertAdjacentHTML('beforeend', '<span class="text-[10px] text-ink-faint mt-1 ml-1 block mono">'+time+'</span>');
+            wrap.appendChild(ansWrap);
+            scrollMsgs();
+
+            if (animate && !cancelRequested) await streamText(p, script.answer, 15); else p.textContent = script.answer;
+            if (script.card) { bubble.insertAdjacentHTML('beforeend', script.card); lucide.createIcons(); }
+            if (animate) { streaming = false; cancelRequested = false; setSendButton(false); }
+            scrollMsgs();
+        }
+
+        // ===== Result cards =====
+        function fileCard(files) {
+            const rows = files.map(f =>
+                '<div class="mono text-[11.5px] px-3 py-2 rounded-md" style="background:#fafaf7;border:1px solid #e6e5e0;"><span class="text-ink-muted">src/auth/</span><span class="text-ink">'+f+'</span></div>'
+            ).join('');
+            return '<div class="t-result card p-3">'
+                + '<div class="flex items-center gap-2 mb-2"><i data-lucide="search" class="w-3.5 h-3.5 text-ink-muted"></i>'
+                + '<span class="text-[12px] font-semibold text-ink">代码搜索</span>'
+                + '<span class="text-[10px] text-ink-muted ml-auto mono">'+files.length+' 个结果</span></div>'
+                + '<div class="space-y-1.5">'+rows+'</div></div>';
+        }
+        function listCard(title, items) {
+            const lis = items.map(x =>
+                '<div class="flex items-start gap-2"><svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="#1f8a65" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+                + '<span class="text-[12.5px] text-ink-body leading-relaxed">'+x+'</span></div>'
+            ).join('');
+            return '<div class="t-result card p-3"><p class="text-[12px] font-semibold text-ink mb-2">'+title+'</p>'
+                + '<div class="space-y-1.5">'+lis+'</div></div>';
+        }
+
+        // ===== Map message -> reasoning script (stages use Cursor timeline tokens) =====
+        function buildScript(text) {
+            const t = (text||'').toLowerCase();
+            if (t.includes('search')||t.includes('搜索')||t.includes('auth')||t.includes('认证')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'规划检索范围', done:'锁定 auth 模块',
+                      body:'用户要重构认证模块。\n先在 src 下检索认证相关代码，再读候选文件确认边界。' },
+                    { stage:'grep', title:'Grep', sub:'搜索 auth 关键字', done:'命中 3 个文件',
+                      body:'在 src/auth 下检索 token / login 相关实现。',
+                      code:'$ grep -rn "authenticate(" src/\n→ 3 matches\n  AuthProvider.java  TokenManager.java  AuthFilter.java' },
+                    { stage:'read', title:'Read', sub:'读取候选文件', done:'确认重构入口',
+                      body:'快速浏览三个文件的公共方法与依赖关系。' },
+                ],
+                answer:'在代码库里找到 3 个相关文件，需要我展开某个文件看具体内容吗？',
+                card: fileCard(['AuthProvider.java','TokenManager.java','AuthFilter.java'])
+            };
+            if (t.includes('refactor')||t.includes('重构')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'拆解重构目标', done:'理出 3 个步骤',
+                      body:'目标是同时提升可读性与可测试性。\n先看现有实现的耦合点，再决定抽取边界。' },
+                    { stage:'read', title:'Read', sub:'分析现有实现', done:'定位坏味道',
+                      body:'查看 AuthProvider 的构造与校验逻辑。',
+                      code:'class AuthProvider {\n  Token login(Cred c){ /* 校验 + 取 token 混在一起 */ }\n}' },
+                    { stage:'edit', title:'Edit', sub:'套用重构方案', done:'生成重构补丁',
+                      body:'抽出校验类 → 依赖注入 provider → 给 token 加判空。' },
+                ],
+                answer:'分析完成，建议按这三步重构：',
+                card: listCard('重构方案', ['把校验逻辑抽到独立的类','认证 provider 改用依赖注入','给 TokenManager 增加空安全判断'])
+            };
+            if (t.includes('debug')||t.includes('调试')||t.includes('error')||t.includes('bug')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'复现并定位问题', done:'怀疑空指针',
+                      body:'从报错堆栈看，问题出在 token 使用环节，先搜可疑调用。' },
+                    { stage:'grep', title:'Grep', sub:'定位 token 使用点', done:'锁定第 147 行',
+                      body:'检索 token 在 AuthProvider 中的引用位置。',
+                      code:'$ grep -n "token." src/auth/AuthProvider.java\n147:  return token.getUserId();  // ← 未判空' },
+                    { stage:'read', title:'Read', sub:'检查第 147 行上下文', done:'确认缺少守卫',
+                      body:'第 147 行在使用 token 前没有任何 null 检查。' },
+                ],
+                answer:'找到问题：AuthProvider.java 第 147 行在使用前没有判空。加一个守卫判断即可修复。'
+            };
+            if (t.includes('test')||t.includes('测试')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'选择测试范围', done:'只跑 auth 套件',
+                      body:'改动集中在 auth 模块，先跑相关单元测试即可。' },
+                    { stage:'done', title:'Run', sub:'运行测试套件', done:'24 个全部通过',
+                      body:'执行 auth 模块的测试。',
+                      code:'$ mvn -q test -Dtest=Auth*\n... 24 passed in 3.2s   coverage 87%' },
+                ],
+                answer:'24 个测试全部通过，用时 3.2s，覆盖率 87%。'
+            };
+            if (t.includes('git')||t.includes('diff')||t.includes('对比')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'确定对比范围', done:'对比工作区改动',
+                      body:'看看最近一次改动都落在哪些文件。' },
+                    { stage:'done', title:'Run', sub:'执行 git diff', done:'+42 / -8',
+                      body:'统计本次改动的增删行数。',
+                      code:'$ git diff --stat\n auth/AuthProvider.java | 50 ++++++---\n 1 file changed, 42 insertions(+), 8 deletions(-)' },
+                ],
+                answer:'最新改动：新增 42 行、删除 8 行，主要集中在 auth 模块。'
+            };
+            if (t.includes('doc')||t.includes('文档')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'梳理文档结构', done:'定下 3 个章节',
+                      body:'按公共 API、配置项、用法示例三部分组织。' },
+                    { stage:'edit', title:'Edit', sub:'生成模块文档', done:'已生成 Markdown',
+                      body:'为 auth 模块的公开接口逐一补充说明与示例。' },
+                ],
+                answer:'我为 auth 模块生成了文档，涵盖公共 API、配置项和用法示例。还要补充什么吗？'
+            };
+            if (t.includes('review')||t.includes('评审')||t.includes('解释')) return {
+                steps: [
+                    { stage:'thinking', title:'思考', sub:'确定评审重点', done:'聚焦正确性',
+                      body:'重点看输入校验与边界条件。' },
+                    { stage:'read', title:'Read', sub:'通读改动', done:'发现 2 处问题',
+                      body:'逐行查看本次提交的 diff。' },
+                    { stage:'edit', title:'Edit', sub:'汇总评审意见', done:'生成评审清单',
+                      body:'把发现的问题整理成可执行的修改建议。' },
+                ],
+                answer:'评审完成，发现 2 个小问题：第 89 行缺少输入校验；第 203 行的魔法数字建议提取为常量。整体结构良好。'
+            };
+            return {
+                steps: [ { stage:'thinking', title:'思考', sub:'理解你的需求', done:'已理解意图',
+                    body:'先确认你想达成的目标，再决定要不要调用工具。' } ],
+                answer:'明白了，告诉我更多细节，我来帮你。'
+            };
+        }
+
+        function escapeHtml(text) { const d=document.createElement('div'); d.textContent=text; return d.innerHTML; }
+
+        // ===== History search =====
+        function filterHistory(q) {
+            q = (q || '').trim().toLowerCase();
+            const active = q.length > 0;
+            let visible = 0;
+            document.querySelectorAll('.journal-card').forEach(c => {
+                const hit = !active || c.textContent.toLowerCase().includes(q);
+                c.style.display = hit ? '' : 'none';
+                if (hit) visible++;
+            });
+            document.querySelectorAll('.hist-month').forEach(m => { m.style.display = active ? 'none' : ''; });
+            const empty = document.getElementById('historyEmpty');
+            if (empty) empty.classList.toggle('hidden', visible > 0);
+        }
+
+        // ===== Init =====
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            paintAvatars();
+            const msgs = document.getElementById('messagesArea');
+            msgs.addEventListener('scroll', () => {
+                const nearBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
+                autoScroll = nearBottom;
+            });
+            agentTrace(buildScript('refactor auth module'), { animate: false });
+            msgs.scrollTop = msgs.scrollHeight;
+        });
+    </script>
+</body>
+</html>

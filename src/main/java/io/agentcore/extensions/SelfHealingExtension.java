@@ -128,6 +128,14 @@ public class SelfHealingExtension implements Extension {
         return Map.copyOf(fixesApplied);
     }
 
+    /**
+     * Clear accumulated fix state. Called by Agent.reset() to prevent
+     * unbounded growth of fixesApplied across multiple prompt() calls.
+     */
+    public void clearState() {
+        fixesApplied.clear();
+    }
+
     // ── Detection helpers ──
 
     public String detectMissingModule(String text) {

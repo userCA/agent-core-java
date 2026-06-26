@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>日志 · Claude</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        canvas:        '#faf9f5',
+                        'surface-soft':'#f5f0e8',
+                        'surface-card':'#efe9de',
+                        'cream-strong':'#e8e0d2',
+                        dark:          '#181715',
+                        'dark-elev':   '#252320',
+                        'dark-soft':   '#1f1e1b',
+                        hairline:      '#e6dfd8',
+                        'hairline-soft':'#ebe6df',
+                        ink:           '#141413',
+                        'body-strong': '#252523',
+                        body:          '#3d3d3a',
+                        muted:         '#6c6a64',
+                        'muted-soft':  '#8e8b82',
+                        'on-dark':     '#faf9f5',
+                        'on-dark-soft':'#a09d96',
+                        primary:       '#cc785c',
+                        'primary-active':'#a9583e',
+                        teal:          '#5db8a6',
+                        amber:         '#e8a55a',
+                        success:       '#5db872',
+                    },
+                    fontFamily: {
+                        serif: ['Cormorant Garamond', 'Noto Serif SC', 'Georgia', 'Times New Roman', 'serif'],
+                        sans:  ['Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono:  ['JetBrains Mono', 'ui-monospace', 'SF Mono', 'Menlo', 'monospace'],
+                    },
+                    borderRadius: { 'md2': '8px', 'lg2': '12px', 'xl2': '16px', 'pill': '9999px' },
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; }
+        :root {
+            --canvas: #faf9f5; --surface-soft: #f5f0e8; --surface-card: #efe9de; --cream-strong: #e8e0d2;
+            --dark: #181715; --dark-elev: #252320; --dark-soft: #1f1e1b;
+            --hairline: #e6dfd8; --hairline-soft: #ebe6df;
+            --ink: #141413; --body-strong: #252523; --body: #3d3d3a; --muted: #6c6a64; --muted-soft: #8e8b82;
+            --on-dark: #faf9f5; --on-dark-soft: #a09d96;
+            --primary: #cc785c; --primary-active: #a9583e;
+            --teal: #5db8a6; --amber: #e8a55a; --success: #5db872;
+        }
+
+        /* Dark mode overrides (system) */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --canvas: #161513; --surface-soft: #1f1d1a; --surface-card: #24221f; --cream-strong: #2a2724;
+                --dark: #faf9f5; --dark-elev: #e8e0d2; --dark-soft: #252320;
+                --hairline: #3b3834; --hairline-soft: #2f2d29;
+                --ink: #f4f3ef; --body-strong: #e0ded8; --body: #bfbdb4; --muted: #9b9890; --muted-soft: #7a7770;
+                --on-dark: #141413; --on-dark-soft: #4f4c47;
+                --primary: #d9896d; --primary-active: #e49a80;
+                --teal: #6ecfb6; --amber: #f2b86d; --success: #6fd18a;
+            }
+            body { background: #0f0e0d; }
+            .phone-frame { box-shadow: 0 30px 90px -18px rgba(0,0,0,0.55); }
+            .t-code {
+                background: #181715 !important;
+                border: 1px solid var(--hairline);
+            }
+            .msg-user { color: #141413; }
+            .custom-scroll::-webkit-scrollbar-thumb { background: #45423c; }
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+            background: #ece6da;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+        }
+        button, [role="button"], .journal-card, .press, [onclick] { cursor: pointer; }
+        .font-display { font-family: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif; letter-spacing: -0.01em; }
+
+        .phone-frame {
+            width: 390px; height: 844px; max-height: 98vh;
+            background: var(--canvas);
+            border-radius: 44px;
+            border: 1px solid var(--hairline);
+            box-shadow: 0 30px 90px -18px rgba(20,20,19,0.28);
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        @media (max-width: 420px) {
+            .phone-frame { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: none; border: none; }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #d8d0c2; border-radius: 4px; }
+
+        /* Animations */
+        @keyframes slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideDown { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes popIn { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes floatOnce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+        @keyframes typing { 0%,60%,100% { opacity: 0.3; } 30% { opacity: 1; } }
+        .anim-slide-up { animation: slideUp 0.34s cubic-bezier(0.22,1,0.36,1) forwards; }
+        .anim-slide-down { animation: slideDown 0.3s cubic-bezier(0.22,1,0.36,1) forwards; }
+        .anim-pop-in { animation: popIn 0.26s cubic-bezier(0.22,1,0.36,1) forwards; }
+        .float-once { animation: floatOnce 3.2s ease-in-out 1; }
+        .typing-dot { animation: typing 1.3s ease-in-out infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.16s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.32s; }
+        @media (prefers-reduced-motion: reduce) {
+            .anim-slide-up, .anim-slide-down, .anim-pop-in, .float-once, .typing-dot { animation: none; }
+        }
+
+        /* Header scrolled state */
+        header { transition: box-shadow 0.2s ease; }
+        header.scrolled { box-shadow: 0 1px 0 rgba(0,0,0,0.06); }
+        @media (prefers-color-scheme: dark) { header.scrolled { box-shadow: 0 1px 0 rgba(255,255,255,0.08); } }
+
+        /* Message bubbles — cream AI / dark-navy user */
+        .msg-ai {
+            background: var(--surface-card); color: var(--ink);
+            border: 1px solid var(--hairline);
+            border-radius: 14px 14px 14px 5px;
+        }
+        .msg-user {
+            background: var(--dark); color: var(--on-dark);
+            border-radius: 14px 14px 5px 14px;
+        }
+
+        .input-focus { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+        .input-focus:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(204,120,92,0.15); }
+        @media (prefers-color-scheme: dark) { .input-focus:focus { box-shadow: 0 0 0 3px rgba(217,137,109,0.18); } }
+
+        .press { transition: transform 0.14s ease, background-color 0.18s ease, border-color 0.18s ease; }
+        .press:active { transform: scale(0.97); }
+
+        .btn-primary { background: var(--primary); color: #fff; transition: transform 0.14s ease, background-color 0.18s ease; }
+        .btn-primary:active { transform: scale(0.96); background: var(--primary-active); }
+        .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .btn-icon { background: var(--canvas); border: 1px solid var(--hairline); transition: background-color 0.18s ease, transform 0.14s ease; }
+        .btn-icon:hover { background: var(--surface-soft, #f5f0e8); }
+        .btn-icon:active { transform: scale(0.94); }
+
+        .card-cream { background: var(--surface-card); border: 1px solid var(--hairline); transition: box-shadow 0.18s ease, transform 0.14s ease, border-color 0.18s ease; }
+        .journal-card:active { transform: scale(0.99); }
+        .journal-card:hover { box-shadow: 0 1px 3px rgba(20,20,19,0.08); }
+        @media (prefers-color-scheme: dark) { .journal-card:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.35); } }
+
+        .chip { background: var(--canvas); border: 1px solid var(--hairline); color: var(--ink); transition: background-color 0.18s ease, transform 0.14s ease; }
+        .chip:hover { background: var(--surface-soft, #f5f0e8); }
+        .chip:active { transform: scale(0.97); }
+
+        /* Sheets */
+        .bottom-sheet { transition: transform 0.36s cubic-bezier(0.32,0.72,0,1); }
+        .bottom-sheet.hidden-sheet { transform: translateY(101%); }
+        .overlay { transition: opacity 0.24s ease; }
+        .overlay.hidden-overlay { opacity: 0; pointer-events: none; }
+
+        /* Screen transitions */
+        .screen { position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column;
+            transition: transform 0.34s cubic-bezier(0.32,0.72,0,1), opacity 0.24s ease; }
+        .screen-left { transform: translateX(-22%); opacity: 0; pointer-events: none; }
+        .screen-right { transform: translateX(100%); opacity: 0; pointer-events: none; }
+        .screen-active { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+        /* Mood meter */
+        .meter { background: var(--cream-strong); border-radius: 9999px; overflow: hidden; }
+        .meter-fill { border-radius: 9999px; background: var(--primary); }
+
+        button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        /* ===== Agent reasoning thread ===== */
+        .trace {
+            background: var(--canvas);
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .trace-head {
+            width: 100%; display: flex; align-items: center; gap: 9px;
+            padding: 10px 14px; cursor: pointer; text-align: left;
+            background: var(--cream-strong); transition: background-color 0.18s ease;
+        }
+        .trace-head:hover { background: var(--surface-card); }
+        .trace.collapsed .trace-rail { display: none; }
+        .trace-rail { padding: 12px 14px 14px; }
+        .thead-ic { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .thead-label { flex: 1; font-size: 13px; font-weight: 500; color: var(--ink); }
+
+        .t-step { position: relative; padding-left: 28px; }
+        .t-step + .t-step { margin-top: 4px; }
+        .t-step::before {
+            content: ''; position: absolute; left: 9px; top: 20px; bottom: -4px;
+            border-left: 1px solid var(--hairline);
+        }
+        .t-step:last-child::before { display: none; }
+        .t-node {
+            position: absolute; left: 0; top: 1px;
+            width: 19px; height: 19px; border-radius: 50%;
+            border: 1px solid var(--hairline); background: var(--surface-card);
+            display: flex; align-items: center; justify-content: center; z-index: 1;
+        }
+        .t-node.think { background: #f7e7d2; border-color: #ecc99e; color: #b07a35; }
+        .t-node.tool  { background: #ddf0ec; border-color: #a9ddd1; color: #2e8576; }
+        .t-node.skill { background: #f3ddd3; border-color: #e2b09c; color: var(--primary-active); }
+        .t-node.running { background: var(--canvas); }
+        .t-node.done  { background: #ddeedf; border-color: #a8d6b1; color: #3f8d52; }
+        .t-node svg { width: 11px; height: 11px; }
+        @media (prefers-color-scheme: dark) {
+            .t-node.think { background: #3d3326; border-color: #6b583d; color: #f2b86d; }
+            .t-node.tool  { background: #233c38; border-color: #3d6b61; color: #6ecfb6; }
+            .t-node.skill { background: #3d2c26; border-color: #6b4a3d; color: #e49a80; }
+            .t-node.done  { background: #263d2b; border-color: #3d6b4a; color: #6fd18a; }
+        }
+
+        .t-head {
+            width: 100%; display: flex; align-items: center; gap: 8px;
+            padding: 1px 2px; cursor: pointer; text-align: left;
+            border-radius: 8px; transition: background-color 0.18s ease;
+        }
+        .t-head:hover { background: var(--surface-card); }
+        .t-kind { font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+        .t-sub { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .t-chev { width: 14px; height: 14px; color: var(--muted-soft); transition: transform 0.2s ease; flex-shrink: 0; }
+        .t-step.open > .t-head .t-chev { transform: rotate(90deg); }
+        .trace-head .t-chev { transform: rotate(90deg); }
+        .trace.collapsed .trace-head .t-chev { transform: rotate(0deg); }
+
+        .t-body { max-height: 0; overflow: hidden; transition: max-height 0.36s ease; }
+        .t-step.open > .t-body { max-height: 600px; }
+        .t-body-inner { font-size: 12.5px; line-height: 1.65; color: var(--body); padding: 6px 2px 8px 0; white-space: pre-wrap; word-break: break-word; }
+        .t-code {
+            background: var(--dark-soft); color: var(--on-dark); border-radius: 8px;
+            padding: 10px 12px; margin-top: 7px;
+            font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+            font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+        }
+        .t-code .kw { color: #c792ea; }
+        .t-code .str { color: #c3e88d; }
+        .t-code .num { color: #f78c6c; }
+        .t-code .com { color: #676e95; font-style: italic; }
+        .t-code .fn { color: #82aaff; }
+        .t-code .var { color: #f07178; }
+        .t-code .sym { color: #89ddff; }
+        .t-code .cmd { color: #82aaff; }
+
+        .t-cursor { display: inline-block; width: 6px; height: 13px; background: var(--muted); margin-left: 1px; vertical-align: -1px; animation: cursorBlink 1s steps(2) infinite; }
+        @keyframes cursorBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        .t-spin { border: 1.5px solid #d8d0c2; border-top-color: var(--ink); border-radius: 50%; animation: tSpin 0.7s linear infinite; }
+        @media (prefers-color-scheme: dark) { .t-spin { border-color: #45423c; border-top-color: var(--ink); } }
+        @keyframes tSpin { to { transform: rotate(360deg); } }
+        .t-result { margin-top: 9px; }
+        @media (prefers-reduced-motion: reduce) {
+            .t-spin, .t-cursor { animation: none; }
+            .t-body { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame" id="phoneFrame">
+        <!-- ==================== CHAT SCREEN ==================== -->
+        <div class="screen screen-active" id="chatScreen">
+            <header class="flex items-center justify-between px-4 pt-12 pb-3 bg-canvas/90 backdrop-blur-md z-20 border-b border-hairline-soft" id="chatHeader">
+                <button onclick="goToHistory()" class="btn-icon w-9 h-9 flex items-center justify-center rounded-pill" aria-label="历史记录">
+                    <i data-lucide="book-open" class="w-[18px] h-[18px] text-ink"></i>
+                </button>
+                <div class="flex flex-col items-center">
+                    <h1 class="font-display text-ink" style="font-size: 22px; font-weight: 600; line-height: 1;">日志</h1>
+                    <span class="text-[11px] text-muted flex items-center gap-1.5 mt-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-success"></span>
+                        Claude 在线
+                    </span>
+                </div>
+                <button onclick="toggleCompanionPanel()" class="btn-icon w-9 h-9 flex items-center justify-center rounded-pill" aria-label="伙伴面板">
+                    <i data-lucide="settings" class="w-[18px] h-[18px] text-ink"></i>
+                </button>
+            </header>
+
+            <div class="flex-1 overflow-y-auto custom-scroll px-4 py-5 space-y-4" id="messagesArea">
+                <div class="flex items-center justify-center gap-3 py-1">
+                    <div class="h-px flex-1 bg-hairline"></div>
+                    <span class="text-[11px] text-muted font-medium tracking-wide">今天</span>
+                    <div class="h-px flex-1 bg-hairline"></div>
+                </div>
+
+                <!-- AI Welcome -->
+                <div class="flex gap-2.5 anim-slide-down" style="animation-delay: 0.05s">
+                    <div class="w-8 h-8 rounded-full bg-surface-card border border-hairline flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="12" y1="3.2" x2="12" y2="20.8"/><line x1="4.4" y1="7.6" x2="19.6" y2="16.4"/><line x1="4.4" y1="16.4" x2="19.6" y2="7.6"/></svg>
+                    </div>
+                    <div class="flex-1">
+                        <div class="msg-ai inline-block px-4 py-2.5 max-w-[86%] text-[15px] leading-relaxed">
+                            早上好，今天想在日志里记录点什么？
+                        </div>
+                        <span class="text-[10px] text-muted-soft mt-1 ml-1 block">8:32 AM</span>
+                    </div>
+                </div>
+
+                <!-- User message -->
+                <div class="flex gap-2.5 justify-end anim-slide-up" style="animation-delay: 0.12s">
+                    <div class="flex-1 flex flex-col items-end">
+                        <div class="msg-user inline-block px-4 py-2.5 max-w-[86%] text-[15px] leading-relaxed">
+                            我想重构认证模块，能帮我搜一下相关代码吗？
+                        </div>
+                        <span class="text-[10px] text-muted-soft mt-1 mr-1">8:33 AM</span>
+                    </div>
+                </div>
+
+                <!-- Typing indicator -->
+                <div class="flex gap-2.5" id="typingIndicator" style="display: none;">
+                    <div class="w-8 h-8 rounded-full bg-surface-card border border-hairline flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="12" y1="3.2" x2="12" y2="20.8"/><line x1="4.4" y1="7.6" x2="19.6" y2="16.4"/><line x1="4.4" y1="16.4" x2="19.6" y2="7.6"/></svg>
+                    </div>
+                    <div class="msg-ai px-4 py-3">
+                        <div class="flex gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-muted typing-dot"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-muted typing-dot"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-muted typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suggestion chips -->
+            <div class="px-4 pb-2 bg-canvas" id="suggestionPills">
+                <div class="flex gap-2 overflow-x-auto pb-1.5 custom-scroll" style="scrollbar-width: none;">
+                    <button onclick="sendQuickMessage('搜索认证代码')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-muted"></i><span>搜索认证</span>
+                    </button>
+                    <button onclick="sendQuickMessage('查看 git diff')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="git-compare" class="w-3.5 h-3.5 text-muted"></i><span>代码对比</span>
+                    </button>
+                    <button onclick="sendQuickMessage('运行测试')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="play" class="w-3.5 h-3.5 text-muted"></i><span>运行测试</span>
+                    </button>
+                    <button onclick="sendQuickMessage('帮我重构')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="wand-2" class="w-3.5 h-3.5 text-muted"></i><span>重构</span>
+                    </button>
+                    <button onclick="sendQuickMessage('调试报错')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="bug" class="w-3.5 h-3.5 text-muted"></i><span>调试</span>
+                    </button>
+                    <button onclick="sendQuickMessage('写文档')" class="chip press flex items-center gap-1.5 px-3 py-2 rounded-md2 text-[13px] font-medium whitespace-nowrap">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-muted"></i><span>文档</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Input area -->
+            <div class="px-4 pb-5 pt-2 bg-canvas border-t border-hairline-soft">
+                <div class="flex items-end gap-2">
+                    <button onclick="toggleToolDrawer()" class="btn-icon w-11 h-11 flex items-center justify-center rounded-pill flex-shrink-0" aria-label="工具">
+                        <i data-lucide="plus" class="w-5 h-5 text-ink"></i>
+                    </button>
+                    <div class="flex-1 relative">
+                        <textarea id="messageInput" rows="1" placeholder="写点什么…" aria-label="消息输入"
+                            class="w-full px-4 py-3 bg-canvas border border-hairline rounded-lg2 text-[15px] text-ink placeholder:text-muted-soft resize-none input-focus leading-relaxed"
+                            style="min-height: 44px; max-height: 120px;"
+                            oninput="autoResize(this)" onkeydown="handleEnter(event)"></textarea>
+                    </div>
+                    <button onclick="sendMessage()" id="sendBtn" class="btn-primary w-11 h-11 rounded-lg2 flex items-center justify-center flex-shrink-0" aria-label="发送">
+                        <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Companion chip (float-once, not infinite) -->
+                <div class="flex justify-center mt-3">
+                    <button id="companionChip" onclick="toggleCompanionPanel()" class="float-once chip press flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-pill" aria-label="伙伴状态">
+                        <span class="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="11" r="1.1" fill="#fff" stroke="none"/><circle cx="15" cy="11" r="1.1" fill="#fff" stroke="none"/><path d="M9 15c1 1 2 1.4 3 1.4s2-.4 3-1.4"/></svg>
+                        </span>
+                        <span class="text-[12px] text-ink font-medium">Mochi 在这里</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== HISTORY SCREEN ==================== -->
+        <div class="screen screen-left" id="historyScreen">
+            <header class="flex items-center justify-between px-4 pt-12 pb-3 bg-canvas/90 backdrop-blur-md z-20 border-b border-hairline-soft" id="historyHeader">
+                <button onclick="goToChat()" class="btn-icon w-9 h-9 flex items-center justify-center rounded-pill" aria-label="返回">
+                    <i data-lucide="arrow-left" class="w-[18px] h-[18px] text-ink"></i>
+                </button>
+                <h1 class="font-display text-ink" style="font-size: 22px; font-weight: 600;">日志记录</h1>
+                <button onclick="newConversation()" class="btn-icon w-9 h-9 flex items-center justify-center rounded-pill" aria-label="新建">
+                    <i data-lucide="plus" class="w-[18px] h-[18px] text-ink"></i>
+                </button>
+            </header>
+
+            <div class="flex-1 overflow-y-auto custom-scroll px-4 py-4 space-y-3" id="historyScroll">
+                <div class="relative mb-3">
+                    <i data-lucide="search" class="w-4 h-4 text-muted absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" placeholder="搜索记录…" aria-label="搜索记录"
+                        class="w-full pl-10 pr-4 py-2.5 bg-canvas border border-hairline rounded-md2 text-[14px] text-ink placeholder:text-muted-soft input-focus">
+                </div>
+
+                <div class="flex items-center gap-3 py-1">
+                    <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">2026 年 6 月</span>
+                    <div class="h-px flex-1 bg-hairline"></div>
+                </div>
+
+                <!-- Featured (today) — dark navy = featured signal -->
+                <button onclick="goToChat()" class="journal-card press w-full text-left bg-dark rounded-lg2 p-5">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="text-[11px] font-medium text-on-dark-soft tracking-[1.5px] uppercase">今天 · 进行中</span>
+                        <span class="text-[11px] text-on-dark-soft">8:33 AM</span>
+                    </div>
+                    <h3 class="font-display text-on-dark mb-1.5" style="font-size: 21px; font-weight: 600;">Auth 模块重构</h3>
+                    <p class="text-[13px] text-on-dark-soft leading-relaxed line-clamp-2">在代码库中搜索认证相关代码，找到 AuthProvider.java 与 TokenManager.java，讨论了重构策略。</p>
+                    <div class="flex items-center gap-2 mt-4">
+                        <span class="px-2.5 py-0.5 bg-dark-elev rounded-pill text-[11px] text-on-dark-soft">6 条消息</span>
+                        <span class="px-2.5 py-0.5 rounded-pill text-[11px] font-medium" style="background: rgba(204,120,92,0.2); color: #e6a78e;">2 个工具</span>
+                    </div>
+                </button>
+
+                <button onclick="goToChat()" class="journal-card card-cream press w-full text-left rounded-lg2 p-5">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">昨天</span>
+                        <span class="text-[11px] text-muted-soft">4:15 PM</span>
+                    </div>
+                    <h3 class="font-display text-ink mb-1.5" style="font-size: 21px; font-weight: 600;">数据库结构评审</h3>
+                    <p class="text-[13px] text-body leading-relaxed line-clamp-2">评审了新的用户表结构，建议为 email 和 created_at 列加索引，并校验了迁移脚本。</p>
+                    <div class="flex items-center gap-2 mt-4">
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">12 条消息</span>
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">3 个工具</span>
+                    </div>
+                </button>
+
+                <button onclick="goToChat()" class="journal-card card-cream press w-full text-left rounded-lg2 p-5">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">6 月 22 日</span>
+                        <span class="text-[11px] text-muted-soft">10:42 AM</span>
+                    </div>
+                    <h3 class="font-display text-ink mb-1.5" style="font-size: 21px; font-weight: 600;">API 接口设计</h3>
+                    <p class="text-[13px] text-body leading-relaxed line-clamp-2">为新的计费模块设计了 REST 接口，讨论了分页策略与错误处理模式。</p>
+                    <div class="flex items-center gap-2 mt-4">
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">8 条消息</span>
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">1 个工具</span>
+                    </div>
+                </button>
+
+                <div class="flex items-center gap-3 py-1 mt-2">
+                    <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">2026 年 5 月</span>
+                    <div class="h-px flex-1 bg-hairline"></div>
+                </div>
+
+                <button onclick="goToChat()" class="journal-card card-cream press w-full text-left rounded-lg2 p-5">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">5 月 30 日</span>
+                        <span class="text-[11px] text-muted-soft">2:20 PM</span>
+                    </div>
+                    <h3 class="font-display text-ink mb-1.5" style="font-size: 21px; font-weight: 600;">性能优化</h3>
+                    <p class="text-[13px] text-body leading-relaxed line-clamp-2">分析了数据看板的慢查询，建议引入缓存层并重构查询语句。</p>
+                    <div class="flex items-center gap-2 mt-4">
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">15 条消息</span>
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">4 个工具</span>
+                    </div>
+                </button>
+
+                <button onclick="goToChat()" class="journal-card card-cream press w-full text-left rounded-lg2 p-5">
+                    <div class="flex items-start justify-between mb-1.5">
+                        <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">5 月 28 日</span>
+                        <span class="text-[11px] text-muted-soft">9:00 AM</span>
+                    </div>
+                    <h3 class="font-display text-ink mb-1.5" style="font-size: 21px; font-weight: 600;">代码评审会议</h3>
+                    <p class="text-[13px] text-body leading-relaxed line-clamp-2">评审了 PR #247，发现异步处理器中潜在的竞态条件并给出修复建议。</p>
+                    <div class="flex items-center gap-2 mt-4">
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">20 条消息</span>
+                        <span class="px-2.5 py-0.5 bg-canvas border border-hairline rounded-pill text-[11px] text-muted">2 个工具</span>
+                    </div>
+                </button>
+                <div class="h-4"></div>
+            </div>
+        </div>
+
+        <!-- ==================== TOOL DRAWER ==================== -->
+        <div class="overlay hidden-overlay absolute inset-0 bg-dark/30 z-30" id="toolOverlay" onclick="toggleToolDrawer()"></div>
+        <div class="bottom-sheet hidden-sheet absolute bottom-0 left-0 right-0 bg-canvas rounded-t-xl2 border-t border-hairline z-40 max-h-[70%] flex flex-col" id="toolDrawer">
+            <div class="flex justify-center pt-3 pb-1.5" onclick="toggleToolDrawer()">
+                <div class="w-9 h-1 rounded-full bg-hairline"></div>
+            </div>
+            <div class="px-5 pb-3 pt-1 flex items-center justify-between">
+                <h2 class="font-display text-ink" style="font-size: 24px; font-weight: 600;">工具</h2>
+                <button onclick="toggleToolDrawer()" class="btn-icon w-8 h-8 flex items-center justify-center rounded-pill" aria-label="关闭">
+                    <i data-lucide="x" class="w-4 h-4 text-ink"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll px-5 pb-6">
+                <div class="grid grid-cols-3 gap-2.5" id="toolGrid"></div>
+            </div>
+        </div>
+
+        <!-- ==================== COMPANION PANEL ==================== -->
+        <div class="overlay hidden-overlay absolute inset-0 bg-dark/30 z-30" id="companionOverlay" onclick="toggleCompanionPanel()"></div>
+        <div class="bottom-sheet hidden-sheet absolute bottom-0 left-0 right-0 bg-canvas rounded-t-xl2 border-t border-hairline z-40 max-h-[80%] flex flex-col" id="companionPanel">
+            <div class="flex justify-center pt-3 pb-1.5" onclick="toggleCompanionPanel()">
+                <div class="w-9 h-1 rounded-full bg-hairline"></div>
+            </div>
+
+            <!-- Coral callout card — the brand voltage / Mochi identity -->
+            <div class="mx-4 mt-1 rounded-xl2 px-5 py-5 relative overflow-hidden bg-primary">
+                <button onclick="toggleCompanionPanel()" class="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center rounded-pill bg-white/15 press" aria-label="关闭">
+                    <i data-lucide="x" class="w-4 h-4 text-white"></i>
+                </button>
+                <div class="flex items-center gap-3.5">
+                    <div class="w-14 h-14 rounded-full bg-white/18 border border-white/25 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="11" r="1.3" fill="#fff" stroke="none"/><circle cx="15" cy="11" r="1.3" fill="#fff" stroke="none"/><path d="M8.5 15c1 1.1 2.2 1.6 3.5 1.6s2.5-.5 3.5-1.6"/><path d="M5.5 8.5C6.4 7.6 7.2 7.2 8 7.3"/><path d="M18.5 8.5C17.6 7.6 16.8 7.2 16 7.3"/></svg>
+                    </div>
+                    <div>
+                        <h2 class="font-display text-white leading-none" style="font-size: 30px; font-weight: 600;">Mochi</h2>
+                        <p class="text-[12.5px] text-white/85 mt-1.5">你的编程伙伴 · Agent Companion</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto custom-scroll px-4 pt-3 pb-6 space-y-3">
+                <!-- Mood -->
+                <div class="card-cream rounded-lg2 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">当前心情</span>
+                        <span class="text-[12px] font-semibold text-ink">开心 · 85%</span>
+                    </div>
+                    <div class="h-2 meter"><div class="h-full meter-fill" style="width: 85%"></div></div>
+                </div>
+
+                <!-- Activity — serif numbers -->
+                <div class="card-cream rounded-lg2 p-4">
+                    <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">今日活动</span>
+                    <div class="grid grid-cols-3 gap-3 mt-3">
+                        <div>
+                            <div class="font-display text-ink leading-none" style="font-size: 32px; font-weight: 500;">6</div>
+                            <div class="text-[11px] text-muted mt-1.5">对话</div>
+                        </div>
+                        <div>
+                            <div class="font-display text-ink leading-none" style="font-size: 32px; font-weight: 500;">12</div>
+                            <div class="text-[11px] text-muted mt-1.5">消息</div>
+                        </div>
+                        <div>
+                            <div class="font-display text-ink leading-none" style="font-size: 32px; font-weight: 500;">3</div>
+                            <div class="text-[11px] text-muted mt-1.5">工具调用</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent thoughts -->
+                <div class="card-cream rounded-lg2 p-4">
+                    <span class="text-[11px] font-medium text-muted tracking-[1.5px] uppercase">最近想法</span>
+                    <div class="space-y-2.5 mt-3">
+                        <div class="flex items-start gap-2.5">
+                            <span class="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0"></span>
+                            <p class="text-[12.5px] text-body leading-relaxed">你今天好像在专注认证模块，要我帮你留意相关的代码模式吗？</p>
+                        </div>
+                        <div class="flex items-start gap-2.5">
+                            <span class="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0"></span>
+                            <p class="text-[12.5px] text-body leading-relaxed">最近重构工具挺好用的，我可以多提醒你用它。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex gap-2 pt-0.5">
+                    <button onclick="petReaction('poke')" class="chip press flex-1 py-2.5 rounded-md2 text-[13px] font-medium">戳一下</button>
+                    <button onclick="petReaction('feed')" class="chip press flex-1 py-2.5 rounded-md2 text-[13px] font-medium">喂零食</button>
+                    <button onclick="petReaction('praise')" class="btn-primary press flex-1 py-2.5 rounded-md2 text-[13px] font-medium">表扬</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        const TOOLS = [
+            { icon: 'search', label: '搜索', msg: '搜索代码' },
+            { icon: 'git-compare', label: '代码对比', msg: '查看 git diff' },
+            { icon: 'play', label: '运行测试', msg: '运行测试' },
+            { icon: 'wand-2', label: '重构', msg: '帮我重构' },
+            { icon: 'bug', label: '调试', msg: '调试报错' },
+            { icon: 'file-text', label: '文档', msg: '写文档' },
+            { icon: 'message-square', label: '解释', msg: '解释这段代码' },
+            { icon: 'shield-check', label: '测试生成', msg: '生成测试' },
+            { icon: 'eye', label: '评审', msg: '评审代码' },
+        ];
+        (function renderTools() {
+            const grid = document.getElementById('toolGrid');
+            grid.innerHTML = TOOLS.map(t => `
+                <button onclick="sendQuickMessage('${t.msg}')" class="card-cream press flex flex-col items-center gap-2 p-3.5 rounded-lg2">
+                    <span class="w-10 h-10 rounded-md2 bg-canvas border border-hairline flex items-center justify-center">
+                        <i data-lucide="${t.icon}" class="w-5 h-5 text-ink"></i>
+                    </span>
+                    <span class="text-[12px] font-medium text-ink">${t.label}</span>
+                </button>`).join('');
+            lucide.createIcons();
+        })();
+
+        // Header shadow on scroll
+        function watchHeader(headerId, scrollId) {
+            const header = document.getElementById(headerId);
+            const scroller = scrollId ? document.getElementById(scrollId) : null;
+            const target = scroller || document.getElementById('messagesArea');
+            target.addEventListener('scroll', () => {
+                const s = target.scrollTop > 6;
+                header.classList.toggle('scrolled', s);
+            }, { passive: true });
+        }
+        watchHeader('chatHeader');
+        watchHeader('historyHeader', 'historyScroll');
+
+        // One-time chip float
+        setTimeout(() => { const c = document.getElementById('companionChip'); if (c) c.classList.remove('float-once'); }, 3200);
+
+        // ========== Navigation ==========
+        const chatScreen = document.getElementById('chatScreen');
+        const historyScreen = document.getElementById('historyScreen');
+        function goToHistory() {
+            chatScreen.classList.replace('screen-active', 'screen-right');
+            historyScreen.classList.replace('screen-left', 'screen-active');
+        }
+        function goToChat() {
+            historyScreen.classList.replace('screen-active', 'screen-left');
+            chatScreen.classList.replace('screen-right', 'screen-active');
+        }
+        function newConversation() {
+            goToChat();
+            const msgs = document.getElementById('messagesArea');
+            msgs.innerHTML = `
+                <div class="flex items-center justify-center gap-3 py-1">
+                    <div class="h-px flex-1 bg-hairline"></div>
+                    <span class="text-[11px] text-muted font-medium tracking-wide">新的一页</span>
+                    <div class="h-px flex-1 bg-hairline"></div>
+                </div>
+                <div class="flex gap-2.5 anim-slide-down">
+                    <div class="w-8 h-8 rounded-full bg-surface-card border border-hairline flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="12" y1="3.2" x2="12" y2="20.8"/><line x1="4.4" y1="7.6" x2="19.6" y2="16.4"/><line x1="4.4" y1="16.4" x2="19.6" y2="7.6"/></svg>
+                    </div>
+                    <div class="flex-1">
+                        <div class="msg-ai inline-block px-4 py-2.5 max-w-[86%] text-[15px] leading-relaxed">新的一页，今天我们做点什么？</div>
+                    </div>
+                </div>`;
+            lucide.createIcons();
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        // ========== Sheets ==========
+        function toggleSheet(sheetId, overlayId) {
+            const sheet = document.getElementById(sheetId);
+            const overlay = document.getElementById(overlayId);
+            const hidden = sheet.classList.contains('hidden-sheet');
+            sheet.classList.toggle('hidden-sheet', !hidden);
+            overlay.classList.toggle('hidden-overlay', !hidden);
+        }
+        function toggleToolDrawer() { toggleSheet('toolDrawer', 'toolOverlay'); }
+        function toggleCompanionPanel() { toggleSheet('companionPanel', 'companionOverlay'); }
+
+        function petReaction(type) {
+            const reactions = { poke: 'Mochi 咯咯笑着蹦来蹦去！', feed: 'Mochi 吃得很开心，真香！', praise: 'Mochi 骄傲地笑了！' };
+            const panel = document.getElementById('companionPanel');
+            const host = panel.querySelector('.custom-scroll');
+            const old = host.querySelector('.pet-toast'); if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = 'pet-toast anim-pop-in px-4 py-3 rounded-lg2 mb-1';
+            toast.style.cssText = 'background: rgba(204,120,92,0.12); border: 1px solid rgba(204,120,92,0.3);';
+            toast.innerHTML = `<p class="text-[12.5px] text-ink font-medium">${reactions[type]}</p>`;
+            host.insertBefore(toast, host.firstChild);
+            setTimeout(() => { toast.style.transition = 'opacity 0.5s ease'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 2000);
+        }
+
+        // ========== Messaging ==========
+        function autoResize(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; }
+        function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+            addUserMessage(text);
+            input.value = ''; input.style.height = 'auto';
+            agentTrace(buildScript(text), { animate: true });
+        }
+        function sendQuickMessage(text) {
+            const drawer = document.getElementById('toolDrawer');
+            if (drawer && !drawer.classList.contains('hidden-sheet')) toggleToolDrawer();
+            addUserMessage(text);
+            agentTrace(buildScript(text), { animate: true });
+        }
+        function addUserMessage(text) {
+            const msgs = document.getElementById('messagesArea');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2.5 justify-end anim-slide-up';
+            div.innerHTML = `
+                <div class="flex-1 flex flex-col items-end">
+                    <div class="msg-user inline-block px-4 py-2.5 max-w-[86%] text-[15px] leading-relaxed">${escapeHtml(text)}</div>
+                    <span class="text-[10px] text-muted-soft mt-1 mr-1">${nowTime()}</span>
+                </div>`;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        // ========== Code syntax highlighting ==========
+        function highlightCode(code) {
+            // Escape first
+            const esc = escapeHtml(code);
+            let out = esc;
+            // Comments
+            out = out.replace(/(\/\/[^\n]*)/g, '<span class="com">$1</span>');
+            // Strings
+            out = out.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="str">$1</span>');
+            out = out.replace(/('(?:[^'\\]|\\.)*')/g, '<span class="str">$1</span>');
+            // Keywords
+            const kw = /\b(class|public|private|return|if|else|for|while|new|static|void|int|String|boolean|null|true|false|function|const|let|var|async|await|import|from)\b/g;
+            out = out.replace(kw, '<span class="kw">$1</span>');
+            // Method-like calls (word followed by ()
+            out = out.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?=\()/g, '<span class="fn">$1</span>');
+            // Numbers
+            out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="num">$1</span>');
+            // Shell prompt
+            out = out.replace(/^\$/gm, '<span class="sym">$</span>');
+            out = out.replace(/(→)/g, '<span class="sym">→</span>');
+            return out;
+        }
+
+        // ========== Agent reasoning thread (streaming) ==========
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+        function nowTime() { return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }); }
+        function scrollMsgs() { const m = document.getElementById('messagesArea'); m.scrollTop = m.scrollHeight; }
+        function checkSvg(px) { return '<svg style="width:' + px + 'px;height:' + px + 'px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+        const AI_AVATAR = '<div class="w-8 h-8 rounded-full bg-surface-card border border-hairline flex items-center justify-center flex-shrink-0 mt-0.5"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="12" y1="3.2" x2="12" y2="20.8"/><line x1="4.4" y1="7.6" x2="19.6" y2="16.4"/><line x1="4.4" y1="16.4" x2="19.6" y2="7.6"/></svg></div>';
+
+        async function streamText(span, text, speed) {
+            speed = speed || 14;
+            if (reduceMotion) { span.textContent = text; return; }
+            const cur = document.createElement('span'); cur.className = 't-cursor';
+            span.after(cur);
+            for (let i = 0; i < text.length; i++) {
+                span.textContent += text[i];
+                if (i % 3 === 0) scrollMsgs();
+                await sleep(text[i] === '\n' ? speed + 45 : speed);
+            }
+            cur.remove();
+        }
+
+        async function agentTrace(script, opts) {
+            const animate = !opts || opts.animate !== false;
+            const msgs = document.getElementById('messagesArea');
+            const time = nowTime();
+            const sendBtn = document.getElementById('sendBtn');
+            if (animate && sendBtn) sendBtn.disabled = true;
+
+            const row = el('<div class="flex gap-2.5 anim-slide-down"></div>');
+            row.innerHTML = AI_AVATAR + '<div class="flex-1 min-w-0"></div>';
+            const wrap = row.lastElementChild;
+
+            const trace = el('<div class="trace mb-1.5 max-w-[92%]"></div>');
+            trace.innerHTML =
+                '<button type="button" class="trace-head" aria-expanded="true">'
+                + '<span class="thead-ic"></span>'
+                + '<span class="thead-label">思考中…</span>'
+                + '<svg class="t-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+                + '</button>'
+                + '<div class="trace-rail"></div>';
+            const headIc = trace.querySelector('.thead-ic');
+            const headLabel = trace.querySelector('.thead-label');
+            const rail = trace.querySelector('.trace-rail');
+            trace.querySelector('.trace-head').addEventListener('click', () => {
+                const c = trace.classList.toggle('collapsed');
+                trace.querySelector('.trace-head').setAttribute('aria-expanded', String(!c));
+            });
+            wrap.appendChild(trace);
+
+            const typing = document.getElementById('typingIndicator');
+            if (typing && typing.parentNode === msgs) msgs.insertBefore(row, typing);
+            else msgs.appendChild(row);
+            scrollMsgs();
+
+            headIc.innerHTML = animate ? '<span class="t-spin" style="width:14px;height:14px;display:block"></span>' : '<span style="color:#3f8d52">' + checkSvg(14) + '</span>';
+
+            for (let i = 0; i < script.steps.length; i++) {
+                const s = script.steps[i];
+                const step = el('<div class="t-step open"></div>');
+                step.innerHTML =
+                    '<span class="t-node ' + s.tag + ' running"></span>'
+                    + '<button type="button" class="t-head"><span class="t-kind">' + s.title + '</span><span class="t-sub"></span>'
+                    + '<svg class="t-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>'
+                    + '<div class="t-body"><div class="t-body-inner"></div></div>';
+                const node = step.querySelector('.t-node');
+                const sub = step.querySelector('.t-sub');
+                const bodyInner = step.querySelector('.t-body-inner');
+                step.querySelector('.t-head').addEventListener('click', () => step.classList.toggle('open'));
+                rail.appendChild(step);
+
+                if (animate) {
+                    node.innerHTML = '<span class="t-spin" style="width:11px;height:11px;display:block"></span>';
+                    sub.textContent = s.sub;
+                    headLabel.textContent = s.title + ' · 进行中';
+                    scrollMsgs();
+                    const t = document.createElement('span'); bodyInner.appendChild(t);
+                    await streamText(t, s.body, 13);
+                    if (s.code) {
+                        const c = el('<div class="t-code"></div>');
+                        c.innerHTML = highlightCode(s.code);
+                        bodyInner.appendChild(c);
+                    }
+                    await sleep(280);
+                    node.className = 't-node done'; node.innerHTML = checkSvg(11);
+                    sub.textContent = s.done;
+                    step.classList.remove('open');
+                    await sleep(160);
+                } else {
+                    node.className = 't-node done'; node.innerHTML = checkSvg(11);
+                    sub.textContent = s.done;
+                    bodyInner.textContent = s.body;
+                    if (s.code) { const c = el('<div class="t-code"></div>'); c.innerHTML = highlightCode(s.code); bodyInner.appendChild(c); }
+                    step.classList.remove('open');
+                }
+            }
+
+            headLabel.textContent = '推理完成 · ' + script.steps.length + ' 步';
+            headIc.innerHTML = '<span style="color:#3f8d52">' + checkSvg(14) + '</span>';
+            trace.classList.add('collapsed');
+            trace.querySelector('.trace-head').setAttribute('aria-expanded', 'false');
+
+            const ansWrap = el('<div></div>');
+            const bubble = el('<div class="msg-ai inline-block px-4 py-2.5 max-w-[92%] text-[15px] leading-relaxed"></div>');
+            const p = document.createElement('span'); bubble.appendChild(p);
+            ansWrap.appendChild(bubble);
+            ansWrap.insertAdjacentHTML('beforeend', '<span class="text-[10px] text-muted-soft mt-1 ml-1 block">' + time + '</span>');
+            wrap.appendChild(ansWrap);
+            scrollMsgs();
+
+            if (animate) await streamText(p, script.answer, 16);
+            else p.textContent = script.answer;
+            if (script.card) bubble.insertAdjacentHTML('beforeend', script.card);
+            if (sendBtn) sendBtn.disabled = false;
+            scrollMsgs();
+        }
+
+        // ---- Result card builders ----
+        function fileCard(files) {
+            const rows = files.map(f =>
+                '<div class="bg-canvas rounded-md2 px-3 py-2 text-[12px] text-ink border border-hairline-soft font-mono"><span class="text-muted">src/auth/</span><span class="font-medium">' + f + '</span></div>'
+            ).join('');
+            return '<div class="t-result bg-canvas border border-hairline rounded-lg2 p-3">'
+                + '<div class="flex items-center gap-2 mb-2"><span class="w-6 h-6 rounded-md2 bg-surface-card border border-hairline flex items-center justify-center">'
+                + '<svg class="w-3.5 h-3.5 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>'
+                + '<span class="text-[12px] font-medium text-ink">代码搜索</span>'
+                + '<span class="text-[11px] text-muted ml-auto">' + files.length + ' 个结果</span></div>'
+                + '<div class="space-y-1.5">' + rows + '</div></div>';
+        }
+        function listCard(title, items) {
+            const lis = items.map(x =>
+                '<div class="flex items-start gap-2"><svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style="color:#3f8d52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+                + '<span class="text-[12px] text-body leading-relaxed">' + x + '</span></div>'
+            ).join('');
+            return '<div class="t-result bg-canvas border border-hairline rounded-lg2 p-3">'
+                + '<p class="text-[12px] font-medium text-ink mb-2">' + title + '</p>'
+                + '<div class="space-y-1.5">' + lis + '</div></div>';
+        }
+
+        // ---- Map a user message to a reasoning script ----
+        function buildScript(text) {
+            const t = (text || '').toLowerCase();
+            if (t.includes('search') || t.includes('搜索') || t.includes('auth') || t.includes('认证')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '规划检索范围', done: '锁定 auth 模块',
+                      body: '用户要重构认证模块。\n先在 src 下检索认证相关代码，再读候选文件确认边界。' },
+                    { tag: 'tool', title: '工具 · Grep', sub: '搜索 auth 关键字', done: '命中 3 个文件',
+                      body: '在 src/auth 下检索 token / login 相关实现。',
+                      code: '$ grep -rn "authenticate(" src/\n→ 3 matches\n  AuthProvider.java  TokenManager.java  AuthFilter.java' },
+                    { tag: 'tool', title: '工具 · Read', sub: '读取候选文件', done: '确认重构入口',
+                      body: '快速浏览三个文件的公共方法与依赖关系。' }
+                ],
+                answer: '在代码库里找到 3 个相关文件，需要我展开某个文件看具体内容吗？',
+                card: fileCard(['AuthProvider.java', 'TokenManager.java', 'AuthFilter.java'])
+            };
+            if (t.includes('refactor') || t.includes('重构')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '拆解重构目标', done: '理出 3 个步骤',
+                      body: '目标是同时提升可读性与可测试性。\n先看现有实现的耦合点，再决定抽取边界。' },
+                    { tag: 'tool', title: '工具 · Read', sub: '分析现有实现', done: '定位坏味道',
+                      body: '查看 AuthProvider 的构造与校验逻辑。',
+                      code: 'class AuthProvider {\n  Token login(Cred c){ /* 校验 + 取 token 混在一起 */ }\n}' },
+                    { tag: 'skill', title: '技能 · 重构', sub: '套用重构方案', done: '生成重构补丁',
+                      body: '抽出校验类 → 依赖注入 provider → 给 token 加判空。' }
+                ],
+                answer: '分析完成，建议按这三步重构：',
+                card: listCard('重构方案', ['把校验逻辑抽到独立的类', '认证 provider 改用依赖注入', '给 TokenManager 增加空安全判断'])
+            };
+            if (t.includes('debug') || t.includes('调试') || t.includes('error') || t.includes('报错') || t.includes('bug')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '复现并定位问题', done: '怀疑空指针',
+                      body: '从报错堆栈看，问题出在 token 使用环节，先搜可疑调用。' },
+                    { tag: 'tool', title: '工具 · Grep', sub: '定位 token 使用点', done: '锁定第 147 行',
+                      body: '检索 token 在 AuthProvider 中的引用位置。',
+                      code: '$ grep -n "token." src/auth/AuthProvider.java\n147:  return token.getUserId();  // ← 未判空' },
+                    { tag: 'tool', title: '工具 · Read', sub: '检查第 147 行上下文', done: '确认缺少守卫',
+                      body: '第 147 行在使用 token 前没有任何 null 检查。' }
+                ],
+                answer: '找到问题：AuthProvider.java 第 147 行在使用前没有判空。加一个守卫判断即可修复。'
+            };
+            if (t.includes('test') || t.includes('测试')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '选择测试范围', done: '只跑 auth 套件',
+                      body: '改动集中在 auth 模块，先跑相关单元测试即可。' },
+                    { tag: 'tool', title: '工具 · Bash', sub: '运行测试套件', done: '24 个全部通过',
+                      body: '执行 auth 模块的测试。',
+                      code: '$ mvn -q test -Dtest=Auth*\n... 24 passed in 3.2s   coverage 87%' }
+                ],
+                answer: '24 个测试全部通过，用时 3.2s，覆盖率 87%。'
+            };
+            if (t.includes('git') || t.includes('diff') || t.includes('对比')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '确定对比范围', done: '对比工作区改动',
+                      body: '看看最近一次改动都落在哪些文件。' },
+                    { tag: 'tool', title: '工具 · Bash', sub: '执行 git diff', done: '+42 / -8',
+                      body: '统计本次改动的增删行数。',
+                      code: '$ git diff --stat\n auth/AuthProvider.java | 50 ++++++---\n 1 file changed, 42 insertions(+), 8 deletions(-)' }
+                ],
+                answer: '最新改动：新增 42 行、删除 8 行，主要集中在 auth 模块。'
+            };
+            if (t.includes('doc') || t.includes('文档')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '梳理文档结构', done: '定下 3 个章节',
+                      body: '按公共 API、配置项、用法示例三部分组织。' },
+                    { tag: 'skill', title: '技能 · 文档', sub: '生成模块文档', done: '已生成 Markdown',
+                      body: '为 auth 模块的公开接口逐一补充说明与示例。' }
+                ],
+                answer: '我为 auth 模块生成了文档，涵盖公共 API、配置项和用法示例。还要补充什么吗？'
+            };
+            if (t.includes('review') || t.includes('评审') || t.includes('解释')) return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '确定评审重点', done: '聚焦正确性',
+                      body: '重点看输入校验与边界条件。' },
+                    { tag: 'tool', title: '工具 · Read', sub: '通读改动', done: '发现 2 处问题',
+                      body: '逐行查看本次提交的 diff。' },
+                    { tag: 'skill', title: '技能 · 评审', sub: '汇总评审意见', done: '生成评审清单',
+                      body: '把发现的问题整理成可执行的修改建议。' }
+                ],
+                answer: '评审完成，发现 2 个小问题：第 89 行缺少输入校验；第 203 行的魔法数字建议提取为常量。整体结构良好。'
+            };
+            return {
+                steps: [
+                    { tag: 'think', title: '思考', sub: '理解你的需求', done: '已理解意图',
+                      body: '先确认你想达成的目标，再决定要不要调用工具。' }
+                ],
+                answer: '明白了，告诉我更多细节，我来帮你。'
+            };
+        }
+
+        function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+
+        // ========== Init ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            agentTrace(buildScript('搜索认证代码'), { animate: false });
+            const msgs = document.getElementById('messagesArea');
+            msgs.scrollTop = msgs.scrollHeight;
+        });
+    </script>
+</body>
+</html>

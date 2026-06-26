@@ -39,3 +39,4 @@ frontend/.env*
 
 # Tools
 .claude/
+.qoder/

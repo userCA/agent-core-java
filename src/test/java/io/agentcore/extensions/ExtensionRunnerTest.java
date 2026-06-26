@@ -259,6 +259,79 @@ class ExtensionRunnerTest {
         assertEquals("base + extra", ((BeforeAgentStartResult.ModifySystemPrompt) result).systemPrompt());
     }
 
+    // ── add/remove extensions ──
+
+    @Test
+    void addExtension_visibleInSubsequentHookCalls() {
+        var runner = new ExtensionRunner(List.of());
+        assertFalse(runner.hasExtensions());
+
+        Extension ext = new Extension() {
+            @Override public String name() { return "dynamic"; }
+            @Override public int order() { return 0; }
+            @Override public void onEvent(AgentEvent event) { }
+        };
+        runner.addExtension(ext);
+
+        assertTrue(runner.hasExtensions());
+        assertEquals(1, runner.extensions().size());
+        assertSame(ext, runner.extensions().get(0));
+    }
+
+    @Test
+    void addExtensions_sortedByOrder() {
+        var runner = new ExtensionRunner(List.of());
+        Extension high = namedExt("high", 100);
+        Extension low = namedExt("low", -100);
+
+        runner.addExtensions(List.of(high, low));
+
+        assertEquals(2, runner.extensions().size());
+        assertEquals("low", runner.extensions().get(0).name());
+        assertEquals("high", runner.extensions().get(1).name());
+    }
+
+    @Test
+    void removeExtension_removesFromList() {
+        Extension ext = namedExt("removable", 0);
+        var runner = new ExtensionRunner(List.of(ext));
+        assertEquals(1, runner.extensions().size());
+
+        runner.removeExtension(ext);
+        assertFalse(runner.hasExtensions());
+        assertTrue(runner.extensions().isEmpty());
+    }
+
+    @Test
+    void addAndRemove_concurrentSafe() throws InterruptedException {
+        var runner = new ExtensionRunner(List.of());
+        int threads = 10;
+        var latch = new java.util.concurrent.CountDownLatch(threads);
+
+        for (int i = 0; i < threads; i++) {
+            final int idx = i;
+            Thread.startVirtualThread(() -> {
+                try {
+                    Extension ext = namedExt("ext-" + idx, idx);
+                    runner.addExtension(ext);
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        latch.await();
+
+        assertEquals(threads, runner.extensions().size());
+    }
+
+    @Test
+    void addExtensions_nullOrEmpty_noOp() {
+        var runner = new ExtensionRunner(List.of(namedExt("base", 0)));
+        runner.addExtensions(null);
+        runner.addExtensions(List.of());
+        assertEquals(1, runner.extensions().size());
+    }
+
     // ── onEvent ──
 
     @Test

@@ -12,7 +12,6 @@ import io.agentcore.model.Content;
 import io.agentcore.model.Message;
 import io.agentcore.model.Message.*;
 import io.agentcore.extensions.Extension;
-import io.agentcore.extensions.ExtensionRunner;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,10 +42,9 @@ public class AgentSession implements AutoCloseable {
     private final int contextWindow;
     private final List<Consumer<AgentEvent>> listeners = new CopyOnWriteArrayList<>();
 
-    private Runnable agentUnsub;
+    private Extension persistenceExtension;
     private volatile boolean started = false;
     private volatile boolean closed = false;
-    private ExtensionRunner extRunner;
 
     public AgentSession(Agent agent, SessionStore store, String sessionId) {
         this(agent, store, sessionId, null, List.of(), DEFAULT_CONTEXT_WINDOW);
@@ -90,14 +88,20 @@ public class AgentSession implements AutoCloseable {
             store.createSession(sessionId, header);
         }
 
-        agentUnsub = agent.subscribe(this::onAgentEvent);
+        // Persistence as extension — unified via ExtensionRunner.onEvent()
+        persistenceExtension = new Extension() {
+            @Override public String name() { return "session-persistence-" + sessionId; }
+            @Override public int order() { return 100; }  // after core hooks
+            @Override public void onEvent(AgentEvent evt) {
+                persistOnEvent(evt);
+                forwardToListeners(evt);
+            }
+        };
 
-        // Wire extension runner: merge session-level extensions with agent's runner
-        if (!extensions.isEmpty()) {
-            extRunner = new ExtensionRunner(extensions);
-        } else if (agent.extensionRunner().hasExtensions()) {
-            extRunner = agent.extensionRunner();
-        }
+        List<Extension> allExtensions = new ArrayList<>();
+        allExtensions.add(persistenceExtension);
+        allExtensions.addAll(extensions);
+        agent.addExtensions(allExtensions);
 
         started = true;
     }
@@ -171,9 +175,8 @@ public class AgentSession implements AutoCloseable {
     public void dispose() {
         if (closed) return;
         closed = true;
-        if (agentUnsub != null) {
-            agentUnsub.run();
-            agentUnsub = null;
+        if (persistenceExtension != null) {
+            agent.extensionRunner().removeExtension(persistenceExtension);
         }
         agent.close();
         store.close();
@@ -260,7 +263,7 @@ public class AgentSession implements AutoCloseable {
         }
     }
 
-    private void onAgentEvent(AgentEvent evt) {
+    private void persistOnEvent(AgentEvent evt) {
         if (evt instanceof MessageEnd me) {
             persistMessage(me.message());
         } else if (evt instanceof ToolExecutionEnd tee) {
@@ -268,11 +271,9 @@ public class AgentSession implements AutoCloseable {
         } else if (evt instanceof AgentEnd) {
             maybeCompact();
         }
+    }
 
-        if (extRunner != null) {
-            extRunner.onEvent(evt);
-        }
-
+    private void forwardToListeners(AgentEvent evt) {
         for (Consumer<AgentEvent> listener : listeners) {
             try {
                 listener.accept(evt);
