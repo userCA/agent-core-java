@@ -16,21 +16,21 @@ import io.agentcore.model.ToolResult;
  */
 public final class ToolContext {
 
-    private final AtomicBoolean signal;
+    private final AtomicBoolean abortSignal;
     private final Consumer<ToolResult> onUpdate;
     private final Map<String, Object> metadata;
     private final AtomicBoolean terminateSignal;
     private final Map<String, Object> userInput;
 
-    public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
+    public ToolContext(AtomicBoolean abortSignal, Consumer<ToolResult> onUpdate,
                        Map<String, Object> metadata, AtomicBoolean terminateSignal) {
-        this(signal, onUpdate, metadata, terminateSignal, null);
+        this(abortSignal, onUpdate, metadata, terminateSignal, null);
     }
 
-    public ToolContext(AtomicBoolean signal, Consumer<ToolResult> onUpdate,
+    public ToolContext(AtomicBoolean abortSignal, Consumer<ToolResult> onUpdate,
                        Map<String, Object> metadata, AtomicBoolean terminateSignal,
                        Map<String, Object> userInput) {
-        this.signal = signal != null ? signal : new AtomicBoolean(false);
+        this.abortSignal = abortSignal != null ? abortSignal : new AtomicBoolean(false);
         this.onUpdate = onUpdate;
         this.metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
         this.terminateSignal = terminateSignal != null ? terminateSignal : new AtomicBoolean(false);
@@ -38,7 +38,7 @@ public final class ToolContext {
     }
 
     /** Abort signal (check to support cancellation). */
-    public AtomicBoolean signal() { return signal; }
+    public AtomicBoolean abortSignal() { return abortSignal; }
 
     /** Callback for intermediate result updates (nullable). */
     public Consumer<ToolResult> onUpdate() { return onUpdate; }
@@ -60,7 +60,7 @@ public final class ToolContext {
      * Check if the tool should abort.
      */
     public boolean isAborted() {
-        return signal.get();
+        return abortSignal.get();
     }
 
     /**

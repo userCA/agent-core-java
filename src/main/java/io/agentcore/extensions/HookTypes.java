@@ -40,7 +40,7 @@ public final class HookTypes {
     // ── Before-tool-call ──────────────────────────────────────
 
     /**
-     * Context passed to {@link Extension#beforeToolCall(ToolCallContext)}.
+     * Context passed to {@link Extension#onBeforeToolCall(ToolCallContext)}.
      */
     public record ToolCallContext(
             ToolCallContent toolCall,
@@ -59,7 +59,7 @@ public final class HookTypes {
     }
 
     /**
-     * Result returned from {@link Extension#beforeToolCall(ToolCallContext)}.
+     * Result returned from {@link Extension#onBeforeToolCall(ToolCallContext)}.
      *
      * <p>Sealed interface with three variants:
      * <ul>
@@ -104,7 +104,7 @@ public final class HookTypes {
     // ── After-tool-call ───────────────────────────────────────
 
     /**
-     * Context passed to {@link Extension#afterToolCall(AfterToolCallContext)}.
+     * Context passed to {@link Extension#onAfterToolCall(AfterToolCallContext)}.
      */
     public record AfterToolCallContext(
             ToolCallContent toolCall,
@@ -125,7 +125,7 @@ public final class HookTypes {
     }
 
     /**
-     * Result returned from {@link Extension#afterToolCall(AfterToolCallContext)}.
+     * Result returned from {@link Extension#onAfterToolCall(AfterToolCallContext)}.
      *
      * <p>Sealed interface with one variant:
      * <ul>
@@ -139,13 +139,13 @@ public final class HookTypes {
          * @param content   replacement content (null = keep original)
          * @param details   replacement details (null = keep original)
          * @param isError   override isError flag (null = keep original)
-         * @param terminate override terminate flag (null = keep original)
+         * @param shouldTerminate override terminate flag (null = keep original)
          */
         record ModifyResult(
                 List<io.agentcore.model.Content> content,
                 Map<String, Object> details,
                 Boolean isError,
-                Boolean terminate
+                Boolean shouldTerminate
         ) implements AfterToolCallHookResult {
             public ModifyResult {
                 if (content != null) content = List.copyOf(content);

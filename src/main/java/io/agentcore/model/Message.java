@@ -116,8 +116,8 @@ public sealed interface Message {
         Usage usage,
         StopReason stopReason,
         String errorMessage,
-        boolean retryableError,
-        boolean overflowError,
+        boolean isRetryableError,
+        boolean isOverflowError,
         String provider,
         String model,
         double timestamp

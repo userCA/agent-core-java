@@ -69,7 +69,7 @@ public class SelfHealingExtension implements Extension {
     }
 
     @Override
-    public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
+    public AfterToolCallHookResult onAfterToolCall(AfterToolCallContext context) {
         if (!context.isError()) return null;
 
         // Only process bash tool calls

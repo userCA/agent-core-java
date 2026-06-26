@@ -41,7 +41,7 @@ public class ToolRunner implements AutoCloseable {
     /**
      * Result of executing one tool call.
      *
-     * @param terminate true if this tool requested loop termination
+     * @param shouldTerminate true if this tool requested loop termination
      *                  (via {@link ToolContext#requestTerminate()} or after-hook override)
      */
     public record ToolCallResult(
@@ -49,23 +49,23 @@ public class ToolRunner implements AutoCloseable {
             String toolName,
             ToolResult result,
             boolean isError,
-            boolean terminate
+            boolean shouldTerminate
     ) {}
 
     /**
      * Result of executing a batch of tool calls.
      *
-     * <p>{@code terminate} is true when <b>all</b> tool results in the batch
-     * have their individual {@code terminate} flag set. This "unanimous consent"
+     * <p>{@code shouldTerminate} is true when <b>all</b> tool results in the batch
+     * have their individual {@code shouldTerminate} flag set. This "unanimous consent"
      * strategy prevents a single tool from accidentally stopping the loop when
      * other tools expect to continue.
      *
      * @param messages  tool result messages
-     * @param terminate true if ALL tool results requested termination
+     * @param shouldTerminate true if ALL tool results requested termination
      */
     public record ToolBatchResult(
             List<ToolResultMessage> messages,
-            boolean terminate
+            boolean shouldTerminate
     ) {}
 
     private final ToolRegistry registry;
@@ -134,7 +134,7 @@ public class ToolRunner implements AutoCloseable {
         if (calls.isEmpty()) return new ToolBatchResult(List.of(), false);
 
         List<ToolResultMessage> results = new ArrayList<>();
-        boolean allTerminate = true;
+        boolean allTerminated = true;
 
         for (ToolCallContent tc : calls) {
             // Check abort signal before each tool
@@ -161,16 +161,16 @@ public class ToolRunner implements AutoCloseable {
                     callResult.isError(),
                     Message.nowEpochSeconds()
             ));
-            if (!callResult.terminate()) allTerminate = false;
+            if (!callResult.shouldTerminate()) allTerminated = false;
 
             // Early-terminate: stop executing remaining tools
-            if (callResult.terminate()) {
+            if (callResult.shouldTerminate()) {
                 log.debug("Sequential execution stopped early: tool '{}' requested terminate", tc.name());
                 break;
             }
         }
 
-        return new ToolBatchResult(results, !results.isEmpty() && allTerminate);
+        return new ToolBatchResult(results, !results.isEmpty() && allTerminated);
     }
 
     /**
@@ -221,7 +221,7 @@ public class ToolRunner implements AutoCloseable {
 
         // Emit end events and build messages
         List<ToolResultMessage> messages = new ArrayList<>();
-        boolean allTerminate = true;
+        boolean allTerminated = true;
         for (int i = 0; i < calls.size(); i++) {
             ToolCallContent tc = calls.get(i);
             ToolCallResult cr = results[i];
@@ -237,10 +237,10 @@ public class ToolRunner implements AutoCloseable {
             messages.add(new ToolResultMessage(
                     tc.id(), tc.name(), truncateContent(cr.result().content()), cr.isError(),
                     Message.nowEpochSeconds()));
-            if (!cr.terminate()) allTerminate = false;
+            if (!cr.shouldTerminate()) allTerminated = false;
         }
 
-        return new ToolBatchResult(messages, !messages.isEmpty() && allTerminate);
+        return new ToolBatchResult(messages, !messages.isEmpty() && allTerminated);
     }
 
     // ── Three-stage tool pipeline ──────────────────────────
@@ -265,7 +265,7 @@ public class ToolRunner implements AutoCloseable {
     private record RawToolResult(
             ToolResult result,
             boolean isError,
-            boolean terminate
+            boolean shouldTerminate
     ) {}
 
     /**
@@ -396,7 +396,7 @@ public class ToolRunner implements AutoCloseable {
         Map<String, Object> args = prepared.arguments();
         ToolResult result = rawResult.result();
         boolean isError = rawResult.isError();
-        boolean terminate = rawResult.terminate();
+        boolean shouldTerminate = rawResult.shouldTerminate();
 
         // After hook (typed) — may override content, details, isError, and terminate
         AgentLoopConfig.AfterToolCallHook hook = this.afterToolCall;
@@ -409,14 +409,14 @@ public class ToolRunner implements AutoCloseable {
                     var newDetails = mr.details() != null ? mr.details() : result.details();
                     result = new ToolResult(newContent, newDetails, result.display());
                     if (mr.isError() != null) isError = mr.isError();
-                    if (mr.terminate() != null) terminate = mr.terminate();
+                    if (mr.shouldTerminate() != null) shouldTerminate = mr.shouldTerminate();
                 }
             } catch (Exception e) {
                 log.warn("After-tool-call hook failure", e);
             }
         }
 
-        return new ToolCallResult(tc.id(), tc.name(), result, isError, terminate);
+        return new ToolCallResult(tc.id(), tc.name(), result, isError, shouldTerminate);
     }
 
     /**

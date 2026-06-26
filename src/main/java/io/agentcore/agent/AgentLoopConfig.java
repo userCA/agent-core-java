@@ -53,7 +53,7 @@ public final class AgentLoopConfig {
 
     // ── Required fields ────────────────────────────────────────
     private final ModelInfo model;
-    private final StreamFunction streamFn;
+    private final LlmStreamProvider streamFn;
     private final MessageAssembler messageAssembler;
     private final Function<String, ProviderAuth> authResolver;
 
@@ -69,11 +69,11 @@ public final class AgentLoopConfig {
     private final BeforeToolCallHook beforeToolCall;
     private final AfterToolCallHook afterToolCall;
     private final Integer maxTurns;
-    private final CompactCallback compactCallback;
-    private final Supplier<List<Message>> getSteeringMessages;
-    private final Supplier<List<Message>> getFollowUpMessages;
+    private final ContextCompactor compactCallback;
+    private final Supplier<List<Message>> steeringMessageSupplier;
+    private final Supplier<List<Message>> followUpMessageSupplier;
     private final HumanInputGate humanInputGate;
-    private final ShouldStopAfterTurn shouldStopAfterTurn;
+    private final TurnStopPredicate shouldStopAfterTurn;
 
     private AgentLoopConfig(Builder b) {
         this.model = b.model;
@@ -92,8 +92,8 @@ public final class AgentLoopConfig {
         this.afterToolCall = b.afterToolCall;
         this.maxTurns = b.maxTurns;
         this.compactCallback = b.compactCallback;
-        this.getSteeringMessages = b.getSteeringMessages;
-        this.getFollowUpMessages = b.getFollowUpMessages;
+        this.steeringMessageSupplier = b.steeringMessageSupplier;
+        this.followUpMessageSupplier = b.followUpMessageSupplier;
         this.humanInputGate = b.humanInputGate;
         this.shouldStopAfterTurn = b.shouldStopAfterTurn;
     }
@@ -101,7 +101,7 @@ public final class AgentLoopConfig {
     /**
      * Create a lightweight copy with only compactCallback changed.
      */
-    public AgentLoopConfig withCompactCallback(CompactCallback callback) {
+    public AgentLoopConfig withCompactCallback(ContextCompactor callback) {
         return toBuilder().compactCallback(callback).build();
     }
 
@@ -111,7 +111,7 @@ public final class AgentLoopConfig {
      * Stream LLM response events.
      */
     @FunctionalInterface
-    public interface StreamFunction {
+    public interface LlmStreamProvider {
         java.util.Iterator<io.agentcore.llm.StreamEvent> stream(
             ModelInfo model, List<Map<String,Object>> messages,
             List<Map<String,Object>> tools, String systemPrompt,
@@ -148,7 +148,7 @@ public final class AgentLoopConfig {
      * Trigger context compaction on overflow.
      */
     @FunctionalInterface
-    public interface CompactCallback {
+    public interface ContextCompactor {
         boolean compact(List<Message> messages);
     }
 
@@ -157,7 +157,7 @@ public final class AgentLoopConfig {
      * Return true to stop the agent loop.
      */
     @FunctionalInterface
-    public interface ShouldStopAfterTurn {
+    public interface TurnStopPredicate {
         boolean apply(TurnContext context);
     }
 
@@ -172,7 +172,7 @@ public final class AgentLoopConfig {
             AssistantMessage message,
             List<ToolResultMessage> toolResults,
             List<Message> allMessages,
-            List<Message> newMessages
+            List<Message> producedMessages
     ) {}
 
     // ── Builder ────────────────────────────────────────────────
@@ -203,8 +203,8 @@ public final class AgentLoopConfig {
         b.toolResultMaxChars = this.toolConfig.resultMaxChars();
         b.maxParallelTools = this.toolConfig.maxParallelTools();
         b.compactCallback = this.compactCallback;
-        b.getSteeringMessages = this.getSteeringMessages;
-        b.getFollowUpMessages = this.getFollowUpMessages;
+        b.steeringMessageSupplier = this.steeringMessageSupplier;
+        b.followUpMessageSupplier = this.followUpMessageSupplier;
         b.humanInputGate = this.humanInputGate;
         b.shouldStopAfterTurn = this.shouldStopAfterTurn;
         return b;
@@ -212,7 +212,7 @@ public final class AgentLoopConfig {
 
     public static final class Builder {
         private ModelInfo model;
-        private StreamFunction streamFn;
+        private LlmStreamProvider streamFn;
         private MessageAssembler messageAssembler;
         private Function<String, ProviderAuth> authResolver;
         private ThinkingLevel thinkingLevel = ThinkingLevel.OFF;
@@ -229,14 +229,14 @@ public final class AgentLoopConfig {
         private double retryMaxDelay = 60.0;
         private int toolResultMaxChars = 4000;
         private int maxParallelTools = 10;
-        private CompactCallback compactCallback;
-        private Supplier<List<Message>> getSteeringMessages;
-        private Supplier<List<Message>> getFollowUpMessages;
+        private ContextCompactor compactCallback;
+        private Supplier<List<Message>> steeringMessageSupplier;
+        private Supplier<List<Message>> followUpMessageSupplier;
         private HumanInputGate humanInputGate;
-        private ShouldStopAfterTurn shouldStopAfterTurn;
+        private TurnStopPredicate shouldStopAfterTurn;
 
         public Builder model(ModelInfo v) { this.model = v; return this; }
-        public Builder streamFn(StreamFunction v) { this.streamFn = v; return this; }
+        public Builder streamFn(LlmStreamProvider v) { this.streamFn = v; return this; }
         public Builder messageAssembler(MessageAssembler v) { this.messageAssembler = v; return this; }
         public Builder authResolver(Function<String, ProviderAuth> v) { this.authResolver = v; return this; }
         public Builder thinkingLevel(String v) { this.thinkingLevel = ThinkingLevel.fromValue(v); return this; }
@@ -254,11 +254,11 @@ public final class AgentLoopConfig {
         public Builder retryMaxDelay(double v) { this.retryMaxDelay = v; return this; }
         public Builder toolResultMaxChars(int v) { this.toolResultMaxChars = v; return this; }
         public Builder maxParallelTools(int v) { this.maxParallelTools = v; return this; }
-        public Builder compactCallback(CompactCallback v) { this.compactCallback = v; return this; }
-        public Builder getSteeringMessages(Supplier<List<Message>> v) { this.getSteeringMessages = v; return this; }
-        public Builder getFollowUpMessages(Supplier<List<Message>> v) { this.getFollowUpMessages = v; return this; }
+        public Builder compactCallback(ContextCompactor v) { this.compactCallback = v; return this; }
+        public Builder steeringMessageSupplier(Supplier<List<Message>> v) { this.steeringMessageSupplier = v; return this; }
+        public Builder followUpMessageSupplier(Supplier<List<Message>> v) { this.followUpMessageSupplier = v; return this; }
         public Builder humanInputGate(HumanInputGate v) { this.humanInputGate = v; return this; }
-        public Builder shouldStopAfterTurn(ShouldStopAfterTurn v) { this.shouldStopAfterTurn = v; return this; }
+        public Builder shouldStopAfterTurn(TurnStopPredicate v) { this.shouldStopAfterTurn = v; return this; }
 
         /**
          * Set all retry parameters from a RetryConfig (preferred over individual setters).
@@ -299,7 +299,7 @@ public final class AgentLoopConfig {
     // ── Getters ────────────────────────────────────────────────
 
     public ModelInfo model() { return model; }
-    public StreamFunction streamFn() { return streamFn; }
+    public LlmStreamProvider streamFn() { return streamFn; }
     public MessageAssembler messageAssembler() { return messageAssembler; }
     public Function<String, ProviderAuth> authResolver() { return authResolver; }
     public ThinkingLevel thinkingLevel() { return thinkingLevel; }
@@ -309,11 +309,11 @@ public final class AgentLoopConfig {
     public BeforeToolCallHook beforeToolCall() { return beforeToolCall; }
     public AfterToolCallHook afterToolCall() { return afterToolCall; }
     public Integer maxTurns() { return maxTurns; }
-    public CompactCallback compactCallback() { return compactCallback; }
-    public Supplier<List<Message>> getSteeringMessages() { return getSteeringMessages; }
-    public Supplier<List<Message>> getFollowUpMessages() { return getFollowUpMessages; }
+    public ContextCompactor compactCallback() { return compactCallback; }
+    public Supplier<List<Message>> steeringMessageSupplier() { return steeringMessageSupplier; }
+    public Supplier<List<Message>> followUpMessageSupplier() { return followUpMessageSupplier; }
     public HumanInputGate humanInputGate() { return humanInputGate; }
-    public ShouldStopAfterTurn shouldStopAfterTurn() { return shouldStopAfterTurn; }
+    public TurnStopPredicate shouldStopAfterTurn() { return shouldStopAfterTurn; }
 
     // ── Sub-config getters (preferred) ─────────────────────────
 

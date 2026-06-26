@@ -66,7 +66,7 @@ public class SandboxPolicyExtension implements Extension {
     }
 
     @Override
-    public ToolCallHookResult beforeToolCall(ToolCallContext context) {
+    public ToolCallHookResult onBeforeToolCall(ToolCallContext context) {
         ToolCallContent toolCall = context.toolCall();
         if (!"bash".equals(toolCall.name())) return null;
 

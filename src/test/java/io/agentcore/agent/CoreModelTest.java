@@ -510,7 +510,7 @@ class CoreModelTest {
             var model1 = new ModelInfo("test", "model-1", 1000, 100);
             var model2 = new ModelInfo("test", "model-2", 2000, 200);
 
-            AgentLoopConfig.StreamFunction streamFn =
+            AgentLoopConfig.LlmStreamProvider streamFn =
                     (m, msgs, tools, sp, tl, temp, mt, sig, auth) -> List.<StreamEvent>of().iterator();
             AgentLoopConfig.MessageAssembler convertFn = msgs -> List.of();
             java.util.function.Function<String, ProviderAuth> authFn = name -> new ProviderAuth("key");

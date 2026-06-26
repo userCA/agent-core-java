@@ -47,7 +47,7 @@ public interface Extension {
      *   <li>{@link ToolCallHookResult.InjectMetadata} — attach metadata</li>
      * </ul>
      */
-    default ToolCallHookResult beforeToolCall(ToolCallContext context) {
+    default ToolCallHookResult onBeforeToolCall(ToolCallContext context) {
         return null;
     }
 
@@ -55,7 +55,7 @@ public interface Extension {
      * Called after each tool execution.
      * Return a {@link AfterToolCallHookResult} to optionally modify the result.
      */
-    default AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
+    default AfterToolCallHookResult onAfterToolCall(AfterToolCallContext context) {
         return null;
     }
 

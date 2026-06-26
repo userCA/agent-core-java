@@ -63,7 +63,7 @@ public final class ExtensionRunner {
      * Before tool call: iterate extensions and merge typed results.
      * Returns early with Block if any extension blocks.
      */
-    public ToolCallHookResult beforeToolCall(ToolCallContext context) {
+    public ToolCallHookResult onBeforeToolCall(ToolCallContext context) {
         if (extensions.isEmpty()) return null;
 
         Map<String, Object> mergedMetadata = new LinkedHashMap<>();
@@ -71,7 +71,7 @@ public final class ExtensionRunner {
 
         for (Extension ext : extensions) {
             try {
-                ToolCallHookResult result = ext.beforeToolCall(context);
+                ToolCallHookResult result = ext.onBeforeToolCall(context);
                 if (result == null) continue;
 
                 switch (result) {
@@ -89,7 +89,7 @@ public final class ExtensionRunner {
                     }
                 }
             } catch (Exception e) {
-                log.warn("Extension {} beforeToolCall failed: {}", ext.name(), e.getMessage());
+                log.warn("Extension {} onBeforeToolCall failed: {}", ext.name(), e.getMessage());
             }
         }
 
@@ -111,34 +111,34 @@ public final class ExtensionRunner {
      * Multiple ModifyResult responses are merged — each extension's non-null
      * fields override the previous accumulation (not the original).
      */
-    public AfterToolCallHookResult afterToolCall(AfterToolCallContext context) {
+    public AfterToolCallHookResult onAfterToolCall(AfterToolCallContext context) {
         if (extensions.isEmpty()) return null;
 
         // Accumulated modifications (null fields = "no extension modified this yet")
         List<Content> accContent = null;
         Map<String, Object> accDetails = null;
         Boolean accIsError = null;
-        Boolean accTerminate = null;
+        Boolean accShouldTerminate = null;
         boolean hasModification = false;
 
         for (Extension ext : extensions) {
             try {
-                AfterToolCallHookResult result = ext.afterToolCall(context);
+                AfterToolCallHookResult result = ext.onAfterToolCall(context);
                 if (result instanceof AfterToolCallHookResult.ModifyResult mr) {
                     hasModification = true;
                     // Merge: later non-null fields override earlier ones
                     if (mr.content() != null) accContent = mr.content();
                     if (mr.details() != null) accDetails = mr.details();
                     if (mr.isError() != null) accIsError = mr.isError();
-                    if (mr.terminate() != null) accTerminate = mr.terminate();
+                    if (mr.shouldTerminate() != null) accShouldTerminate = mr.shouldTerminate();
                 }
             } catch (Exception e) {
-                log.warn("Extension {} afterToolCall failed: {}", ext.name(), e.getMessage());
+                log.warn("Extension {} onAfterToolCall failed: {}", ext.name(), e.getMessage());
             }
         }
 
         if (!hasModification) return null;
-        return new AfterToolCallHookResult.ModifyResult(accContent, accDetails, accIsError, accTerminate);
+        return new AfterToolCallHookResult.ModifyResult(accContent, accDetails, accIsError, accShouldTerminate);
     }
 
     /**

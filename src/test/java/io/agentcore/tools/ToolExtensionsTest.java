@@ -41,7 +41,7 @@ class ToolExtensionsTest {
                     Map.of("command", "rm -rf /"));
             var ctx = new ToolCallContext(tc, tc.arguments());
 
-            var result = policy.beforeToolCall(ctx);
+            var result = policy.onBeforeToolCall(ctx);
             assertNotNull(result);
             assertInstanceOf(ToolCallHookResult.Block.class, result);
         }
@@ -52,7 +52,7 @@ class ToolExtensionsTest {
                     Map.of("command", "shutdown -h now"));
             var ctx = new ToolCallContext(tc, tc.arguments());
 
-            var result = policy.beforeToolCall(ctx);
+            var result = policy.onBeforeToolCall(ctx);
             assertNotNull(result);
             assertInstanceOf(ToolCallHookResult.Block.class, result);
         }
@@ -63,7 +63,7 @@ class ToolExtensionsTest {
                     Map.of("command", "ls -la"));
             var ctx = new ToolCallContext(tc, tc.arguments());
 
-            var result = policy.beforeToolCall(ctx);
+            var result = policy.onBeforeToolCall(ctx);
             // Proceed or InjectMetadata (not Block)
             if (result != null) {
                 assertFalse(result instanceof ToolCallHookResult.Block);
@@ -76,7 +76,7 @@ class ToolExtensionsTest {
                     Map.of("path", "/etc/passwd"));
             var ctx = new ToolCallContext(tc, tc.arguments());
 
-            var result = policy.beforeToolCall(ctx);
+            var result = policy.onBeforeToolCall(ctx);
             assertNull(result);
         }
 
@@ -153,7 +153,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("File not found: /tmp/x");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNull(response);
         }
 
@@ -163,7 +163,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("file1.txt\nfile2.txt");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, false);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNull(response);
         }
 
@@ -173,7 +173,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("Command timed out after 60s");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNotNull(response);
             assertInstanceOf(AfterToolCallHookResult.ModifyResult.class, response);
         }
@@ -184,7 +184,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("MemoryError: process killed");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNotNull(response);
         }
 
@@ -194,7 +194,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("No such file or directory: 'missing.txt'");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNotNull(response);
         }
 
@@ -204,7 +204,7 @@ class ToolExtensionsTest {
             var result = new ToolResult("Some random error message");
             var ctx = new AfterToolCallContext(tc, tc.arguments(), result, true);
 
-            var response = healing.afterToolCall(ctx);
+            var response = healing.onAfterToolCall(ctx);
             assertNull(response);
         }
 

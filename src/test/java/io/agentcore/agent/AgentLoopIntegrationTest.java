@@ -523,19 +523,19 @@ class AgentLoopIntegrationTest {
     class ExtensionRunnerIntegration {
 
         @Test
-        void beforeToolCallHookIsApplied() {
+        void onBeforeToolCallHookIsApplied() {
             ExtensionRunner runner = new ExtensionRunner(List.of(
                     new Extension() {
                         @Override public String name() { return "test-hook"; }
                         @Override
-                        public ToolCallHookResult beforeToolCall(ToolCallContext context) {
+                        public ToolCallHookResult onBeforeToolCall(ToolCallContext context) {
                             return new ToolCallHookResult.InjectMetadata(Map.of("custom", "value"));
                         }
                     }
             ));
 
             var tc = new ToolCallContent("tc1", "echo", Map.of());
-            ToolCallHookResult result = runner.beforeToolCall(new ToolCallContext(tc, Map.of()));
+            ToolCallHookResult result = runner.onBeforeToolCall(new ToolCallContext(tc, Map.of()));
             assertNotNull(result);
             assertInstanceOf(ToolCallHookResult.InjectMetadata.class, result);
         }

@@ -82,7 +82,7 @@ class ToolRunnerTest {
             var msg = assistantWithTools();
             var result = runner.executeSequential(msg, new AtomicBoolean(false), null);
             assertTrue(result.messages().isEmpty());
-            assertFalse(result.terminate());
+            assertFalse(result.shouldTerminate());
         }
 
         @Test
@@ -95,7 +95,7 @@ class ToolRunnerTest {
             assertEquals(1, result.messages().size());
             assertEquals("hello", Content.extractText(result.messages().get(0).content()));
             assertFalse(result.messages().get(0).isError());
-            assertFalse(result.terminate());
+            assertFalse(result.shouldTerminate());
         }
 
         @Test
@@ -167,7 +167,7 @@ class ToolRunnerTest {
             var result = runner.executeParallel(msg, new AtomicBoolean(false), null);
 
             assertEquals(2, result.messages().size());
-            assertFalse(result.terminate());
+            assertFalse(result.shouldTerminate());
         }
 
         @Test
@@ -261,7 +261,7 @@ class ToolRunnerTest {
             var result = runner.executeSequential(msg, new AtomicBoolean(false), null);
 
             // After-hook overrode terminate to false
-            assertFalse(result.terminate());
+            assertFalse(result.shouldTerminate());
         }
     }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-06-26 10:25 — refactor: agentcore 命名规范审计批量修复
+
+**问题/需求**: agentcore 核心框架中存在多处命名不规范问题，包括 `get` 前缀的 Supplier 字段、Boolean 字段缺少 `is`/`should` 前缀、Hook 方法缺少 `on` 前缀、语义不明的字段名、动词式接口名等。
+
+**方案**: 按 P0/P1/P2 优先级分批修复，统一命名风格：
+- **P0-1**: `getSteeringMessages`/`getFollowUpMessages` → `steeringMessageSupplier`/`followUpMessageSupplier`
+- **P0-2**: Boolean 字段加 `is`/`should` 前缀 (`retryableError`→`isRetryableError`, `terminate`→`shouldTerminate`)
+- **P0-3**: Extension Hook 方法加 `on` 前缀 (`beforeToolCall`→`onBeforeToolCall`, `afterToolCall`→`onAfterToolCall`)
+- **P0-4**: `ToolContext.signal` → `abortSignal`
+- **P1-5**: `TurnContext.newMessages` → `producedMessages`
+- **P1-6**: `RetryDecision.newRetryCount` → `nextRetryCount`
+- **P1-7**: 局部变量 `newMessages` → `reassembledMessages`（消除同名歧义）
+- **P1-8**: `Agent.produced` → `producedMessages`
+- **P1-9**: `Agent.pendingToolCalls()` → `pendingToolCallIds()`
+- **P1-10**: `allTerminate` → `allTerminated`
+- **P2-11**: 接口命名改为名词短语 (`StreamFunction`→`LlmStreamProvider`, `CompactCallback`→`ContextCompactor`, `ShouldStopAfterTurn`→`TurnStopPredicate`)
+
+**改动范围**: ~15 文件，包括 AgentLoopConfig、AgentLoop、Agent、ToolRunner、Message、ToolContext、Extension、ExtensionRunner、HookTypes、StreamAccumulator、BashTool、AgentSession 及测试文件。
+
+**影响面**: 纯重命名，无功能变化。所有测试通过。
+
 ## 2026-06-25 23:53 — rename: newMessagesProduced → producedMessages
 
 **问题/需求**: `newMessagesProduced` 命名拗口，"new" 多余且被动语序不自然。

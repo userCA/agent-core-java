@@ -108,7 +108,7 @@ public class Agent implements AutoCloseable {
     }
 
     public List<Message> prompt(String text, Consumer<AgentEvent> onEvent,
-                                AgentLoopConfig.CompactCallback compactCallback) {
+                                AgentLoopConfig.ContextCompactor compactCallback) {
         UserMessage userMsg = new UserMessage(
                 List.of(new TextContent(text)),
                 Message.nowEpochSeconds());
@@ -134,7 +134,7 @@ public class Agent implements AutoCloseable {
      * Send a pre-built message with optional compaction callback.
      */
     public List<Message> prompt(Message message, Consumer<AgentEvent> onEvent,
-                                AgentLoopConfig.CompactCallback compactCallback) {
+                                AgentLoopConfig.ContextCompactor compactCallback) {
         runBeforeAgentStartHooks(message instanceof UserMessage um
                 ? Content.extractText(um.content())
                 : "");
@@ -146,7 +146,7 @@ public class Agent implements AutoCloseable {
     }
 
     public List<Message> continueLoop(Consumer<AgentEvent> onEvent,
-                                      AgentLoopConfig.CompactCallback compactCallback) {
+                                      AgentLoopConfig.ContextCompactor compactCallback) {
         // Validate preconditions (mirrors pi-mono agentLoopContinue)
         List<Message> snapshot = context.messagesSnapshot();
         if (snapshot.isEmpty()) {
@@ -177,10 +177,10 @@ public class Agent implements AutoCloseable {
     }
 
     /**
-     * Async version of {@link #prompt(String, Consumer, AgentLoopConfig.CompactCallback)}.
+     * Async version of {@link #prompt(String, Consumer, AgentLoopConfig.ContextCompactor)}.
      */
     public CompletableFuture<List<Message>> promptAsync(String text, Consumer<AgentEvent> onEvent,
-                                                         AgentLoopConfig.CompactCallback compactCallback) {
+                                                         AgentLoopConfig.ContextCompactor compactCallback) {
         return CompletableFuture.supplyAsync(() -> prompt(text, onEvent, compactCallback), VIRTUAL_EXECUTOR);
     }
 
@@ -192,10 +192,10 @@ public class Agent implements AutoCloseable {
     }
 
     /**
-     * Async version of {@link #prompt(Message, Consumer, AgentLoopConfig.CompactCallback)}.
+     * Async version of {@link #prompt(Message, Consumer, AgentLoopConfig.ContextCompactor)}.
      */
     public CompletableFuture<List<Message>> promptAsync(Message message, Consumer<AgentEvent> onEvent,
-                                                         AgentLoopConfig.CompactCallback compactCallback) {
+                                                         AgentLoopConfig.ContextCompactor compactCallback) {
         return CompletableFuture.supplyAsync(() -> prompt(message, onEvent, compactCallback), VIRTUAL_EXECUTOR);
     }
 
@@ -207,10 +207,10 @@ public class Agent implements AutoCloseable {
     }
 
     /**
-     * Async version of {@link #continueLoop(Consumer, AgentLoopConfig.CompactCallback)}.
+     * Async version of {@link #continueLoop(Consumer, AgentLoopConfig.ContextCompactor)}.
      */
     public CompletableFuture<List<Message>> continueLoopAsync(Consumer<AgentEvent> onEvent,
-                                                               AgentLoopConfig.CompactCallback compactCallback) {
+                                                               AgentLoopConfig.ContextCompactor compactCallback) {
         return CompletableFuture.supplyAsync(() -> continueLoop(onEvent, compactCallback), VIRTUAL_EXECUTOR);
     }
 
@@ -282,7 +282,7 @@ public class Agent implements AutoCloseable {
 
     public boolean isStreaming() { return context.isStreaming(); }
     public String errorMessage() { return context.errorMessage(); }
-    public Set<String> pendingToolCalls() { return toolCallTracker.snapshot(); }
+    public Set<String> pendingToolCallIds() { return toolCallTracker.snapshot(); }
     public List<Message> messages() { return context.messagesSnapshot(); }
     public AgentContext context() { return context; }
     public ExtensionRunner extensionRunner() { return extensionRunner; }
@@ -345,7 +345,7 @@ public class Agent implements AutoCloseable {
      */
     private List<Message> runLoop(List<Message> newMessages,
                                   Consumer<AgentEvent> onEvent,
-                                  AgentLoopConfig.CompactCallback compactCallback) {
+                                  AgentLoopConfig.ContextCompactor compactCallback) {
         // Concurrency guard (mirrors pi-mono activeRun)
         if (!running.compareAndSet(false, true)) {
             throw new IllegalStateException(
@@ -378,13 +378,13 @@ public class Agent implements AutoCloseable {
         StreamAccumulator accumulator = getOrCreateStreamAccumulator(config);
         AgentLoop loop = new AgentLoop(config, context, runner, accumulator);
 
-        AtomicReference<List<Message>> produced = new AtomicReference<>(List.of());
+        AtomicReference<List<Message>> producedMessages = new AtomicReference<>(List.of());
         try {
             loop.run(newMessages, abortSignal, evt -> {
                 toolCallTracker.onEvent(evt);
                 guardedEmitter.accept(evt);
                 if (evt instanceof AgentEvent.AgentEnd ae) {
-                    produced.set(ae.messages());
+                    producedMessages.set(ae.messages());
                 }
             });
         } catch (Exception e) {
@@ -409,7 +409,7 @@ public class Agent implements AutoCloseable {
             running.set(false);
         }
 
-        return produced.get().stream()
+        return producedMessages.get().stream()
                 .filter(m -> m instanceof AssistantMessage)
                 .toList();
     }
@@ -426,7 +426,7 @@ public class Agent implements AutoCloseable {
         }
     }
 
-    private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.CompactCallback compactCallback) {
+    private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.ContextCompactor compactCallback) {
         if (cachedBaseConfig == null) {
             cachedBaseConfig = buildBaseConfigWithHooks();
         }
@@ -448,12 +448,12 @@ public class Agent implements AutoCloseable {
 
         // Wire extension runner hooks (typed)
         if (extensionRunner.hasExtensions()) {
-            b.beforeToolCall(extensionRunner::beforeToolCall);
-            b.afterToolCall(extensionRunner::afterToolCall);
+            b.beforeToolCall(extensionRunner::onBeforeToolCall);
+            b.afterToolCall(extensionRunner::onAfterToolCall);
         }
 
-        b.getSteeringMessages(() -> steeringQueue.drain());
-        b.getFollowUpMessages(() -> followUpQueue.drain());
+        b.steeringMessageSupplier(() -> steeringQueue.drain());
+        b.followUpMessageSupplier(() -> followUpQueue.drain());
 
         return b.build();
     }

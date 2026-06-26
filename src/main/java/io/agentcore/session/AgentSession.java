@@ -199,7 +199,7 @@ public class AgentSession implements AutoCloseable {
         if (!started) throw new IllegalStateException("AgentSession not started; call start() first");
     }
 
-    private AgentLoopConfig.CompactCallback createCompactCallback() {
+    private AgentLoopConfig.ContextCompactor createCompactCallback() {
         if (compactor == null) return null;
         return messages -> {
             try {

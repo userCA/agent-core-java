@@ -48,8 +48,8 @@ public final class MessageSerializer {
                 map.put("provider", am.provider());
                 map.put("model", am.model());
                 if (am.errorMessage() != null) map.put("error_message", am.errorMessage());
-                if (am.retryableError()) map.put("retryable_error", true);
-                if (am.overflowError()) map.put("overflow_error", true);
+                if (am.isRetryableError()) map.put("retryable_error", true);
+                if (am.isOverflowError()) map.put("overflow_error", true);
                 Usage u = am.usage();
                 if (u.totalTokensWithCache() > 0) {
                     map.put("usage", Map.of(

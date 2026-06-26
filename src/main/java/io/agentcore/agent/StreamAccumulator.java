@@ -8,7 +8,7 @@ import io.agentcore.model.Message.StopReason;
 import io.agentcore.llm.StreamEvent;
 import io.agentcore.llm.StreamEvent.*;
 import io.agentcore.model.AgentEvent.MessageDelta.*;
-import io.agentcore.agent.AgentLoopConfig.StreamFunction;
+import io.agentcore.agent.AgentLoopConfig.LlmStreamProvider;
 import io.agentcore.llm.ModelInfo;
 import io.agentcore.llm.ProviderAuth;
 import org.slf4j.Logger;
@@ -56,13 +56,13 @@ public final class StreamAccumulator {
         }
     }
 
-    private final StreamFunction streamFn;
+    private final LlmStreamProvider streamFn;
     private volatile ModelInfo model;
     private volatile String thinkingLevel;
     private volatile Double temperature;
     private final Integer maxTokens;
 
-    public StreamAccumulator(StreamFunction streamFn, ModelInfo model,
+    public StreamAccumulator(LlmStreamProvider streamFn, ModelInfo model,
                              String thinkingLevel, Double temperature, Integer maxTokens) {
         this.streamFn = streamFn;
         this.model = model;

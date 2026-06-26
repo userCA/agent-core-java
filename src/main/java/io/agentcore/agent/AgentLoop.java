@@ -83,7 +83,7 @@ public class AgentLoop {
         if (newMessages != null) producedMessages.addAll(newMessages);
 
         int turnCount = 0;
-        List<Message> pendingMessages = drainMessages(config.getSteeringMessages());
+        List<Message> pendingMessages = drainMessages(config.steeringMessageSupplier());
 
         // Outer loop: continues when follow-up messages arrive after agent would stop
         while (true) {
@@ -115,11 +115,11 @@ public class AgentLoop {
                 hasMoreToolCalls = outcome.hasMoreToolCalls();
 
                 // Check for steering messages for next turn
-                pendingMessages = drainMessages(config.getSteeringMessages());
+                pendingMessages = drainMessages(config.steeringMessageSupplier());
             }
 
             // Outer loop: check for follow-up messages after agent would stop
-            List<Message> followUps = drainMessages(config.getFollowUpMessages());
+            List<Message> followUps = drainMessages(config.followUpMessageSupplier());
             if (!followUps.isEmpty()) {
                 log.debug("Follow-up messages injected, continuing outer loop");
                 pendingMessages = followUps;
@@ -208,7 +208,7 @@ public class AgentLoop {
         boolean hasMoreToolCalls = !toolResults.isEmpty();
 
         // Tool batch termination: if all tools request terminate, stop
-        if (toolBatch.terminate()) {
+        if (toolBatch.shouldTerminate()) {
             log.debug("Loop terminating due to tool batch terminate flag");
             return new TurnOutcome(false, false);
         }
@@ -269,7 +269,7 @@ public class AgentLoop {
             RetryDecision decision = evaluateRetry(assistant, retryCount, maxRetries, llmMessages, signal);
             
             if (decision.shouldRetry()) {
-                retryCount = decision.newRetryCount();
+                retryCount = decision.nextRetryCount();
                 llmMessages = decision.updatedMessages();
                 if (decision.delaySeconds() > 0) {
                     sleepWithInterruptCheck(decision.delaySeconds(), signal);
@@ -294,21 +294,21 @@ public class AgentLoop {
             AtomicBoolean signal) {
         
         if (assistant.stopReason() == StopReason.ERROR
-                && assistant.retryableError()
+                && assistant.isRetryableError()
                 && retryCount < maxRetries) {
             double delay = calculateBackoffDelay(retryCount);
             log.debug("Retryable error detected, backing off for {}s", String.format("%.2f", delay));
             return new RetryDecision(true, retryCount + 1, delay, llmMessages);
         }
         
-        if (assistant.overflowError()
+        if (assistant.isOverflowError()
                 && config.compactCallback() != null
                 && retryCount < maxRetries) {
             log.info("Context overflow detected, triggering compaction");
             boolean compacted = config.compactCallback().compact(context.messagesSnapshot());
             if (compacted) {
-                List<Map<String, Object>> newMessages = config.messageAssembler().assemble(context.messagesSnapshot());
-                return new RetryDecision(true, retryCount + 1, 0, newMessages);
+                List<Map<String, Object>> reassembledMessages = config.messageAssembler().assemble(context.messagesSnapshot());
+                return new RetryDecision(true, retryCount + 1, 0, reassembledMessages);
             }
         }
         
@@ -377,7 +377,7 @@ public class AgentLoop {
 
     private record RetryDecision(
             boolean shouldRetry,
-            int newRetryCount,
+            int nextRetryCount,
             double delaySeconds,
             List<Map<String, Object>> updatedMessages
     ) {}
