@@ -101,7 +101,7 @@ public class AgentSession implements AutoCloseable {
         List<Extension> allExtensions = new ArrayList<>();
         allExtensions.add(persistenceExtension);
         allExtensions.addAll(extensions);
-        agent.addExtensions(allExtensions);
+        agent.extensionRunner().addExtensions(allExtensions);
 
         started = true;
     }

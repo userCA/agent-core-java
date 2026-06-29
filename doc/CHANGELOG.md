@@ -1,5 +1,84 @@
 # Changelog
 
+## 2026-06-26 — refactor: 消除Agent透传方法与过度分层
+
+**问题/需求**: `Agent.addExtensions()` 是对 `ExtensionRunner` 的无意义透传；`buildBaseConfigWithHooks` 与 `buildConfigWithHooks` 分两层但无复用价值。
+
+**方案**:
+- 移除 `Agent.addExtensions()`，`AgentSession` 改为 `agent.extensionRunner().addExtensions(...)`
+- 合并 `buildBaseConfigWithHooks` 到 `buildConfigWithHooks`，消除单调用者的私有方法分层
+- 移除因本次变更已无调用者的 `AgentLoopConfig.withCompactCallback()`
+- 同步更新 `ObservabilityExtension` 文档示例
+
+**改动范围**: `Agent.java`、`AgentLoopConfig.java`、`AgentSession.java`、`ObservabilityExtension.java`
+
+**影响面**: 纯内部重构，无外部 API 变化。
+
+⚡ 影响范围：`agent`、`session`、`observability`
+
+## 2026-06-26 — fix: Playground快速导航栏点击无响应
+
+**问题/需求**: Playground页面顶部快速导航栏的锚点链接点击无效，无法跳转到对应Section。
+
+**方案**: 为每个导航链接添加onClick事件处理，使用`element.scrollIntoView({ behavior: 'smooth', block: 'start' })`实现平滑滚动到目标区域，替代默认锚点跳转行为。确保导航功能在各种浏览器环境下稳定工作。
+
+**改动范围**: `Playground.tsx`
+
+**影响范围**: 仅Playground页面的快速导航功能，不影响其他组件
+
+---
+
+## 2026-06-26 — fix: 前端组件UX/UX优化，修复7项问题
+
+**问题/需求**: 对照 ui-ux-pro-max UX 指南和设计系统，发现前端组件存在多项可用性问题。
+
+**方案**:
+- CodeBlock 复制按钮触摸目标从 24x24 增大到 32x32，改善移动端点击体验
+- GitDiffBlock +N/-N 统计色从 Tailwind 默认色(emerald-600/rose-500)改为设计系统色(accent-sage/accent-coral)
+- TypingIndicator 改用 AIAvatar 组件，与其他 AI 消息头像保持一致
+- SearchResultBlock 搜索结果移除无实际功能的 cursor-pointer，避免误导用户
+- ChatScreen companion 按钮移除无限循环动画(pet-bounce)，符合“无限动画仅用于加载指示器”规范
+- index.css 全局添加 touch-action: manipulation，消除移动端 300ms 点击延迟
+- HistoryScreen 搜索框添加 inputMode="search"，移动端弹出搜索键盘
+
+**改动范围**: `CodeBlock.tsx`、`GitDiffBlock.tsx`、`TypingIndicator.tsx`、`SearchResultBlock.tsx`、`ChatScreen.tsx`、`HistoryScreen.tsx`、`index.css`
+
+**影响范围**: 各组件独立修改，无破坏性变更，App 主页行为不变
+
+---
+
+## 2026-06-26 — fix: Playground页面全面优化，补全缺失组件demo
+
+**问题/需求**: Playground页面存在多项UI/UX问题：body全局样式污染布局、缺失大量CSS组件demo、缺少语法高亮色和动画展示、无快速导航。
+
+**方案**:
+- 将body的flex居中+背景色提取为`.app-stage`类，仅在App主页路由使用，消除对Playground的样式污染
+- 补全缺失的CSS组件demo：phone-frame手机容器、journal-card日记卡片、dashed-divider虚线分隔、streaming-card基础容器、trace CSS推理时间线、screen页面转场、overlay遮罩+bottom-sheet底部抽屉（可交互）
+- 新增「代码语法高亮色」Section，展示7个token-*语法着色类及实际代码效果
+- 补全缺失动画demo：shimmer骨架屏闪烁、pulse-ring脉冲环、skill-stripe条纹滚动，动画分区细分为入场/循环/特效三组
+- 修复字体展示区font-sans冗余描述文字
+- 添加sticky快速导航栏，14个锚点一键跳转
+
+**改动范围**: `frontend/src/index.css`、`frontend/src/main.tsx`、`frontend/src/pages/Playground.tsx`
+
+**影响面**: Playground页面布局大幅改善，App主页行为不变，无破坏性变更
+
+---
+
+## 2026-06-26 — feat: 前端新增PlayGround组件基准页
+
+**问题/需求**: 前端项目缺少PlayGround页面，不符合rules.md第14条要求，持续开发中无法直观校验组件视觉一致性。
+
+**方案**:
+- 启用react-router路由，`/`为主应用，`/playground`为PlayGround页
+- 创建PlayGround页面，分区展示：色彩体系、字体体系、按钮系统、消息气泡、图标组件、流式卡片、推理线程、打字指示器、表单元素、动画展示、圆角与阴影参考
+- 删除Vite脚手架遗留文件（App.css、Home.tsx）
+- 重新生成package-lock.json（原lock文件引用了不可用的mirror）
+
+**改动范围**: `frontend/src/main.tsx`、`frontend/src/pages/Playground.tsx`（新增）、`frontend/src/App.css`（删除）、`frontend/src/pages/Home.tsx`（删除）、`frontend/package-lock.json`
+
+**影响面**: 前端新增路由和PlayGround页，不影响现有App.tsx和所有组件功能。
+
 ## 2026-06-26 — refactor: 重构Agent事件分发与Extension加载机制
 
 **问题/需求**: AgentEventDispatcher作为独立类职责不清，Extension加载逻辑散落在Runner中，缺乏独立加载器。

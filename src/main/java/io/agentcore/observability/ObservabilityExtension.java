@@ -16,7 +16,7 @@ import java.util.Map;
  * <p>Usage:
  * <pre>{@code
  * Agent agent = Agent.create(...);
- * agent.addExtensions(List.of(new ObservabilityExtension("my-session")));
+ * agent.extensionRunner().addExtensions(List.of(new ObservabilityExtension("my-session")));
  * agent.prompt("Hello", null);
  * }</pre>
  */

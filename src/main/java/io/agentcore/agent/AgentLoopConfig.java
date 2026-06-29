@@ -98,13 +98,6 @@ public final class AgentLoopConfig {
         this.shouldStopAfterTurn = b.shouldStopAfterTurn;
     }
 
-    /**
-     * Create a lightweight copy with only compactCallback changed.
-     */
-    public AgentLoopConfig withCompactCallback(ContextCompactor callback) {
-        return toBuilder().compactCallback(callback).build();
-    }
-
     // ── Functional interfaces ──────────────────────────────────
 
     /**

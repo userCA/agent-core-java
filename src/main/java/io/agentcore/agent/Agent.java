@@ -101,14 +101,6 @@ public class Agent implements AutoCloseable {
         return () -> extensionRunner.removeExtension(sub);
     }
 
-    /**
-     * Register additional extensions at runtime (e.g. from AgentSession).
-     * Rebuilds config on next run to pick up new hooks.
-     */
-    public void addExtensions(List<Extension> additional) {
-        extensionRunner.addExtensions(additional);
-    }
-
     // ── Prompt / Continue / Abort ──────────────────────────
 
     public List<Message> prompt(String text, Consumer<AgentEvent> onEvent) {
@@ -427,32 +419,22 @@ public class Agent implements AutoCloseable {
         }
     }
 
-    private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.ContextCompactor compactCallback) {
-        AgentLoopConfig base = buildBaseConfigWithHooks();
-        return compactCallback != null
-                ? base.withCompactCallback(compactCallback)
-                : base;
-    }
-
     /**
-     * Build the base config with all hooks (extensions + queue suppliers).
+     * Build config with all hooks (extensions + queue suppliers) for this run.
      * Rebuilt on each run to pick up dynamically added extensions.
      */
-    private AgentLoopConfig buildBaseConfigWithHooks() {
+    private AgentLoopConfig buildConfigWithHooks(AgentLoopConfig.ContextCompactor compactCallback) {
         AgentLoopConfig.Builder b = baseConfig.toBuilder();
-
-        // Wrap assembler with Agent-layer enrichment (future: memory injection, context enhancement)
         b.messageAssembler(messages -> messageAssembler.assemble(messages));
-
-        // Wire extension runner hooks (typed)
         if (extensionRunner.hasExtensions()) {
             b.beforeToolCall(extensionRunner::onBeforeToolCall);
             b.afterToolCall(extensionRunner::onAfterToolCall);
         }
-
         b.steeringMessageSupplier(() -> steeringQueue.drain());
         b.followUpMessageSupplier(() -> followUpQueue.drain());
-
+        if (compactCallback != null) {
+            b.compactCallback(compactCallback);
+        }
         return b.build();
     }
 
