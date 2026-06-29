@@ -221,7 +221,7 @@ class ResourceLoaderTest {
 
         @Test
         void loadSkillsFromEmptyDir() throws IOException {
-            Path skillsDir = tempDir.resolve(".pi").resolve("skills");
+            Path skillsDir = tempDir.resolve(".agent-core").resolve("skills");
             Files.createDirectories(skillsDir);
 
             var loader = new ResourceLoader(tempDir, List.of(), List.of(), List.of());
@@ -233,7 +233,7 @@ class ResourceLoaderTest {
 
         @Test
         void loadThemesFromDir() throws IOException {
-            Path themesDir = tempDir.resolve(".pi").resolve("themes");
+            Path themesDir = tempDir.resolve(".agent-core").resolve("themes");
             Files.createDirectories(themesDir);
             Files.writeString(themesDir.resolve("dark.json"), "{\"name\":\"dark\",\"bg\":\"#000\"}");
             Files.writeString(themesDir.resolve("light.json"), "{\"name\":\"light\",\"bg\":\"#fff\"}");
@@ -246,7 +246,7 @@ class ResourceLoaderTest {
 
         @Test
         void loadPromptsFromDir() throws IOException {
-            Path promptsDir = tempDir.resolve(".pi").resolve("prompts");
+            Path promptsDir = tempDir.resolve(".agent-core").resolve("prompts");
             Files.createDirectories(promptsDir);
             Files.writeString(promptsDir.resolve("greeting.md"), """
                     ---

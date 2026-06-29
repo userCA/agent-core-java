@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-29 — refactor: Skill模型统一与Harness层集成优化
+
+**问题/需求**: Skill 模块存在两套模型（`skill.Skill` vs `SystemPromptBuilder.Skill`）、Agent 运行时零加载 Skill、硬编码 `.pi` 路径、格式化不一致。
+
+**方案**:
+- `Skill` record 新增 `content` 字段（对齐 pi-mono Skill 结构）
+- `SkillLoader.loadSkillFromFile()` 将 frontmatter body 填入 `content`
+- 删除 `SystemPromptBuilder` 内部重复的 `Skill` record，统一使用 `io.agentcore.skill.Skill`
+- `SystemPromptBuilder` skill section 委托 `SkillLoader.formatSkillsForPrompt()` 渲染
+- `AgentConfig.createAgent()` 在 Harness 层加载 skills 并注入 system prompt，Agent/AgentLoop 保持薄层
+- 全局替换硬编码 `.pi` 路径为 `.agent-core`（SkillLoader、ResourceLoader、PersonaLoader）
+
+**改动范围**: `Skill.java`、`SkillLoader.java`、`SystemPromptBuilder.java`、`AgentConfig.java`、`ResourceLoader.java`、`PersonaLoader.java`、`SystemPromptBuilderTest.java`、`SkillLoaderTest.java`、`ResourceLoaderTest.java`
+
+**影响面**: 无外部 API 变化，纯内部重构。
+
+⚡ 影响范围：`skill`、`prompt`、`config`、`resources`
+
 ## 2026-06-26 — refactor: 消除Agent透传方法与过度分层
 
 **问题/需求**: `Agent.addExtensions()` 是对 `ExtensionRunner` 的无意义透传；`buildBaseConfigWithHooks` 与 `buildConfigWithHooks` 分两层但无复用价值。

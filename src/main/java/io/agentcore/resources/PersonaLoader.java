@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Persona (agent role) loading from .pi/personas/*.json.
+ * Persona (agent role) loading from .agent-core/personas/*.json.
  *
  * <p>Mirrors Python {@code agent_core/resources/personas.py}.
  *
@@ -29,7 +29,7 @@ public final class PersonaLoader {
     private PersonaLoader() {}
 
     /**
-     * Load persona definitions from .pi/personas/*.json and ~/.pi/agent/personas/*.json.
+     * Load persona definitions from .agent-core/personas/*.json and ~/.agent-core/agent/personas/*.json.
      */
     public static List<Persona> loadPersonas(Path cwd) {
         return loadPersonas(cwd, null);
@@ -44,10 +44,10 @@ public final class PersonaLoader {
     public static List<Persona> loadPersonas(Path cwd, DiagnosticsCollector diagnostics) {
         List<Path> searchDirs = new ArrayList<>();
 
-        Path localDir = cwd.resolve(".pi").resolve("personas");
+        Path localDir = cwd.resolve(".agent-core").resolve("personas");
         if (Files.isDirectory(localDir)) searchDirs.add(localDir);
 
-        Path homeDir = Path.of(System.getProperty("user.home"), ".pi", "agent", "personas");
+        Path homeDir = Path.of(System.getProperty("user.home"), ".agent-core", "agent", "personas");
         if (Files.isDirectory(homeDir)) searchDirs.add(homeDir);
 
         List<Persona> personas = new ArrayList<>();
@@ -123,7 +123,7 @@ public final class PersonaLoader {
      * Save (create or update) a persona JSON file.
      */
     public static void savePersona(Persona persona, Path cwd) throws IOException {
-        Path dir = cwd.resolve(".pi").resolve("personas");
+        Path dir = cwd.resolve(".agent-core").resolve("personas");
         Files.createDirectories(dir);
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -143,7 +143,7 @@ public final class PersonaLoader {
      * Delete a persona JSON file. Returns true if found.
      */
     public static boolean deletePersona(String personaId, Path cwd) throws IOException {
-        Path file = cwd.resolve(".pi").resolve("personas").resolve(personaId + ".json");
+        Path file = cwd.resolve(".agent-core").resolve("personas").resolve(personaId + ".json");
         return Files.deleteIfExists(file);
     }
 }

@@ -1,6 +1,8 @@
 package io.agentcore.prompt;
 
 import io.agentcore.resources.ContextFileLoader.ContextFile;
+import io.agentcore.skill.Skill;
+import io.agentcore.skill.SkillLoader;
 import io.agentcore.tools.ToolDefinition;
 
 import java.time.LocalDate;
@@ -21,19 +23,6 @@ public final class SystemPromptBuilder {
             "You are a helpful assistant with access to tools. "
             + "When you need to perform actions on the user's system, use the available tools. "
             + "Always prefer using tools over guessing when file or system information is needed.";
-
-    /**
-     * A skill descriptor for prompt injection.
-     *
-     * @param name                    skill name
-     * @param description             skill description
-     * @param disableModelInvocation  if true, hidden from model
-     */
-    public record Skill(String name, String description, boolean disableModelInvocation) {
-        public Skill(String name, String description) {
-            this(name, description, false);
-        }
-    }
 
     /**
      * Guideline rule: given a set of active tool names, optionally produce a guideline string.
@@ -144,17 +133,12 @@ public final class SystemPromptBuilder {
             sections.add(new SystemPromptSection("context_files", cf.toString()));
         }
 
-        // 6. Skills
+        // 6. Skills — delegate to SkillLoader for consistent XML format
         if (!skillList.isEmpty()) {
-            StringBuilder sk = new StringBuilder("\n## Skills\n\n<available_skills>\n");
-            for (Skill skill : skillList) {
-                if (!skill.disableModelInvocation()) {
-                    sk.append("  <skill name=\"").append(skill.name()).append("\">")
-                      .append(skill.description()).append("</skill>\n");
-                }
+            String skillSection = SkillLoader.formatSkillsForPrompt(skillList);
+            if (!skillSection.isEmpty()) {
+                sections.add(new SystemPromptSection("skills", skillSection));
             }
-            sk.append("</available_skills>\n");
-            sections.add(new SystemPromptSection("skills", sk.toString()));
         }
 
         // 7. Meta

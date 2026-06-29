@@ -1,6 +1,7 @@
 package io.agentcore.prompt;
 
 import io.agentcore.resources.ContextFileLoader.ContextFile;
+import io.agentcore.skill.Skill;
 import io.agentcore.tools.ToolDefinition;
 
 import org.junit.jupiter.api.Nested;
@@ -116,8 +117,8 @@ class SystemPromptBuilderTest {
 
         @Test
         void skillsIncludedInPrompt() {
-            SystemPromptBuilder.Skill skill = new SystemPromptBuilder.Skill(
-                    "code-review", "Review code quality");
+            Skill skill = new Skill(
+                    "code-review", "Review code quality", "", "/path/skill.md", "/path", false);
 
             SystemPromptBuilder builder = new SystemPromptBuilder();
             SystemPrompt prompt = builder.build(null, null, List.of(skill), null);
@@ -129,8 +130,8 @@ class SystemPromptBuilderTest {
 
         @Test
         void disabledSkillsAreHidden() {
-            SystemPromptBuilder.Skill skill = new SystemPromptBuilder.Skill(
-                    "secret", "Internal skill", true);
+            Skill skill = new Skill(
+                    "secret", "Internal skill", "", "/path/secret.md", "/path", true);
 
             SystemPromptBuilder builder = new SystemPromptBuilder();
             SystemPrompt prompt = builder.build(null, null, List.of(skill), null);

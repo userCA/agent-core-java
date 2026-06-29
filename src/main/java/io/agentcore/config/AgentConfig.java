@@ -5,6 +5,8 @@ import io.agentcore.agent.AgentLoopConfig;
 import io.agentcore.llm.*;
 import io.agentcore.llm.anthropic.AnthropicProvider;
 import io.agentcore.llm.openai.OpenAIProvider;
+import io.agentcore.skill.Skill;
+import io.agentcore.skill.SkillLoader;
 import io.agentcore.tools.ToolRegistry;
 
 import org.slf4j.Logger;
@@ -261,6 +263,15 @@ public final class AgentConfig {
         ModelInfo modelInfo = createModel();
         AuthSource authSource = createAuthSource();
         String prompt = systemPromptOverride != null ? systemPromptOverride : this.systemPrompt;
+        if (prompt == null) prompt = "";
+
+        // Harness responsibility: load skills from local directories and inject into system prompt
+        SkillLoader.LoadSkillsResult skillResult = SkillLoader.loadSkills();
+        if (!skillResult.skills().isEmpty()) {
+            String skillSection = SkillLoader.formatSkillsForPrompt(skillResult.skills());
+            prompt = prompt + skillSection;
+            log.info("Loaded {} skills into system prompt", skillResult.skills().size());
+        }
 
         return Agent.create(providerInstance, modelInfo, authSource, toolRegistry, prompt);
     }

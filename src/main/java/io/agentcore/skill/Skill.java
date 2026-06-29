@@ -7,6 +7,7 @@ package io.agentcore.skill;
  *
  * @param name                  skill name (validated against directory name)
  * @param description           human-readable description from frontmatter
+ * @param content               skill markdown body (content after frontmatter)
  * @param filePath              absolute path to the SKILL.md or .md file
  * @param baseDir               parent directory of the skill file
  * @param disableModelInvocation if true, skill is hidden from LLM prompt
@@ -14,6 +15,7 @@ package io.agentcore.skill;
 public record Skill(
         String name,
         String description,
+        String content,
         String filePath,
         String baseDir,
         boolean disableModelInvocation
@@ -21,6 +23,7 @@ public record Skill(
     public Skill {
         if (name == null || name.isBlank()) throw new IllegalArgumentException("name required");
         if (description == null) description = "";
+        if (content == null) content = "";
         if (filePath == null) filePath = "";
         if (baseDir == null) baseDir = "";
     }

@@ -167,8 +167,11 @@ public final class SkillLoader {
         boolean disableModelInvocation = Boolean.TRUE.equals(
                 frontmatter.get("disable-model-invocation"));
 
+        String body = parsed.get("body") != null ? parsed.get("body").toString() : "";
+
         Skill skill = new Skill(
                 name, description,
+                body,
                 filePath.toAbsolutePath().toString(),
                 skillDir,
                 disableModelInvocation);
@@ -228,7 +231,7 @@ public final class SkillLoader {
      * Load skills from multiple sources with collision detection.
      *
      * @param cwd              current working directory
-     * @param agentDir         agent config directory (default: ~/.pi/agent)
+     * @param agentDir         agent config directory (default: ~/.agent-core/agent)
      * @param skillPaths       additional skill paths (files or directories)
      * @param includeDefaults  whether to include default skill directories
      */
@@ -241,7 +244,7 @@ public final class SkillLoader {
         // Helper to merge skills with collision detection
         if (includeDefaults) {
             Path userSkillsDir = agentDir.resolve("skills");
-            Path projectSkillsDir = cwd.resolve(".pi").resolve("skills");
+            Path projectSkillsDir = cwd.resolve(".agent-core").resolve("skills");
 
             mergeSkills(loadSkillsFromDir(userSkillsDir), skillMap, allDiagnostics);
             mergeSkills(loadSkillsFromDir(projectSkillsDir), skillMap, allDiagnostics);
@@ -277,7 +280,7 @@ public final class SkillLoader {
      */
     public static LoadSkillsResult loadSkills() {
         Path cwd = Path.of(System.getProperty("user.dir"));
-        Path agentDir = Path.of(System.getProperty("user.home"), ".pi", "agent");
+        Path agentDir = Path.of(System.getProperty("user.home"), ".agent-core", "agent");
         return loadSkills(cwd, agentDir, List.of(), true);
     }
 

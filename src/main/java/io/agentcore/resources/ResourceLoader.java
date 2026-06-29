@@ -61,10 +61,10 @@ public final class ResourceLoader {
             Path resolved = Path.of(p.replaceFirst("^~", System.getProperty("user.home")));
             if (Files.exists(resolved)) uniquePaths.add(resolved.toAbsolutePath().normalize());
         }
-        Path localDir = cwd.resolve(".pi").resolve(resourceType);
+        Path localDir = cwd.resolve(".agent-core").resolve(resourceType);
         if (Files.isDirectory(localDir)) uniquePaths.add(localDir.toAbsolutePath().normalize());
 
-        Path homeDir = Path.of(System.getProperty("user.home"), ".pi", "agent", resourceType);
+        Path homeDir = Path.of(System.getProperty("user.home"), ".agent-core", "agent", resourceType);
         if (Files.isDirectory(homeDir)) uniquePaths.add(homeDir.toAbsolutePath().normalize());
 
         String envVar = System.getenv("AGENT_CORE_" + resourceType.toUpperCase() + "_PATH");

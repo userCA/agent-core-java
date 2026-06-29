@@ -24,12 +24,12 @@ class SkillLoaderTest {
     @Test
     void skillRequiresName() {
         assertThrows(IllegalArgumentException.class, () ->
-                new Skill("", "desc", "/path", "/base", false));
+                new Skill("", "desc", "", "/path", "/base", false));
     }
 
     @Test
     void skillDefaults() {
-        var skill = new Skill("test", "desc", null, null, false);
+        var skill = new Skill("test", "desc", "body", null, null, false);
         assertEquals("", skill.filePath());
         assertEquals("", skill.baseDir());
         assertFalse(skill.disableModelInvocation());
@@ -227,8 +227,8 @@ class SkillLoaderTest {
     @Test
     void formatSkillsForPrompt() {
         var skills = List.of(
-                new Skill("skill-a", "Does A", "/path/a/SKILL.md", "/path/a", false),
-                new Skill("skill-b", "Does B", "/path/b/SKILL.md", "/path/b", false)
+                new Skill("skill-a", "Does A", "", "/path/a/SKILL.md", "/path/a", false),
+                new Skill("skill-b", "Does B", "", "/path/b/SKILL.md", "/path/b", false)
         );
         String result = SkillLoader.formatSkillsForPrompt(skills);
         assertTrue(result.contains("<available_skills>"));
@@ -241,8 +241,8 @@ class SkillLoaderTest {
     @Test
     void formatSkillsForPromptHidesDisabled() {
         var skills = List.of(
-                new Skill("visible", "Visible skill", "/v", "/v", false),
-                new Skill("hidden", "Hidden skill", "/h", "/h", true)
+                new Skill("visible", "Visible skill", "", "/v", "/v", false),
+                new Skill("hidden", "Hidden skill", "", "/h", "/h", true)
         );
         String result = SkillLoader.formatSkillsForPrompt(skills);
         assertTrue(result.contains("visible"));
