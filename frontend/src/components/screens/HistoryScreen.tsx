@@ -45,7 +45,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ entries, onSelect, onNewC
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <label htmlFor="history-search" className="sr-only">搜索日记</label>
-          <input id="history-search" type="text" placeholder="搜索日记..." className="w-full pl-10 pr-4 py-2.5 bg-cream-card border-2 border-ink rounded-button text-sm text-ink placeholder:text-ink-faint input-focus font-comic" />
+          <input id="history-search" type="text" inputMode="search" placeholder="搜索日记..." className="w-full pl-10 pr-4 py-2.5 bg-cream-card border-2 border-ink rounded-button text-sm text-ink placeholder:text-ink-faint input-focus font-comic" />
         </div>
 
         <div className="flex items-center gap-2 py-1">

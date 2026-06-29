@@ -40,8 +40,8 @@ const GitDiffBlock: React.FC<GitDiffBlockProps> = ({
         </svg>
         <span className="text-[12px] font-semibold text-ink font-sans">{filename}</span>
         <div className="ml-auto flex gap-2 font-comic text-[10px]">
-          <span className="text-emerald-600">+{stats.add}</span>
-          <span className="text-rose-500">-{stats.del}</span>
+          <span style={{ color: '#a8c4a0' }}>+{stats.add}</span>
+          <span style={{ color: '#e89080' }}>-{stats.del}</span>
         </div>
       </div>
 

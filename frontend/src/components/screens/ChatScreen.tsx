@@ -99,7 +99,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             {statusLabel}
           </span>
         </div>
-        <button onClick={onOpenCompanion} aria-label="伙伴状态" className="pet-bounce w-11 h-11 flex items-center justify-center rounded-button border-2 border-ink bg-cream-card hover:bg-cream-warm transition-all shadow-card cursor-pointer">
+        <button onClick={onOpenCompanion} aria-label="伙伴状态" className="w-11 h-11 flex items-center justify-center rounded-button border-2 border-ink bg-cream-card hover:bg-cream-warm transition-all shadow-card cursor-pointer">
           <PetAvatar size={20} />
         </button>
       </header>

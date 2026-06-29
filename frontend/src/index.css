@@ -30,19 +30,24 @@
 
   * {
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   html, body, #root {
     height: 100%;
-    overflow: hidden;
   }
 
   body {
     font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, sans-serif;
+  }
+
+  /* App 主页舞台 — 手机框架居中展示，Playground 不使用此样式 */
+  .app-stage {
     background: #f4b89a;
     display: flex;
     align-items: center;
     justify-content: center;
+    min-height: 100%;
   }
 
   /* Global focus ring — keyboard users need visible indicators */

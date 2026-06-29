@@ -94,7 +94,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           <button
             onClick={handleCopy}
             aria-label="复制代码"
-            className="w-6 h-6 rounded-md flex items-center justify-center transition-all duration-150 hover:bg-white/10 cursor-pointer"
+            className="w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 hover:bg-white/10 cursor-pointer"
             style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#f9d5c0' }}
           >
             {copied ? (

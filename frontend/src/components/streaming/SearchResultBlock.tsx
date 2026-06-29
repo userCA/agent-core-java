@@ -83,7 +83,7 @@ const SearchResultBlock: React.FC<SearchResultBlockProps> = ({
         {results.map((r, i) => (
           <div
             key={i}
-            className="flex flex-col gap-1 p-3 bg-cream-surface border-[1.5px] border-ink rounded-[10px] cursor-pointer transition-all duration-150 hover:bg-cream-warm hover:translate-x-0.5"
+            className="flex flex-col gap-1 p-3 bg-cream-surface border-[1.5px] border-ink rounded-[10px] transition-all duration-150 hover:bg-cream-warm hover:translate-x-0.5"
           >
             <div className="text-[10px] text-ink-muted font-sans">{r.path}<span className="font-semibold text-ink">{r.filename}</span></div>
             <div className="font-mono text-[11px] text-ink-muted leading-relaxed mt-1 pl-2 border-l-2 border-accent-pink" style={{ background: 'rgba(61,43,31,0.04)', padding: '6px 8px', borderRadius: '0 6px 6px 0' }}>
